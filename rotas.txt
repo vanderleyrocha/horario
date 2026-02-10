@@ -1,0 +1,62 @@
+
+  GET|HEAD   / ............................................................................................................................................................. dashboard › App\Livewire\Dashboard
+  POST       _boost/browser-logs ........................................................................................................................................................... boost.browser-logs
+  GET|HEAD   algoritmo ......................................................................................................................................... algoritmo.index › App\Livewire\Algoritmo\Index
+  GET|HEAD   configuracoes ...................................................................................................................................................................... configuracoes
+  GET|HEAD   disciplinas ................................................................................................................................... disciplinas.index › App\Livewire\Disciplinas\Index
+  GET|HEAD   disciplinas/criar ........................................................................................................................... disciplinas.create › App\Livewire\Disciplinas\Create
+  GET|HEAD   disciplinas/{disciplina}/editar ................................................................................................................. disciplinas.edit › App\Livewire\Disciplinas\Edit
+  POST       email/verification-notification .............................................................................. verification.send › Laravel\Fortify › EmailVerificationNotificationController@store
+  GET|HEAD   email/verify .................................................................................................. verification.notice › Laravel\Fortify › EmailVerificationPromptController@__invoke
+  GET|HEAD   email/verify/{id}/{hash} .................................................................................................. verification.verify › Laravel\Fortify › VerifyEmailController@__invoke
+  GET|HEAD   flux/editor.css ............................................................................................................................. Flux\AssetManager@editorCss › AssetManager@editorCss
+  GET|HEAD   flux/editor.js ................................................................................................................................ Flux\AssetManager@editorJs › AssetManager@editorJs
+  GET|HEAD   flux/editor.min.js ...................................................................................................................... Flux\AssetManager@editorMinJs › AssetManager@editorMinJs
+  GET|HEAD   flux/flux.js ...................................................................................................................................... Flux\AssetManager@fluxJs › AssetManager@fluxJs
+  GET|HEAD   flux/flux.min.js ............................................................................................................................ Flux\AssetManager@fluxMinJs › AssetManager@fluxMinJs
+  GET|HEAD   forgot-password .......................................................................................................... password.request › Laravel\Fortify › PasswordResetLinkController@create
+  POST       forgot-password ............................................................................................................. password.email › Laravel\Fortify › PasswordResetLinkController@store
+  GET|HEAD   horarios ............................................................................................................................................ horarios.index › App\Livewire\Horarios\Index
+  GET|HEAD   horarios/criar .................................................................................................................................... horarios.create › App\Livewire\Horarios\Create
+  GET|HEAD   horarios/{horario} .................................................................................................................................... horarios.show › App\Livewire\Horarios\Show
+  GET|HEAD   horarios/{horario}/configurar ............................................................................................................. horarios.configurar › App\Livewire\Horarios\Configurar
+  GET|HEAD   livewire-89b0014d/css/{component}.css ............................................................................................................................................................ 
+  GET|HEAD   livewire-89b0014d/css/{component}.global.css ..................................................................................................................................................... 
+  GET|HEAD   livewire-89b0014d/js/{component}.js .............................................................................................................................................................. 
+  GET|HEAD   livewire-89b0014d/livewire.csp.min.js.map ........................................................................................................... Livewire\Mechanisms › FrontendAssets@cspMaps
+  GET|HEAD   livewire-89b0014d/livewire.js ........................................................................................................ Livewire\Mechanisms › FrontendAssets@returnJavaScriptAsFile
+  GET|HEAD   livewire-89b0014d/livewire.min.js.map .................................................................................................................. Livewire\Mechanisms › FrontendAssets@maps
+  GET|HEAD   livewire-89b0014d/preview-file/{filename} ............................................................................... livewire.preview-file › Livewire\Features › FilePreviewController@handle
+  POST       livewire-89b0014d/update ..................................................................................................... livewire.update › Livewire\Mechanisms › HandleRequests@handleUpdate
+  POST       livewire-89b0014d/upload-file ............................................................................................. livewire.upload-file › Livewire\Features › FileUploadController@handle
+  GET|HEAD   login ............................................................................................................................................................ login › App\Livewire\Auth\Login
+  POST       login ....................................................................................................................... login.store › Laravel\Fortify › AuthenticatedSessionController@store
+  POST       logout ......................................................................................................................... logout › Laravel\Fortify › AuthenticatedSessionController@destroy
+  GET|HEAD   perfil ................................................................................................................................................................................... profile
+  GET|HEAD   professores ................................................................................................................................... professores.index › App\Livewire\Professores\Index
+  GET|HEAD   professores/criar ........................................................................................................................... professores.create › App\Livewire\Professores\Create
+  GET|HEAD   professores/{professor}/editar .................................................................................................................. professores.edit › App\Livewire\Professores\Edit
+  GET|HEAD   register ............................................................................................................................ register › Laravel\Fortify › RegisteredUserController@create
+  POST       register ....................................................................................................................... register.store › Laravel\Fortify › RegisteredUserController@store
+  POST       reset-password ................................................................................................................... password.update › Laravel\Fortify › NewPasswordController@store
+  GET|HEAD   reset-password/{token} ........................................................................................................... password.reset › Laravel\Fortify › NewPasswordController@create
+  GET|HEAD   storage/{path} ..................................................................................................................................................................... storage.local
+  GET|HEAD   turmas .................................................................................................................................................. turmas.index › App\Livewire\Turmas\Index
+  GET|HEAD   turmas/criar .......................................................................................................................................... turmas.create › App\Livewire\Turmas\Create
+  GET|HEAD   turmas/{turma}/editar ..................................................................................................................................... turmas.edit › App\Livewire\Turmas\Edit
+  GET|HEAD   two-factor-challenge ......................................................................................... two-factor.login › Laravel\Fortify › TwoFactorAuthenticatedSessionController@create
+  POST       two-factor-challenge .................................................................................... two-factor.login.store › Laravel\Fortify › TwoFactorAuthenticatedSessionController@store
+  GET|HEAD   up ............................................................................................................................................................................................... 
+  GET|HEAD   user/confirm-password .................................................................................................... password.confirm › Laravel\Fortify › ConfirmablePasswordController@show
+  POST       user/confirm-password ............................................................................................. password.confirm.store › Laravel\Fortify › ConfirmablePasswordController@store
+  GET|HEAD   user/confirmed-password-status .................................................................................. password.confirmation › Laravel\Fortify › ConfirmedPasswordStatusController@show
+  POST       user/confirmed-two-factor-authentication ................................................................. two-factor.confirm › Laravel\Fortify › ConfirmedTwoFactorAuthenticationController@store
+  POST       user/two-factor-authentication ..................................................................................... two-factor.enable › Laravel\Fortify › TwoFactorAuthenticationController@store
+  DELETE     user/two-factor-authentication .................................................................................. two-factor.disable › Laravel\Fortify › TwoFactorAuthenticationController@destroy
+  GET|HEAD   user/two-factor-qr-code .................................................................................................... two-factor.qr-code › Laravel\Fortify › TwoFactorQrCodeController@show
+  GET|HEAD   user/two-factor-recovery-codes ........................................................................................ two-factor.recovery-codes › Laravel\Fortify › RecoveryCodeController@index
+  POST       user/two-factor-recovery-codes ............................................................................. two-factor.regenerate-recovery-codes › Laravel\Fortify › RecoveryCodeController@store
+  GET|HEAD   user/two-factor-secret-key ........................................................................................... two-factor.secret-key › Laravel\Fortify › TwoFactorSecretKeyController@show
+
+                                                                                                                                                                                            Showing [58] routes
+

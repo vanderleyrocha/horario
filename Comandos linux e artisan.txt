@@ -1,0 +1,22 @@
+php artisan horizon:terminate
+php artisan queue:clear redis
+php artisan config:clear
+php artisan optimize:clear
+php artisan queue:restart
+
+sudo chown -R $USER:www-data storage bootstrap/cache
+sudo chmod -R 775 storage bootstrap/cache
+
+mysql -u admin -p u815349007_decagono < '/mnt/d/sql/u815349007_decagono 03.sql'
+
+/mnt/d/BackUps_NaoApague/Downloads/sql
+
+nano ~/.bashrc
+
+php artisan test --filter=GaPerformancePorTurmaTest
+
+LARAVEL_ENV=.env.testing php artisan horario:gerar 19
+
+php artisan queue:monitor default
+
+php artisan queue:work --tries=1 --timeout=600

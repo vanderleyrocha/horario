@@ -1,0 +1,225 @@
+horario
+├── app
+│   ├── Jobs
+│   │   └── GerarHorarioJob.php
+│   ├── Livewire
+│   │   ├── Actions
+│   │   │   └── Logout.php
+│   │   ├── Algoritmo
+│   │   │   └── Index.php
+│   │   ├── Aulas
+│   │   │   ├── Edit.php
+│   │   │   └── Index.php
+│   │   ├── Auth
+│   │   │   ├── Login.php
+│   │   │   └── UserManager.php
+│   │   ├── Disciplinas
+│   │   │   ├── Create.php
+│   │   │   ├── Edit.php
+│   │   │   └── Index.php
+│   │   ├── Horarios
+│   │   │   ├── Configurar.php
+│   │   │   ├── Create.php
+│   │   │   ├── GerenciarAulas.php
+│   │   │   ├── GerenciarRestricoes.php
+│   │   │   ├── Index.php
+│   │   │   ├── ResumoConfiguracao.php
+│   │   │   └── Show.php
+│   │   ├── Layout
+│   │   │   ├── Navbar.php
+│   │   │   └── Sidebar.php
+│   │   ├── Professores
+│   │   │   ├── Create.php
+│   │   │   ├── Edit.php
+│   │   │   └── Index.php
+│   │   ├── Turmas
+│   │   │   ├── Aulas.php
+│   │   │   ├── Create.php
+│   │   │   ├── Edit.php
+│   │   │   └── Index.php
+│   │   └── Dashboard.php
+│   ├── Models
+│   │   ├── Alocacao.php
+│   │   ├── Aula.php
+│   │   ├── ConfiguracaoHorario.php
+│   │   ├── Disciplina.php
+│   │   ├── Horario.php
+│   │   ├── Professor.php
+│   │   ├── RestricaoTempo.php
+│   │   ├── Turma.php
+│   │   └── User.php
+│   ├── Providers
+│   │   ├── AppServiceProvider.php
+│   │   └── FortifyServiceProvider.php
+│   ├── Services
+│   │   └── GeneticAlgorithm
+│   │       ├── Genetico
+│   │       │   ├── DTO
+│   │       │   │   └── GeneticAlgorithmConfigDTO.php
+│   │       │   ├── Fitness
+│   │       │   │   ├── Rules
+│   │       │   │   │   ├── AulasNaoConsecutivasRule.php
+│   │       │   │   │   ├── BloqueiosHardRule.php
+│   │       │   │   │   ├── BloqueiosPreferenciaisRule.php
+│   │       │   │   │   ├── CargaHorariaExcedidaRule.php
+│   │       │   │   │   ├── ConflitoProfessorRule.php
+│   │       │   │   │   ├── ConflitoTurmaRule.php
+│   │       │   │   │   ├── DistribuicaoRule.php
+│   │       │   │   │   ├── JanelasRule.php
+│   │       │   │   │   └── MaxAulasDiaRule.php
+│   │       │   │   ├── FitnessFunction.php
+│   │       │   │   ├── FitnessRuleInterface.php
+│   │       │   │   ├── HardRuleInterface.php
+│   │       │   │   └── SoftRuleInterface.php
+│   │       │   ├── Repositories
+│   │       │   │   └── ConfiguracaoHorarioReadRepository.php
+│   │       │   ├── HorarioGeneticoOrchestrator.php
+│   │       │   └── PopulationGenerator.php
+│   │       └── HorarioGeneticoService.php
+│   ├── Traits
+│   │   └── ComDadosComuns.php
+│   └── View
+│       └── Components
+│           ├── AppLayout.php
+│           ├── Button.php
+│           └── GuestLayout.php
+├── config
+│   ├── app.php
+│   ├── auth.php
+│   ├── cache.php
+│   ├── database.php
+│   ├── filesystems.php
+│   ├── fortify.php
+│   ├── livewire.php
+│   ├── logging.php
+│   ├── mail.php
+│   ├── queue.php
+│   ├── services.php
+│   └── session.php
+├── database
+│   ├── factories
+│   │   ├── AlocacaoFactory.php
+│   │   ├── AulaFactory.php
+│   │   ├── DisciplinaFactory.php
+│   │   ├── HorarioFactory.php
+│   │   ├── ProfessorFactory.php
+│   │   ├── TurmaFactory.php
+│   │   └── UserFactory.php
+│   ├── migrations
+│   │   ├── 0001_01_01_000000_create_users_table.php
+│   │   ├── 0001_01_01_000001_create_cache_table.php
+│   │   ├── 0001_01_01_000002_create_jobs_table.php
+│   │   ├── 2025_08_14_170933_add_two_factor_columns_to_users_table.php
+│   │   ├── 2026_01_31_210446_create_professores_table.php
+│   │   ├── 2026_01_31_210455_create_disciplinas_table.php
+│   │   ├── 2026_01_31_210505_create_turmas_table.php
+│   │   ├── 2026_01_31_210512_create_horarios_table.php
+│   │   ├── 2026_01_31_210519_create_alocacoes_table.php
+│   │   ├── 2026_02_01_001_create_configuracoes_horario_table.php
+│   │   ├── 2026_02_01_002_create_aulas_table.php
+│   │   └── 2026_02_01_003_create_restricoes_tempo_table.php
+│   ├── seeders
+│   │   ├── ConfiguracaoHorarioSeeder.php
+│   │   └── DatabaseSeeder.php
+│   ├── .gitignore
+│   └── database.sqlite
+├── resources
+│   ├── css
+│   │   └── app.css
+│   ├── js
+│   │   ├── app.js
+│   │   └── bootstrap.js
+│   └── views
+│       ├── components
+│       │   ├── action-message.blade.php
+│       │   ├── app-layout.blade.php
+│       │   ├── app-logo-icon.blade.php
+│       │   ├── app-logo.blade.php
+│       │   ├── auth-header.blade.php
+│       │   ├── auth-session-status.blade.php
+│       │   ├── button.blade.php
+│       │   ├── desktop-user-menu.blade.php
+│       │   ├── guest-layout.blade.php
+│       │   └── placeholder-pattern.blade.php
+│       ├── flux
+│       │   ├── icon
+│       │   │   ├── book-open-text.blade.php
+│       │   │   ├── chevrons-up-down.blade.php
+│       │   │   ├── folder-git-2.blade.php
+│       │   │   └── layout-grid.blade.php
+│       │   └── navlist
+│       │       └── group.blade.php
+│       ├── layouts
+│       │   ├── app
+│       │   │   ├── header.blade.php
+│       │   │   └── sidebar.blade.php
+│       │   ├── auth
+│       │   │   ├── card.blade.php
+│       │   │   ├── simple.blade.php
+│       │   │   └── split.blade.php
+│       │   ├── app.blade.php
+│       │   └── auth.blade.php
+│       ├── livewire
+│       │   ├── algoritmo
+│       │   │   └── index.blade.php
+│       │   ├── aulas
+│       │   │   ├── edit.blade.php
+│       │   │   └── index.blade.php
+│       │   ├── auth
+│       │   │   ├── login.blade.php
+│       │   │   └── user-manager.blade.php
+│       │   ├── disciplinas
+│       │   │   ├── create.blade.php
+│       │   │   ├── edit.blade.php
+│       │   │   └── index.blade.php
+│       │   ├── horarios
+│       │   │   ├── partials
+│       │   │   │   ├── etapa-configuracao-basica.blade.php
+│       │   │   │   └── modal-aula.blade.php
+│       │   │   ├── configurar.blade.php
+│       │   │   ├── create.blade.php
+│       │   │   ├── gerenciar-aulas.blade.php
+│       │   │   ├── gerenciar-restricoes.blade.php
+│       │   │   ├── index.blade.php
+│       │   │   ├── resumo-configuracao.blade.php
+│       │   │   └── show.blade.php
+│       │   ├── layout
+│       │   │   ├── navbar.blade.php
+│       │   │   └── sidebar.blade.php
+│       │   ├── professores
+│       │   │   ├── create.blade.php
+│       │   │   ├── edit.blade.php
+│       │   │   └── index.blade.php
+│       │   ├── turmas
+│       │   │   ├── aulas.blade.php
+│       │   │   ├── create.blade.php
+│       │   │   ├── edit.blade.php
+│       │   │   └── index.blade.php
+│       │   └── dashboard.blade.php
+│       ├── pages
+│       │   ├── auth
+│       │   │   ├── confirm-password.blade.php
+│       │   │   ├── forgot-password.blade.php
+│       │   │   ├── login.blade.php
+│       │   │   ├── register.blade.php
+│       │   │   ├── reset-password.blade.php
+│       │   │   ├── two-factor-challenge.blade.php
+│       │   │   └── verify-email.blade.php
+│       │   └── settings
+│       │       ├── two-factor
+│       │       │   └── ⚡recovery-codes.blade.php
+│       │       ├── layout.blade.php
+│       │       ├── ⚡appearance.blade.php
+│       │       ├── ⚡delete-user-form.blade.php
+│       │       ├── ⚡password.blade.php
+│       │       ├── ⚡profile.blade.php
+│       │       └── ⚡two-factor.blade.php
+│       ├── partials
+│       │   ├── head.blade.php
+│       │   └── settings-heading.blade.php
+│       ├── dashboard.blade.php
+│       └── welcome.blade.php
+└── routes
+    ├── console.php
+    ├── settings.php
+    └── web.php

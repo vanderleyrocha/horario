@@ -1,0 +1,227 @@
+Estou desenvolvendo um Sistema de Geração Automática de Horários Escolares usando Algoritmo Genético para otimizar a alocação de professores, turmas e disciplinas.
+
+🛠️ Stack Tecnológico
+Backend: Laravel 12 (PHP 8.4)
+Frontend: Livewire 4 (formato com arquivos separados: classe PHP + view Blade)
+CSS: TailwindCSS
+Alpine.js: Para interatividade (mínima)
+Queue: Laravel Queue com Database driver
+Banco de Dados: MySQL/MariaDB
+
+📁 Estrutura Atual do Projeto
+Modelos Implementados
+app/Models/
+├── User.php (autenticação)
+├── Professor.php (nome, email, telefone, dias_disponiveis, carga_horaria_maxima, ativo)
+├── Turma.php (nome, codigo, turno, numero_alunos, ano, ativa)
+├── Disciplina.php (nome, codigo, carga_horaria_semanal, descricao, cor, ativa)
+├── Horario.php (nome, ano, semestre, status, fitness_score, configuracao, gerado_em)
+└── Alocacao.php (horario_id, turma_id, disciplina_id, professor_id, dia_semana, horario_inicio, horario_fim)
+
+Componentes Livewire Implementados
+app/Livewire/ 
+├── Auth/
+│   └── Login.php (autenticação funcional)
+├── Layout/
+│   ├── Sidebar.php (menu lateral com toggle)
+│   └── Navbar.php (barra superior com logout)
+├── Dashboard.php (dashboard atualizado com dados reais)
+├── Professores/
+│   ├── Index.php (listagem com filtros e busca)
+│   ├── Create.php (cadastro completo)
+│   └── Edit.php (edição e exclusão)
+├── Turmas/
+│   ├── Index.php (listagem com filtros por turno)
+│   ├── Create.php (cadastro com seleção de turno visual)
+│   └── Edit.php (edição e gerenciamento)
+├── Disciplinas/
+│   ├── Index.php (listagem com visualização de cores)
+│   ├── Create.php (cadastro com seletor de cores)
+│   └── Edit.php (edição com preview)
+├── Horarios/
+│   ├── Index.php (listagem de horários gerados)
+│   ├── Create.php (criação com configuração do AG)
+│   └── Show.php (visualização em grade por turma)
+└── Algoritmo/
+    └── Index.php (interface de geração com polling)
+
+Serviços e Jobs
+app/Services/GeneticAlgorithm/
+└── HorarioGeneticoService.php (implementação completa do AG)
+
+app/Jobs/
+└── GerarHorarioJob.php (processamento assíncrono)
+
+✅ Funcionalidades Implementadas
+
+1. Sistema de Autenticação
+Login funcional com validação
+Proteção de rotas com middleware
+Logout implementado
+
+2. CRUD Completo
+Professores: Cadastro, edição, disponibilidade por dia da semana, carga horária máxima, ativação/desativação
+Turmas: Gestão por turno (matutino, vespertino, noturno, integral), ano letivo, número de alunos
+Disciplinas: Cores personalizáveis (hexadecimal), carga horária semanal, descrição opcional
+
+3. Gerenciamento de Horários
+Criação de horários com configuração do algoritmo genético
+Visualização em grade por turma
+Filtros por status e ano
+Duplicação de horários
+Ativação/desativação
+Sistema de status (rascunho, em_geracao, concluido, ativo)
+
+4. Algoritmo Genético 🧬
+Implementação completa com:
+
+Inicialização de população aleatória
+Função de fitness considerando múltiplas restrições:
+Conflitos de professor (hard constraint)
+Conflitos de turma (hard constraint)
+Disponibilidade de professores (hard constraint)
+Minimização de janelas no horário (soft constraint)
+Distribuição de aulas na semana (soft constraint)
+
+Operadores genéticos:
+Seleção por torneio
+Crossover de um ponto
+Mutação de genes (dia/horário)
+Elitismo (10% melhores)
+Processamento assíncrono com Jobs/Queue
+Feedback de progresso em tempo real via polling
+Cache para persistência de progresso
+
+5. Dashboard Atualizado
+Estatísticas reais de professores, turmas, disciplinas e horários
+Cards de carga horária total e médias
+Atividades recentes (últimas 5)
+Status visual dos horários (barras de progresso)
+Ações rápidas para cadastros
+
+6. Interface Responsiva
+TailwindCSS com design moderno
+Componentes visuais consistentes
+Feedback visual (loading, success, error)
+Navegação SPA com Livewire Navigate
+
+⚙️ Configurações do Sistema
+
+Queue Configuration (.env)
+
+QUEUE_CONNECTION=database
+Supervisor Configuration (Produção)
+
+
+[program:horarios-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /caminho/do/projeto/artisan queue:work --sleep=3 --tries=1 --max-time=3600
+autostart=true
+autorestart=true
+user=www-data
+numprocs=2
+Rotas Implementadas
+
+// Autenticação
+GET /login -> Login::class
+
+// Autenticadas
+GET / -> Dashboard::class
+GET /professores -> Professores\Index::class
+GET /professores/criar -> Professores\Create::class
+GET /professores/{professor}/editar -> Professores\Edit::class
+GET /turmas -> Turmas\Index::class
+GET /turmas/criar -> Turmas\Create::class
+GET /turmas/{turma}/editar -> Turmas\Edit::class
+GET /disciplinas -> Disciplinas\Index::class
+GET /disciplinas/criar -> Disciplinas\Create::class
+GET /disciplinas/{disciplina}/editar -> Disciplinas\Edit::class
+GET /horarios -> Horarios\Index::class
+GET /horarios/criar -> Horarios\Create::class
+GET /horarios/{horario} -> Horarios\Show::class
+GET /algoritmo -> Algoritmo\Index::class
+
+🎯 Comandos para Iniciar
+
+# Iniciar servidor
+php artisan serve
+
+# Queue worker (em outro terminal)
+php artisan queue:work --tries=1 --timeout=600
+
+# Ou com supervisor (produção)
+sudo supervisorctl start horarios-worker:*
+
+# Assets
+npm run dev  # desenvolvimento
+npm run build  # produção
+
+# Limpar caches
+php artisan optimize:clear
+php artisan view:clear
+
+# Seeders
+php artisan db:seed
+📊 Dados de Teste
+
+// Usuário padrão
+Email: vanderley@outlook.com
+Senha: leticia5
+
+// Seeds incluem:
+- 19 professores
+- 12 turmas (diversos turnos)
+- 30 disciplinas (com cores)
+
+🚀 Próximos Passos Sugeridos
+
+1. Acrescentar entrada de dados importantes para definição do horário
+[ ] Tabela horarios (Nome da escola, Aulas por dia e numero de dias por semana)
+[ ] Tabela auxiliar para definir status de cada tempo de aula de cada disciplina com os campos disciplina_id, dia_semana, tempo e status (Livre, Preferencialmente bloqueado, Bloqueado)
+[ ] Tabela auxiliar para definir status de cada tempo de aula de cada turma com os campos turma_id, dia_semana, tempo e status (Livre, Preferencialmente bloqueado, Bloqueado)
+[ ] Tabela auxiliar para definir status de cada tempo de aula de cada professor com os campos turma_id, dia_semana, tempo e status (Livre, Preferencialmente bloqueado, Bloqueado)
+[ ] Tabela de Aulas (horario_id, professor_id, disciplina_id, turma_id, aulas_semana, tipo (simples, dupla, tripla))
+
+2. Melhorias no Algoritmo
+[ ] Iniciar geração do horário a partir da tabela de aulas
+[ ] Considerar especialização professor-disciplina
+[ ] Adicionar peso às restrições (configurável)
+[ ] Implementar mutação adaptativa
+
+
+3. Visualização
+[ ] Visualização dos horários gerados
+[ ] Gráfico de evolução do fitness
+[ ] Relatório de conflitos
+[ ] Visualização por professor
+[ ] Mapa de calor de ocupação
+
+4. Funcionalidades
+[ ] Edição manual de alocações (drag & drop)
+[ ] Exportação para PDF profissional
+[ ] Exportação para Excel
+[ ] Notificações quando geração terminar
+[ ] WebSockets com Laravel Echo (tempo real)
+
+5. Performance
+[ ] Otimização de queries N+1
+[ ] Indexação de tabelas
+[ ] Cache de horários frequentes
+
+6. Testes
+[ ] Testes unitários do AG
+[ ] Testes de integração
+[ ] Testes de performance
+📝 Estrutura de Arquivos Importante
+
+
+resources/views/livewire/
+├── auth/login.blade.php
+├── layout/
+│   ├── sidebar.blade.php (PROBLEMA: usa Alpine com @entangle)
+│   └── navbar.blade.php
+├── dashboard.blade.php (ATUALIZADO com dados reais)
+├── professores/ (index, create, edit) ✅
+├── turmas/ (index, create, edit) ✅
+├── disciplinas/ (index, create, edit) ✅
+└── horarios/ (index, create, show) ✅

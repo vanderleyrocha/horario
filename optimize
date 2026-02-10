@@ -1,0 +1,11 @@
+php artisan optimize:clear
+php artisan cache:clear
+php artisan view:clear
+php artisan config:clear
+php artisan route:clear
+
+rm -rf public/build
+npm run build
+
+sudo chown -R $USER:www-data ./storage ./bootstrap/cache
+sudo chmod -R 775 ./storage ./bootstrap/cache
