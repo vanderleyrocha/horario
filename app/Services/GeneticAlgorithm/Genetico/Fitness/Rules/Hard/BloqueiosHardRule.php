@@ -12,12 +12,10 @@ final class BloqueiosHardRule implements HardRuleInterface {
 
         foreach ($context->genes as $gene) {
 
-            if ($gene->isEmpty()) continue;
-
             if (
-                isset($context->restricoesIndexadas['professor'][$gene->professorId][$gene->diaSemana][$gene->periodoDia])
+                isset($context->restricoesIndexadas['professor'][$gene->getProfessorId()][$gene->getDiaSemana()][$gene->getPeriodoDia()])
                 ||
-                isset($context->restricoesIndexadas['turma'][$gene->turmaId][$gene->diaSemana][$gene->periodoDia])
+                isset($context->restricoesIndexadas['turma'][$gene->getTurmaId()][$gene->getDiaSemana()][$gene->getPeriodoDia()])
             ) {
                 $penalty++;
             }

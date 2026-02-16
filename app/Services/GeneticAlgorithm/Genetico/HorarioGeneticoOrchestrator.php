@@ -29,13 +29,10 @@ final class HorarioGeneticoOrchestrator {
         TerminationCriterionInterface $terminationCriterion,
         MetricsRecorder $metricsRecorder,
         array $evaluationData
-    ): Cromossomo {
+    ): array {
 
-        $cargaEsperada = $this->buildCargaEsperada();
-        $diasPreferidos = $this->buildDiasPreferidos();
-        $temposPreferidos = $this->buildTemposPreferidos();
-
-        $population = $this->populationGenerator->generate($this->config->tamanhoPopulacao);
+ 
+        $population = $populationGenerator->generate();
 
         $generation = 0;
 
@@ -44,11 +41,11 @@ final class HorarioGeneticoOrchestrator {
             foreach ($population as $cromossomo) {
 
                 $context = new EvaluationContext(
-                    genes: $cromossomo->genes,
-                    restricoesIndexadas: $this->restricoesIndexadas,
-                    cargaEsperada: $cargaEsperada,
-                    diasPreferidos: $diasPreferidos,
-                    temposPreferidos: $temposPreferidos
+                    genes: $cromossomo->getGenes(),
+                    restricoesIndexadas: $evaluationData['restricoesIndexadas'],
+                    cargaEsperada: $evaluationData['cargaEsperada'],
+                    diasPreferidos: $evaluationData['diasPreferidos'],
+                    temposPreferidos: $evaluationData['temposPreferidos']
                 );
 
                 $fitnessEvaluator->evaluate($cromossomo, $context);
@@ -56,63 +53,57 @@ final class HorarioGeneticoOrchestrator {
 
             usort($population, fn(Cromossomo $a, Cromossomo $b) => $a->getFitness() <=> $b->getFitness());
 
-            $this->metricsRecorder->recordGeneration($generation, $population);
+            $metricsRecorder->recordGeneration($generation, $population);
 
-            if ($this->terminationCriterion->shouldTerminate($population, $generation, $this->metricsRecorder->getBestCromossomoOverall())) {
+            if ($terminationCriterion->shouldTerminate($population, $generation, $metricsRecorder->getBestCromossomoOverall())) {
                 break;
             }
 
-            $population = $this->evoluir($population);
+            $population = $this->evoluir($population, $config);
 
             $generation++;
         }
 
-        return $this->metricsRecorder->getBestCromossomoOverall() ?? $population[0];
+        return ["cromossomo" => $metricsRecorder->getBestCromossomoOverall() ?? $population[0], "generation" => $generation];
     }
 
 
-    private function evoluir(array $population): array {
+    private function evoluir(array $population, GeneticAlgorithmConfigDTO $config): array {
         $newPopulation = [];
 
         // ✅ CORRETO: usa getElites()
-        $elites = $this->selectionOperator->getElites(
-            $population,
-            $this->config->elitismCount
-        );
+        $elites = $this->selectionOperator->getElites($population, $config->elitismCount);
 
         foreach ($elites as $elite) {
             $newPopulation[] = $elite->copy();
         }
 
-        while (count($newPopulation) < $this->config->tamanhoPopulacao) {
+        while (count($newPopulation) < $config->tamanhoPopulacao) {
 
-            // ✅ CORRETO: select retorna array
             $parents = $this->selectionOperator->select($population, 2);
 
             $parent1 = $parents[0];
             $parent2 = $parents[1];
 
-            if ($this->randomFloat() < $this->config->taxaCrossover) {
-
-                [$child1, $child2] =
-                    $this->crossoverOperator->crossover($parent1, $parent2);
+            if ($this->randomFloat() < $config->taxaCrossover) {
+                [$child1, $child2] =  $this->crossoverOperator->crossover($parent1, $parent2);
             } else {
 
                 $child1 = $parent1->copy();
                 $child2 = $parent2->copy();
             }
 
-            if ($this->randomFloat() < $this->config->taxaMutacao) {
+            if ($this->randomFloat() < $config->taxaMutacao) {
                 $this->mutationOperator->mutate($child1);
             }
 
-            if ($this->randomFloat() < $this->config->taxaMutacao) {
+            if ($this->randomFloat() < $config->taxaMutacao) {
                 $this->mutationOperator->mutate($child2);
             }
 
             $newPopulation[] = $child1;
 
-            if (count($newPopulation) < $this->config->tamanhoPopulacao) {
+            if (count($newPopulation) < $config->tamanhoPopulacao) {
                 $newPopulation[] = $child2;
             }
         }

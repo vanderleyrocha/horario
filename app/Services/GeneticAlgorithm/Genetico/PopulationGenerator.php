@@ -13,11 +13,12 @@ final class PopulationGenerator
         private readonly GeneticAlgorithmConfigDTO $configAG
     ) {}
 
-    public function generate(int $populationSize): array
+    public function generate(): array
     {
+
         $population = [];
 
-        for ($i = 0; $i < $populationSize; $i++) {
+        for ($i = 0; $i < $this->configAG->tamanhoPopulacao; $i++) {
             $population[] = $this->createDiverseCromossomo($i);
         }
 
@@ -62,15 +63,7 @@ final class PopulationGenerator
                     $dia = $horario['dia'];
                     $tempo = $horario['tempo'];
 
-                    if (!$this->temConflitoBasico(
-                        $aula->professor->id,
-                        $aula->turma->id,
-                        $dia,
-                        $tempo,
-                        $duracao,
-                        $ocupacaoProfessor,
-                        $ocupacaoTurma
-                    )) {
+                    if (!$this->temConflitoBasico($aula->professor->id, $aula->turma->id, $dia, $tempo, $duracao, $ocupacaoProfessor, $ocupacaoTurma)) {
                         $horarioEscolhido = $horario;
                         break;
                     }
@@ -105,20 +98,13 @@ final class PopulationGenerator
         return new Cromossomo($genes);
     }
 
-    private function temConflitoBasico(
-        int $professorId,
-        int $turmaId,
-        int $dia,
-        int $tempo,
-        int $duracao,
-        array $ocupacaoProfessor,
-        array $ocupacaoTurma
-    ): bool {
+    private function temConflitoBasico(int $professorId, int $turmaId, int $dia, int $tempo, int $duracao, array $ocupacaoProfessor, array $ocupacaoTurma): bool {
 
         for ($i = 0; $i < $duracao; $i++) {
 
             if (
-                isset($ocupacaoProfessor[$professorId][$dia][$tempo + $i]) ||
+                isset($ocupacaoProfessor[$professorId][$dia][$tempo + $i])
+                ||
                 isset($ocupacaoTurma[$turmaId][$dia][$tempo + $i])
             ) {
                 return true;

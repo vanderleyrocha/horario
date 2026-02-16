@@ -15,12 +15,7 @@ final class CargaHorariaExcedidaRule implements HardRuleInterface
 
         foreach ($context->genes as $gene) {
 
-            if ($gene->isEmpty() || $gene->aulaId === null) {
-                continue;
-            }
-
-            $contador[$gene->aulaId] =
-                ($contador[$gene->aulaId] ?? 0) + 1;
+            $contador[$gene->getAulaId()] = ($contador[$gene->getAulaId()] ?? 0) + 1;
         }
 
         foreach ($contador as $aulaId => $quantidade) {

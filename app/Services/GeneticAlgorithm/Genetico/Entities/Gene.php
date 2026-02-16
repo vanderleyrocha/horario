@@ -6,15 +6,9 @@ namespace App\Services\GeneticAlgorithm\Genetico\Entities;
 
 final readonly class Gene
 {
-    public function __construct(
-        private int $aulaId,
-        private int $professorId,
-        private int $turmaId,
-        private int $disciplinaId,
-        private int $diaSemana,
-        private int $periodoDia,
-        private int $duracaoTempos
-    ) {}
+    public function __construct(private int $aulaId, private int $professorId, private int $turmaId, private int $disciplinaId, 
+        private int $diaSemana, private int $periodoDia, private int $duracaoTempos)
+    {}
 
     public function getAulaId(): int
     {

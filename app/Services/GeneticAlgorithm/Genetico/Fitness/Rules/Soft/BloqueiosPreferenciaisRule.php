@@ -14,14 +14,9 @@ final class BloqueiosPreferenciaisRule implements SoftRuleInterface
 
         foreach ($context->genes as $gene) {
 
-            if ($gene->isEmpty() || $gene->aulaId === null) {
-                continue;
-            }
+            $preferidos = $context->diasPreferidos[$gene->getAulaId()] ?? [];
 
-            $preferidos =
-                $context->diasPreferidos[$gene->aulaId] ?? [];
-
-            if (!in_array($gene->diaSemana, $preferidos)) {
+            if (!in_array($gene->getDiaSemana(), $preferidos)) {
                 $penalty++;
             }
         }

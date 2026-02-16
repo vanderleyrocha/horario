@@ -14,13 +14,7 @@ final class AulasNaoConsecutivasRule implements SoftRuleInterface
         $map = [];
 
         foreach ($context->genes as $gene) {
-
-            if ($gene->isEmpty() || $gene->turmaId === null) {
-                continue;
-            }
-
-            $map[$gene->turmaId][$gene->diaSemana][] =
-                $gene->periodoDia;
+            $map[$gene->getTurmaId()][$gene->getDiaSemana()][] = $gene->getPeriodoDia();
         }
 
         foreach ($map as $dias) {

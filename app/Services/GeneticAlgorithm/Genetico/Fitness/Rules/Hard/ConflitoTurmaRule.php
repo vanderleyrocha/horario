@@ -15,15 +15,9 @@ final class ConflitoTurmaRule implements HardRuleInterface
 
         foreach ($context->genes as $gene) {
 
-            if ($gene->isEmpty() || $gene->turmaId === null) {
-                continue;
-            }
+            for ($i = 0; $i < $gene->getDuracaoTempos(); $i++) {
 
-            for ($i = 0; $i < $gene->duracaoTempos; $i++) {
-
-                $slot = $gene->turmaId . '_' .
-                        $gene->diaSemana . '_' .
-                        ($gene->periodoDia + $i);
+                $slot = $gene->getTurmaId() . '_' . $gene->getDiaSemana() . '_' . ($gene->getPeriodoDia() + $i);
 
                 if (isset($ocupacao[$slot])) {
                     $penalty++;
