@@ -1,77 +1,202 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\GeneticAlgorithm\Genetico\Entities;
 
 final class Cromossomo
 {
     /** @var Gene[] */
-    public array $genes = [];
+    private array $genes;
 
-    private float $fitness = INF;
+    private float $fitness = 0.0;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Índices Estruturais (O(1))
+    |--------------------------------------------------------------------------
+    */
+
+    // professorId => dia => periodo => count
+    private array $professorHorarioIndex = [];
+
+    // turmaId => dia => periodo => count
+    private array $turmaHorarioIndex = [];
+
+    // professorId => carga total
+    private array $cargaProfessorIndex = [];
+
+    // turmaId => carga total
+    private array $cargaTurmaIndex = [];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Construtor
+    |--------------------------------------------------------------------------
+    */
 
     /**
-     * Índices auxiliares de alta performance
-     * Estrutura:
-     *  - professorId => Gene[]
-     *  - turmaId     => Gene[]
-     *  - aulaId      => Gene[]
+     * @param Gene[] $genes
      */
-    private array $indexProfessor = [];
-    private array $indexTurma = [];
-    private array $indexAula = [];
-
-    public function __construct(array $genes = [])
+    public function __construct(array $genes)
     {
-        $this->genes = $genes;
+        $this->genes = array_values($genes);
+        $this->buildInitialIndexes();
+    }
 
-        if (!empty($genes)) {
-            $this->buildIndexes();
+    /*
+    |--------------------------------------------------------------------------
+    | Inicialização
+    |--------------------------------------------------------------------------
+    */
+
+    private function buildInitialIndexes(): void
+    {
+        foreach ($this->genes as $gene) {
+            $this->applyGeneToIndexes($gene);
         }
     }
 
-    /* ============================================================
-       FITNESS
-       ============================================================ */
+    /*
+    |--------------------------------------------------------------------------
+    | Atualização Incremental
+    |--------------------------------------------------------------------------
+    */
 
-    public function setFitness(float $fitness): void
+    private function applyGeneToIndexes(Gene $gene): void
     {
-        $this->fitness = $fitness;
+        $prof = $gene->getProfessorId();
+        $turma = $gene->getTurmaId();
+        $dia = $gene->getDiaSemana();
+        $periodo = $gene->getPeriodoDia();
+        $duracao = $gene->getDuracaoTempos();
+
+        // Professor horário
+        $this->professorHorarioIndex[$prof][$dia][$periodo] =
+            ($this->professorHorarioIndex[$prof][$dia][$periodo] ?? 0) + 1;
+
+        // Turma horário
+        $this->turmaHorarioIndex[$turma][$dia][$periodo] =
+            ($this->turmaHorarioIndex[$turma][$dia][$periodo] ?? 0) + 1;
+
+        // Carga professor
+        $this->cargaProfessorIndex[$prof] =
+            ($this->cargaProfessorIndex[$prof] ?? 0) + $duracao;
+
+        // Carga turma
+        $this->cargaTurmaIndex[$turma] =
+            ($this->cargaTurmaIndex[$turma] ?? 0) + $duracao;
     }
 
-    public function getFitness(): float
+    private function removeGeneFromIndexes(Gene $gene): void
     {
-        return $this->fitness;
+        $prof = $gene->getProfessorId();
+        $turma = $gene->getTurmaId();
+        $dia = $gene->getDiaSemana();
+        $periodo = $gene->getPeriodoDia();
+        $duracao = $gene->getDuracaoTempos();
+
+        // Professor horário
+        $this->professorHorarioIndex[$prof][$dia][$periodo]--;
+
+        if ($this->professorHorarioIndex[$prof][$dia][$periodo] <= 0) {
+            unset($this->professorHorarioIndex[$prof][$dia][$periodo]);
+        }
+
+        // Turma horário
+        $this->turmaHorarioIndex[$turma][$dia][$periodo]--;
+
+        if ($this->turmaHorarioIndex[$turma][$dia][$periodo] <= 0) {
+            unset($this->turmaHorarioIndex[$turma][$dia][$periodo]);
+        }
+
+        // Carga professor
+        $this->cargaProfessorIndex[$prof] -= $duracao;
+        if ($this->cargaProfessorIndex[$prof] <= 0) {
+            unset($this->cargaProfessorIndex[$prof]);
+        }
+
+        // Carga turma
+        $this->cargaTurmaIndex[$turma] -= $duracao;
+        if ($this->cargaTurmaIndex[$turma] <= 0) {
+            unset($this->cargaTurmaIndex[$turma]);
+        }
     }
 
-    /* ============================================================
-       GENES
-       ============================================================ */
+    /*
+    |--------------------------------------------------------------------------
+    | Operações Evolutivas O(1)
+    |--------------------------------------------------------------------------
+    */
 
-    public function addGene(Gene $gene): void
+    public function replaceGene(int $index, Gene $novoGene): void
     {
-        $this->genes[] = $gene;
+        $geneAntigo = $this->genes[$index];
 
-        if ($gene->isEmpty()) {
+        $this->removeGeneFromIndexes($geneAntigo);
+
+        $this->genes[$index] = $novoGene;
+
+        $this->applyGeneToIndexes($novoGene);
+    }
+
+    public function swapGenes(int $i, int $j): void
+    {
+        if ($i === $j) {
             return;
         }
 
-        if ($gene->professorId !== null) {
-            $this->indexProfessor[$gene->professorId][] = $gene;
-        }
+        $geneA = $this->genes[$i];
+        $geneB = $this->genes[$j];
 
-        if ($gene->turmaId !== null) {
-            $this->indexTurma[$gene->turmaId][] = $gene;
-        }
+        $this->removeGeneFromIndexes($geneA);
+        $this->removeGeneFromIndexes($geneB);
 
-        if ($gene->aulaId !== null) {
-            $this->indexAula[$gene->aulaId][] = $gene;
-        }
+        $this->genes[$i] = $geneB;
+        $this->genes[$j] = $geneA;
+
+        $this->applyGeneToIndexes($geneB);
+        $this->applyGeneToIndexes($geneA);
     }
 
-    public function replaceGene(int $index, Gene $gene): void
+    /*
+    |--------------------------------------------------------------------------
+    | Getters Estruturais (para Rules)
+    |--------------------------------------------------------------------------
+    */
+
+    public function getProfessorHorarioIndex(): array
     {
-        $this->genes[$index] = $gene;
-        $this->rebuildIndexes();
+        return $this->professorHorarioIndex;
+    }
+
+    public function getTurmaHorarioIndex(): array
+    {
+        return $this->turmaHorarioIndex;
+    }
+
+    public function getCargaProfessorIndex(): array
+    {
+        return $this->cargaProfessorIndex;
+    }
+
+    public function getCargaTurmaIndex(): array
+    {
+        return $this->cargaTurmaIndex;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Genes
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * @return Gene[]
+     */
+    public function getGenes(): array
+    {
+        return $this->genes;
     }
 
     public function count(): int
@@ -79,80 +204,32 @@ final class Cromossomo
         return count($this->genes);
     }
 
-    /* ============================================================
-       INDEXES
-       ============================================================ */
+    /*
+    |--------------------------------------------------------------------------
+    | Fitness
+    |--------------------------------------------------------------------------
+    */
 
-    private function buildIndexes(): void
+    public function getFitness(): float
     {
-        foreach ($this->genes as $gene) {
-
-            if ($gene->isEmpty()) {
-                continue;
-            }
-
-            if ($gene->professorId !== null) {
-                $this->indexProfessor[$gene->professorId][] = $gene;
-            }
-
-            if ($gene->turmaId !== null) {
-                $this->indexTurma[$gene->turmaId][] = $gene;
-            }
-
-            if ($gene->aulaId !== null) {
-                $this->indexAula[$gene->aulaId][] = $gene;
-            }
-        }
+        return $this->fitness;
     }
 
-    public function rebuildIndexes(): void
+    public function setFitness(float $fitness): void
     {
-        $this->indexProfessor = [];
-        $this->indexTurma = [];
-        $this->indexAula = [];
-
-        $this->buildIndexes();
+        $this->fitness = $fitness;
     }
 
-    public function getProfessorGenes(int $professorId): array
-    {
-        return $this->indexProfessor[$professorId] ?? [];
-    }
-
-    public function getTurmaGenes(int $turmaId): array
-    {
-        return $this->indexTurma[$turmaId] ?? [];
-    }
-
-    public function getAulaGenes(int $aulaId): array
-    {
-        return $this->indexAula[$aulaId] ?? [];
-    }
-
-    /* ============================================================
-       CLONE ULTRA RÁPIDO
-       ============================================================ */
+    /*
+    |--------------------------------------------------------------------------
+    | Clone Defensivo
+    |--------------------------------------------------------------------------
+    */
 
     public function copy(): self
     {
-        $newGenes = [];
-
-        foreach ($this->genes as $gene) {
-            $newGenes[] = $gene->copy();
-        }
-
-        $clone = new self($newGenes);
-        $clone->fitness = $this->fitness;
-
+        $clone = new self($this->genes);
+        $clone->setFitness($this->fitness);
         return $clone;
-    }
-
-    /* ============================================================
-       UTIL
-       ============================================================ */
-
-    public function hasHardConflict(): bool
-    {
-        return $this->fitness > 0;
     }
 }

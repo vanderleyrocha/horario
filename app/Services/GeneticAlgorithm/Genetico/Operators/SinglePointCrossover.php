@@ -1,25 +1,40 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\GeneticAlgorithm\Genetico\Operators;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
 
-class SinglePointCrossover implements CrossoverOperatorInterface
-{
-    public function crossover(Cromossomo $parent1, Cromossomo $parent2): array {
+final class SinglePointCrossover implements CrossoverOperatorInterface {
+    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array {
+        $size = $pai1->count();
 
-        $size = count($parent1->genes);
-
-        if ($size <= 1) {
-            return [$parent1->copy(), $parent2->copy()];
+        if ($size === 0) {
+            return [$pai1->copy(), $pai2->copy()];
         }
 
-        $cutPoint = rand(1, $size - 1);
+        $point = random_int(1, $size - 1);
 
-        $child1Genes = array_merge(array_slice($parent1->genes, 0, $cutPoint), array_slice($parent2->genes, $cutPoint));
+        $genes1 = [];
+        $genes2 = [];
 
-        $child2Genes = array_merge(array_slice($parent2->genes, 0, $cutPoint), array_slice($parent1->genes, $cutPoint));
+        $p1Genes = $pai1->getGenes();
+        $p2Genes = $pai2->getGenes();
 
-        return [new Cromossomo($child1Genes), new Cromossomo($child2Genes),];
+        for ($i = 0; $i < $size; $i++) {
+            if ($i < $point) {
+                $genes1[] = $p1Genes[$i];
+                $genes2[] = $p2Genes[$i];
+            } else {
+                $genes1[] = $p2Genes[$i];
+                $genes2[] = $p1Genes[$i];
+            }
+        }
+
+        return [
+            new Cromossomo($genes1),
+            new Cromossomo($genes2),
+        ];
     }
 }

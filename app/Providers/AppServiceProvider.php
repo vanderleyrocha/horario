@@ -16,6 +16,7 @@ use App\Services\GeneticAlgorithm\Genetico\Operators\BlockPreservingCrossover;
 use App\Services\GeneticAlgorithm\Genetico\Operators\GeneSwapMutation;
 use App\Services\GeneticAlgorithm\Genetico\Operators\MutationOperatorInterface;
 
+
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {
 

@@ -3,58 +3,33 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Operators;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
-use App\Services\GeneticAlgorithm\Genetico\Entities\Gene;
 
 final class BlockPreservingCrossover implements CrossoverOperatorInterface
 {
-    public function crossover(Cromossomo $parent1, Cromossomo $parent2): array
+    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array
     {
-        $child1 = $this->createChild($parent1, $parent2);
-        $child2 = $this->createChild($parent2, $parent1);
-
-        return [$child1, $child2];
-    }
-
-    private function createChild(Cromossomo $primary, Cromossomo $secondary): Cromossomo
-    {
-        $genes = [];
-
-        $selectedDays = $this->selectRandomDays($primary);
-
-        // 1️⃣ Preserva blocos inteiros do primary
-        foreach ($primary->genes as $gene) {
-            if (in_array($gene->diaSemana, $selectedDays)) {
-                $genes[] = $gene->copy();
-            }
+        $size = $pai1->count();
+        if ($size < 2) {
+            return [$pai1->copy(), $pai2->copy()];
         }
 
-        // 2️⃣ Completa com genes do secondary
-        foreach ($secondary->genes as $gene) {
+        $start = random_int(0, $size - 2);
+        $end   = random_int($start + 1, $size - 1);
 
-            if (in_array($gene->diaSemana, $selectedDays)) {
-                continue;
-            }
+        $p1 = $pai1->getGenes();
+        $p2 = $pai2->getGenes();
 
-            $genes[] = $gene->copy();
+        $child1 = $p1;
+        $child2 = $p2;
+
+        for ($i = $start; $i <= $end; $i++) {
+            $child1[$i] = $p2[$i];
+            $child2[$i] = $p1[$i];
         }
 
-        return new Cromossomo($genes);
-    }
-
-    private function selectRandomDays(Cromossomo $cromossomo): array
-    {
-        $dias = [];
-
-        foreach ($cromossomo->genes as $gene) {
-            $dias[$gene->diaSemana] = true;
-        }
-
-        $dias = array_keys($dias);
-
-        shuffle($dias);
-
-        $half = max(1, (int)(count($dias) / 2));
-
-        return array_slice($dias, 0, $half);
+        return [
+            new Cromossomo($child1),
+            new Cromossomo($child2),
+        ];
     }
 }

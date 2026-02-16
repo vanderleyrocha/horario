@@ -1,51 +1,98 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\GeneticAlgorithm\Genetico\Entities;
 
-final class Gene
+final readonly class Gene
 {
-    public readonly ?int $aulaId;
-    public readonly ?int $professorId;
-    public readonly ?int $disciplinaId;
-    public readonly ?int $turmaId;
-
-    public readonly int $diaSemana;
-    public readonly int $periodoDia;
-    public readonly int $duracaoTempos;
-
     public function __construct(
-        ?int $aulaId,
-        int $diaSemana,
-        int $periodoDia,
-        int $duracaoTempos = 1,
-        ?int $professorId = null,
-        ?int $disciplinaId = null,
-        ?int $turmaId = null
-    ) {
-        $this->aulaId = $aulaId;
-        $this->diaSemana = $diaSemana;
-        $this->periodoDia = $periodoDia;
-        $this->duracaoTempos = $duracaoTempos;
-        $this->professorId = $professorId;
-        $this->disciplinaId = $disciplinaId;
-        $this->turmaId = $turmaId;
-    }
+        private int $aulaId,
+        private int $professorId,
+        private int $turmaId,
+        private int $disciplinaId,
+        private int $diaSemana,
+        private int $periodoDia,
+        private int $duracaoTempos
+    ) {}
 
-    public function isEmpty(): bool
+    public function getAulaId(): int
     {
-        return $this->aulaId === null;
+        return $this->aulaId;
     }
 
-    public function copy(): self
+    public function getProfessorId(): int
+    {
+        return $this->professorId;
+    }
+
+    public function getTurmaId(): int
+    {
+        return $this->turmaId;
+    }
+
+    public function getDisciplinaId(): int
+    {
+        return $this->disciplinaId;
+    }
+
+    public function getDiaSemana(): int
+    {
+        return $this->diaSemana;
+    }
+
+    public function getPeriodoDia(): int
+    {
+        return $this->periodoDia;
+    }
+
+    public function getDuracaoTempos(): int
+    {
+        return $this->duracaoTempos;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Métodos utilitários industriais
+    |--------------------------------------------------------------------------
+    */
+
+    public function withDiaPeriodo(int $diaSemana, int $periodoDia): self
     {
         return new self(
             $this->aulaId,
+            $this->professorId,
+            $this->turmaId,
+            $this->disciplinaId,
+            $diaSemana,
+            $periodoDia,
+            $this->duracaoTempos
+        );
+    }
+
+    public function withProfessor(int $professorId): self
+    {
+        return new self(
+            $this->aulaId,
+            $professorId,
+            $this->turmaId,
+            $this->disciplinaId,
             $this->diaSemana,
             $this->periodoDia,
-            $this->duracaoTempos,
+            $this->duracaoTempos
+        );
+    }
+
+    public function withTurma(int $turmaId): self
+    {
+        return new self(
+            $this->aulaId,
             $this->professorId,
+            $turmaId,
             $this->disciplinaId,
-            $this->turmaId
+            $this->diaSemana,
+            $this->periodoDia,
+            $this->duracaoTempos
         );
     }
 }
