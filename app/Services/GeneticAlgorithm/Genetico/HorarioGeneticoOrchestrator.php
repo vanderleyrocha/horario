@@ -30,35 +30,35 @@ final class HorarioGeneticoOrchestrator {
         MetricsRecorder $metricsRecorder,
         array $evaluationData
     ): Cromossomo {
-        // ✅ CORRETO: passa tamanho da população
-        $population = $this->populationGenerator->generate(
-            $this->config->tamanhoPopulacao
-        );
+
+        $cargaEsperada = $this->buildCargaEsperada();
+        $diasPreferidos = $this->buildDiasPreferidos();
+        $temposPreferidos = $this->buildTemposPreferidos();
+
+        $population = $this->populationGenerator->generate($this->config->tamanhoPopulacao);
 
         $generation = 0;
 
         while (true) {
 
-            $this->avaliarPopulacao($population);
+            foreach ($population as $cromossomo) {
 
-            usort(
-                $population,
-                fn(Cromossomo $a, Cromossomo $b)
-                => $a->getFitness() <=> $b->getFitness()
-            );
+                $context = new EvaluationContext(
+                    genes: $cromossomo->genes,
+                    restricoesIndexadas: $this->restricoesIndexadas,
+                    cargaEsperada: $cargaEsperada,
+                    diasPreferidos: $diasPreferidos,
+                    temposPreferidos: $temposPreferidos
+                );
 
-            // ✅ Compatível com MetricsRecorder
-            $this->metricsRecorder->recordGeneration(
-                $generation,
-                $population
-            );
+                $fitnessEvaluator->evaluate($cromossomo, $context);
+            }
 
-            // ✅ Compatível com TerminationCriterion
-            if ($this->terminationCriterion->shouldTerminate(
-                $population,
-                $generation,
-                $this->metricsRecorder->getBestCromossomoOverall()
-            )) {
+            usort($population, fn(Cromossomo $a, Cromossomo $b) => $a->getFitness() <=> $b->getFitness());
+
+            $this->metricsRecorder->recordGeneration($generation, $population);
+
+            if ($this->terminationCriterion->shouldTerminate($population, $generation, $this->metricsRecorder->getBestCromossomoOverall())) {
                 break;
             }
 
@@ -67,37 +67,9 @@ final class HorarioGeneticoOrchestrator {
             $generation++;
         }
 
-        return $this->metricsRecorder->getBestCromossomoOverall()
-            ?? $population[0];
+        return $this->metricsRecorder->getBestCromossomoOverall() ?? $population[0];
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Avaliação
-    |--------------------------------------------------------------------------
-    */
-
-    private function avaliarPopulacao(array $population): void {
-        foreach ($population as $chromosome) {
-
-            $context = new EvaluationContext(
-                $chromosome,
-                ...$this->evaluationData
-            );
-
-            // ✅ CORRETO: passa cromossomo e contexto
-            $this->fitnessEvaluator->evaluate(
-                $chromosome,
-                $context
-            );
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Evolução
-    |--------------------------------------------------------------------------
-    */
 
     private function evoluir(array $population): array {
         $newPopulation = [];
