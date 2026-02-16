@@ -3,58 +3,64 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Termination;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
-use App\Services\GeneticAlgorithm\Genetico\DTO\GeneticAlgorithmConfigDTO;
-use Illuminate\Support\Collection;
 
-class MaxGenerationsOrFitnessCriterion implements TerminationCriterionInterface {
-    private GeneticAlgorithmConfigDTO $configAG;
+final class MaxGenerationsOrFitnessCriterion implements TerminationCriterionInterface
+{
     private int $generationsWithoutImprovement = 0;
-    private float $lastBestFitness = -INF; // Usar -INF para garantir que qualquer score seja maior
 
-    public function __construct() {
-        // O configAG será setado via setContext()
-    }
+    private float $bestFitnessSeen = INF;
 
-    public function setContext(GeneticAlgorithmConfigDTO $configAG): void {
-        $this->configAG = $configAG;
-        // Resetar estado ao definir novo contexto
-        $this->generationsWithoutImprovement = 0;
-        $this->lastBestFitness = -INF;
-    }
+    public function __construct(
+        private readonly int $maxGenerations,
+        private readonly float $targetFitness = 0.0,
+        private readonly int $maxGenerationsWithoutImprovement = 50
+    ) {}
 
-    public function shouldTerminate(Collection $population, int $currentGeneration, ?Cromossomo $bestCromossomoOverall): bool {
-        if (!isset($this->configAG)) {
-            throw new \Exception("MaxGenerationsOrFitnessCriterion context not set. Call setContext() before shouldTerminate().");
-        }
+    public function shouldTerminate(
+        array $population,
+        int $generation,
+        ?Cromossomo $bestOverall
+    ): bool {
 
-        // Critério 1: Número máximo de gerações
-        if ($currentGeneration >= $this->configAG->numeroGeracoes) {
+        // 1️⃣ Critério: limite de gerações
+        if ($generation >= $this->maxGenerations) {
             return true;
         }
 
-        // Critério 2: Fitness satisfatório
-        if ($bestCromossomoOverall && $bestCromossomoOverall->getFitnessScore() >= $this->configAG->targetFitness) {
+        if (!$bestOverall) {
+            return false;
+        }
+
+        $currentBest = $bestOverall->getFitness();
+
+        // 2️⃣ Atualiza controle de estagnação
+        if ($currentBest < $this->bestFitnessSeen) {
+
+            $this->bestFitnessSeen = $currentBest;
+            $this->generationsWithoutImprovement = 0;
+
+        } else {
+
+            $this->generationsWithoutImprovement++;
+        }
+
+        // 3️⃣ Critério: target fitness (minimização)
+        if ($this->targetFitness > 0.0 &&
+            $currentBest <= $this->targetFitness) {
             return true;
         }
 
-        // Critério 3: Convergência (gerações sem melhoria)
-        if ($bestCromossomoOverall) {
-            if ($bestCromossomoOverall->getFitnessScore() > $this->lastBestFitness) {
-                $this->lastBestFitness = $bestCromossomoOverall->getFitnessScore();
-                $this->generationsWithoutImprovement = 0;
-            } else {
-                $this->generationsWithoutImprovement++;
-            }
-        }
-
-        if ($this->generationsWithoutImprovement >= $this->configAG->maxGenerationsWithoutImprovement) {
+        // 4️⃣ Critério: estagnação
+        if ($this->generationsWithoutImprovement >=
+            $this->maxGenerationsWithoutImprovement) {
             return true;
         }
 
         return false;
     }
 
-    public function getGenerationsWithoutImprovement(): int {
+    public function getGenerationsWithoutImprovement(): int
+    {
         return $this->generationsWithoutImprovement;
     }
 }

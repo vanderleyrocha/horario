@@ -3,47 +3,34 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Operators;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
-use App\Services\GeneticAlgorithm\Genetico\DTO\GeneticAlgorithmConfigDTO;
-use Illuminate\Support\Collection;
 
-class GeneSwapMutation implements MutationOperatorInterface
+final class GeneSwapMutation implements MutationOperatorInterface
 {
-    private GeneticAlgorithmConfigDTO $configAG;
-
-    public function __construct()
+    public function mutate(Cromossomo $cromossomo): void
     {
-        // O configAG será setado via setContext()
-    }
+        $size = count($cromossomo->genes);
 
-    public function setContext(GeneticAlgorithmConfigDTO $configAG): void
-    {
-        $this->configAG = $configAG;
-    }
-
-    public function mutate(Cromossomo $cromossomo, float $mutationRate): void
-    {
-        if (!isset($this->configAG)) {
-            throw new \Exception("GeneSwapMutation context not set. Call setContext() before mutate().");
-        }
-
-        if ($cromossomo->genes->isEmpty()) {
+        if ($size < 2) {
             return;
         }
 
-        if (mt_rand() / mt_getrandmax() < $mutationRate) {
-            // Seleciona um gene aleatoriamente para mutar
-            $geneToMutate = $cromossomo->genes->random();
+        // Escolhe dois índices distintos
+        $i = random_int(0, $size - 1);
+        $j = random_int(0, $size - 1);
 
-            // Encontra um novo slot de tempo aleatório
-            $horariosDisponiveis = $this->configAG->horariosDisponiveis;
-            if (empty($horariosDisponiveis)) {
-                return;
-            }
-            $novoHorario = $horariosDisponiveis[array_rand($horariosDisponiveis)];
-
-            // Aplica a mutação: altera o dia e tempo do gene
-            $geneToMutate->diaSemana = $novoHorario['dia'];
-            $geneToMutate->periodoDia = $novoHorario['tempo'];
+        if ($i === $j) {
+            return;
         }
+
+        // Swap estrutural
+        $temp = $cromossomo->genes[$i];
+        $cromossomo->genes[$i] = $cromossomo->genes[$j];
+        $cromossomo->genes[$j] = $temp;
+
+        // Reconstruir índices para manter consistência
+        $cromossomo->rebuildIndexes();
+
+        // Fitness será recalculado pelo loop principal
+        $cromossomo->setFitness(INF);
     }
 }

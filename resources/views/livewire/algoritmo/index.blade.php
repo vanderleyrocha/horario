@@ -14,13 +14,12 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Tamanho da População
                         </label>
-                        <input
-                            type="number"
-                            wire:model="configuracao.populacao"
-                            min="10"
+                        <input type="number" wire:model="configuracao.populacao" min="10"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <p class="mt-1 text-xs text-gray-500">Número de indivíduos em cada geração.</p>
-                        @error('configuracao.populacao') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        @error('configuracao.populacao')
+                            <span class="text-red-500 text-xs">{{ $message }}</span>
+                        @enderror
                     </div>
 
                     {{-- Número de Gerações --}}
@@ -28,10 +27,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Número de Gerações
                         </label>
-                        <input
-                            type="number"
-                            wire:model="configuracao.geracoes"
-                            min="1"
+                        <input type="number" wire:model="configuracao.geracoes" min="1"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <p class="mt-1 text-xs text-gray-500">Total de ciclos de evolução do algoritmo.</p>
                         @error('configuracao.geracoes')
@@ -44,12 +40,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Taxa de Mutação
                         </label>
-                        <input
-                            type="number"
-                            wire:model="configuracao.taxa_mutacao"
-                            min="0"
-                            max="1"
-                            step="0.01"
+                        <input type="number" wire:model="configuracao.taxa_mutacao" min="0" max="1" step="0.01"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <p class="mt-1 text-xs text-gray-500">Probabilidade de mutação de um gene (0.0-1.0)</p>
                         @error('configuracao.taxa_mutacao')
@@ -62,12 +53,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Taxa de Crossover
                         </label>
-                        <input
-                            type="number"
-                            wire:model="configuracao.taxa_crossover"
-                            min="0"
-                            max="1"
-                            step="0.01"
+                        <input type="number" wire:model="configuracao.taxa_crossover" min="0" max="1" step="0.01"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <p class="mt-1 text-xs text-gray-500">Probabilidade de cruzamento (0.0-1.0)</p>
                         @error('configuracao.taxa_crossover')
@@ -80,7 +66,8 @@
                 <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div class="flex items-start space-x-3">
                         <svg class="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                clip-rule="evenodd" />
                         </svg>
                         <div class="flex-1">
                             <h4 class="text-sm font-semibold text-blue-900 mb-1">Dicas para Configuração</h4>
@@ -96,21 +83,17 @@
 
                 {{-- Botão Iniciar --}}
                 <div class="mt-6 flex justify-end">
-                    <button
-                        wire:click="iniciarGeracao"
-                        class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center space-x-2">
+                    <button wire:click="iniciarGeracao" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center space-x-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                         <span>Iniciar Geração</span>
                     </button>
                 </div>
             </div>
-
         @else
             {{-- Progresso da Geração --}}
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
-                 wire:poll.2000ms="atualizarProgresso"> {{-- ✅ wire:poll para atualização automática --}}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" wire:poll.2000ms="atualizarStatus"> {{-- ✅ wire:poll para atualização automática --}}
                 <h2 class="text-xl font-bold text-gray-900 mb-6">Gerando Horário...</h2>
 
                 {{-- Barra de Progresso --}}
@@ -124,9 +107,7 @@
                         </span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                        <div
-                            class="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-500"
-                            style="width: {{ $progresso }}%">
+                        <div class="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-500" style="width: {{ $progresso }}%">
                         </div>
                     </div>
                 </div>
@@ -174,16 +155,13 @@
 
                 {{-- Botão Cancelar --}}
                 <div class="flex justify-center mt-6">
-                    <button
-                        wire:click="cancelarGeracao"
-                        wire:confirm="Tem certeza que deseja cancelar a geração?"
-                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    <button wire:click="cancelarGeracao" wire:confirm="Tem certeza que deseja cancelar a geração?" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                         Cancelar Geração
                     </button>
                 </div>
             </div>
         @endif
-
+        
         {{-- Informações do Horário --}}
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Informações do Horário</h3>
@@ -211,11 +189,11 @@
 </div>
 
 @script
-<script>
-    $wire.on('geracaoConcluida', () => {
-        setTimeout(() => {
-            $wire.visualizarResultado();
-        }, 2000);
-    });
-</script>
+    <script>
+        $wire.on('geracaoConcluida', () => {
+            setTimeout(() => {
+                $wire.visualizarResultado();
+            }, 2000);
+        });
+    </script>
 @endscript

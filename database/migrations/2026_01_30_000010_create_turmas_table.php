@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('nome');
             $table->string('codigo');
+            $table->integer('serie');
             $table->enum('turno', ['matutino', 'vespertino', 'noturno', 'integral']);
             $table->integer('numero_alunos');
             $table->integer('ano');

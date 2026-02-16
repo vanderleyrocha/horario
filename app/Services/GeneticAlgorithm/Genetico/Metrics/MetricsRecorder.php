@@ -3,53 +3,67 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Metrics;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
-use Illuminate\Support\Collection;
 
-class MetricsRecorder
+final class MetricsRecorder
 {
-    private array $generationData = []; // Armazena métricas por geração
-    private ?Cromossomo $bestCromossomoOverall = null;
-    private float $bestFitnessOverall = -INF;
+    private array $generationData = [];
 
-    public function recordGeneration(int $generation, Collection $population): void
+    private ?Cromossomo $bestOverall = null;
+
+    private float $bestFitnessOverall = INF;
+
+    public function recordGeneration(int $generation, array $population): void
     {
-        if ($population->isEmpty()) {
+        if (empty($population)) {
             return;
         }
 
-        $fitnessScores = $population->map(fn(Cromossomo $c) => $c->getFitnessScore());
+        $bestFitness = INF;
+        $bestIndividual = null;
+        $sum = 0.0;
+        $count = count($population);
 
-        $bestInGeneration = $fitnessScores->max();
-        $averageInGeneration = $fitnessScores->avg();
-        $worstInGeneration = $fitnessScores->min();
+        foreach ($population as $cromossomo) {
+
+            $fitness = $cromossomo->getFitness();
+
+            $sum += $fitness;
+
+            if ($fitness < $bestFitness) {
+                $bestFitness = $fitness;
+                $bestIndividual = $cromossomo;
+            }
+        }
+
+        $averageFitness = $sum / $count;
+
+        // Atualiza melhor global se necessário
+        if ($bestFitness < $this->bestFitnessOverall) {
+
+            $this->bestFitnessOverall = $bestFitness;
+
+            // IMPORTANTE: copiar para evitar mutação posterior
+            $this->bestOverall = $bestIndividual?->copy();
+        }
 
         $this->generationData[$generation] = [
-            'best_fitness' => $bestInGeneration,
-            'average_fitness' => $averageInGeneration,
-            'worst_fitness' => $worstInGeneration,
-            // Outras métricas, como número de conflitos hard/soft, etc.
+            'best_fitness' => $bestFitness,
+            'average_fitness' => $averageFitness,
         ];
-
-        // Atualiza o melhor cromossomo geral
-        $currentBestCromossomo = $population->sortByDesc(fn(Cromossomo $c) => $c->getFitnessScore())->first();
-        if ($currentBestCromossomo && $currentBestCromossomo->getFitnessScore() > $this->bestFitnessOverall) {
-            $this->bestFitnessOverall = $currentBestCromossomo->getFitnessScore();
-            $this->bestCromossomoOverall = $currentBestCromossomo->clone();
-        }
-    }
-
-    public function getGenerationData(): array
-    {
-        return $this->generationData;
     }
 
     public function getBestCromossomoOverall(): ?Cromossomo
     {
-        return $this->bestCromossomoOverall;
+        return $this->bestOverall;
     }
 
     public function getBestFitnessOverall(): float
     {
         return $this->bestFitnessOverall;
+    }
+
+    public function getGenerationData(): array
+    {
+        return $this->generationData;
     }
 }

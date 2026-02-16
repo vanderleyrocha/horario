@@ -2,146 +2,135 @@
 
 namespace App\Services\GeneticAlgorithm\Genetico;
 
-use App\Models\Aula;
-use App\Models\ConfiguracaoHorario; // ✅ ADICIONADO
 use App\Services\GeneticAlgorithm\Genetico\DTO\GeneticAlgorithmConfigDTO;
-use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo; // ✅ ADICIONADO
-use App\Services\GeneticAlgorithm\Genetico\Entities\Gene; // ✅ ADICIONADO
-use Illuminate\Support\Collection;
+use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
+use App\Services\GeneticAlgorithm\Genetico\Entities\Gene;
 
-class PopulationGenerator
+final class PopulationGenerator
 {
-    private ConfiguracaoHorario $configuracaoHorario; // ✅ ADICIONADO
-    
-    private Collection $aulas;
-    private GeneticAlgorithmConfigDTO $configAG;
+    public function __construct(
+        private readonly array $aulas,
+        private readonly GeneticAlgorithmConfigDTO $configAG
+    ) {}
 
-    public function __construct()
+    public function generate(int $populationSize): array
     {
-        // As dependências serão setadas via setContext()
-    }
+        $population = [];
 
-    public function setContext(ConfiguracaoHorario $configuracaoHorario, Collection $aulas, GeneticAlgorithmConfigDTO $configAG): void {
-        $this->configuracaoHorario = $configuracaoHorario;
-        $this->aulas = $aulas;
-        $this->configAG = $configAG;
-    }
-
-    public function generate(int $populationSize): Collection
-    {
-        if (!isset($this->configuracaoHorario, $this->aulas, $this->configAG)) {
-            throw new \Exception("PopulationGenerator context not set. Call setContext() before generate().");
-        }
-
-        $population = new Collection();
         for ($i = 0; $i < $populationSize; $i++) {
-            $population->add($this->createRandomCromossomo());
+            $population[] = $this->createDiverseCromossomo($i);
         }
+
         return $population;
     }
 
-    protected function createRandomCromossomo(): Cromossomo
+    /**
+     * Gera cromossomo com alta diversidade estrutural
+     */
+    private function createDiverseCromossomo(int $seedOffset): Cromossomo
     {
-        $cromossomo = new Cromossomo($this->configuracaoHorario);
+        $genes = [];
 
-        foreach ($this->aulas as $aula) {
-            $numAlocacoes = $aula->aulas_semana;
-            $duracaoTempos = $this->getDuracaoTempos($aula->tipo);
+        $aulas = $this->aulas;
+        shuffle($aulas);
 
-            $alocacoesFeitas = 0;
-            $tentativas = 0;
-            $maxTentativas = 100; // Limite para evitar loops infinitos em casos impossíveis
+        $horarios = $this->configAG->horariosDisponiveis;
+        shuffle($horarios);
 
-            while ($alocacoesFeitas < $numAlocacoes && $tentativas < $maxTentativas) {
-                $tentativas++;
+        $horarioCount = count($horarios);
+        $pointer = $seedOffset % max(1, $horarioCount);
 
-                // Escolhe um horário aleatório (respeitando preferências e evitando conflitos)
-                $horario = $this->escolherHorarioAleatorio($aula, $cromossomo->genes);
+        $ocupacaoProfessor = [];
+        $ocupacaoTurma = [];
 
-                if ($horario) {
-                    $gene = new Gene(
-                        $aula,
-                        $horario['dia'],
-                        $horario['tempo'],
-                        $duracaoTempos,
-                        $aula->professor,
-                        $aula->disciplina,
-                        $aula->turma
-                    );
-                    $cromossomo->addGene($gene);
-                    $alocacoesFeitas++;
-                }
-            }
-        }
+        foreach ($aulas as $aula) {
 
-        return $cromossomo;
-    }
+            $numAlocacoes = (int) $aula->aulas_semana;
+            $duracao = $this->getDuracaoTempos($aula->tipo);
 
-    protected function escolherHorarioAleatorio(Aula $aula, Collection $genesExistentes): ?array
-    {
-        $horariosValidos = [];
-        $horariosDisponiveis = $this->configAG->horariosDisponiveis;
+            for ($i = 0; $i < $numAlocacoes; $i++) {
 
-        if (empty($horariosDisponiveis)) {
-            return null;
-        }
+                $tentativas = 0;
+                $maxTentativas = 30;
+                $horarioEscolhido = null;
 
-        foreach ($horariosDisponiveis as $horario) {
-            $dia = $horario['dia'];
-            $tempo = $horario['tempo'];
+                while ($tentativas < $maxTentativas) {
 
-            // Verificar preferências de dias
-            if (!empty($aula->dias_preferidos) && !in_array($dia, json_decode($aula->dias_preferidos, true))) {
-                continue;
-            }
+                    $horario = $horarios[$pointer];
+                    $pointer = ($pointer + 1) % $horarioCount;
 
-            // Verificar preferências de tempos
-            if (!empty($aula->tempos_preferidos) && !in_array($tempo, json_decode($aula->tempos_preferidos, true))) {
-                continue;
-            }
+                    $dia = $horario['dia'];
+                    $tempo = $horario['tempo'];
 
-            // Verificar se não há conflito com genes existentes (mesma turma ou professor no mesmo dia/tempo)
-            $temConflito = false;
-            $duracaoNovaAula = $this->getDuracaoTempos($aula->tipo);
-
-            // Itera sobre cada slot que a nova aula ocuparia
-            for ($i = 0; $i < $duracaoNovaAula; $i++) {
-                $currentPeriodoNovaAula = $tempo + $i;
-
-                foreach ($genesExistentes as $geneExistente) {
-                    // Itera sobre cada slot que o gene existente ocupa
-                    for ($j = 0; $j < $geneExistente->duracaoTempos; $j++) {
-                        $currentPeriodoGeneExistente = $geneExistente->periodoDia + $j;
-
-                        // Verifica se há sobreposição de dia e período
-                        if ($geneExistente->diaSemana == $dia && $currentPeriodoGeneExistente == $currentPeriodoNovaAula) {
-                            // Verifica conflito de turma ou professor
-                            if (($geneExistente->turma && $geneExistente->turma->id == $aula->turma_id) ||
-                                ($geneExistente->professor && $geneExistente->professor->id == $aula->professor_id)) {
-                                $temConflito = true;
-                                break 3; // Sai dos três loops (i, j, foreach genesExistentes)
-                            }
-                        }
+                    if (!$this->temConflitoBasico(
+                        $aula->professor->id,
+                        $aula->turma->id,
+                        $dia,
+                        $tempo,
+                        $duracao,
+                        $ocupacaoProfessor,
+                        $ocupacaoTurma
+                    )) {
+                        $horarioEscolhido = $horario;
+                        break;
                     }
+
+                    $tentativas++;
                 }
-            }
 
-            if (!$temConflito) {
-                $horariosValidos[] = $horario;
+                if (!$horarioEscolhido) {
+                    $horarioEscolhido = $horarios[array_rand($horarios)];
+                }
+
+                $dia = $horarioEscolhido['dia'];
+                $tempo = $horarioEscolhido['tempo'];
+
+                for ($d = 0; $d < $duracao; $d++) {
+                    $ocupacaoProfessor[$aula->professor->id][$dia][$tempo + $d] = true;
+                    $ocupacaoTurma[$aula->turma->id][$dia][$tempo + $d] = true;
+                }
+
+                $genes[] = new Gene(
+                    aulaId: $aula->id,
+                    professorId: $aula->professor->id,
+                    turmaId: $aula->turma->id,
+                    disciplinaId: $aula->disciplina->id,
+                    diaSemana: $dia,
+                    periodoDia: $tempo,
+                    duracaoTempos: $duracao
+                );
             }
         }
 
-        if (empty($horariosValidos)) {
-            // Se não encontrou horário válido com preferências, tentar qualquer horário disponível
-            return $horariosDisponiveis[array_rand($horariosDisponiveis)] ?? null;
-        }
-
-        return $horariosValidos[array_rand($horariosValidos)];
+        return new Cromossomo($genes);
     }
 
-    protected function getDuracaoTempos(string $tipo): int
+    private function temConflitoBasico(
+        int $professorId,
+        int $turmaId,
+        int $dia,
+        int $tempo,
+        int $duracao,
+        array $ocupacaoProfessor,
+        array $ocupacaoTurma
+    ): bool {
+
+        for ($i = 0; $i < $duracao; $i++) {
+
+            if (
+                isset($ocupacaoProfessor[$professorId][$dia][$tempo + $i]) ||
+                isset($ocupacaoTurma[$turmaId][$dia][$tempo + $i])
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function getDuracaoTempos(string $tipo): int
     {
-        return match($tipo) {
+        return match ($tipo) {
             'simples' => 1,
             'dupla' => 2,
             'tripla' => 3,

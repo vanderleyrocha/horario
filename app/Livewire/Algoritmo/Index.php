@@ -21,6 +21,9 @@ class Index extends Component {
     public float $melhorFitness = 0.0;
     public ?string $mensagemStatus = null; // ✅ ADICIONADO
 
+    public ?string $status = null;
+    public ?string $mensagemErro = null;
+
     public array $configuracao = [];
 
     protected array $rules = [
@@ -55,6 +58,7 @@ class Index extends Component {
             $this->statusGeracao = 'pronto';
             $this->mensagemStatus = 'Aguardando início da geração.';
         }
+        $this->atualizarStatus();
     }
 
     public function updatedConfiguracao() {
@@ -78,6 +82,7 @@ class Index extends Component {
         $this->mensagemStatus = 'Iniciando processo de geração...'; // ✅ ADICIONADO
 
         // Dispara o Job assíncrono
+        Log::info("Algoritmo.Index Component: dispatch Job para horário {$this->horario->id}");
         GerarHorarioJob::dispatch($this->horario);
 
         // O polling começará a buscar atualizações do cache
@@ -89,20 +94,16 @@ class Index extends Component {
         $dadosProgresso = Cache::get($cacheKey);
 
         // Log para depuração: Verifique os dados lidos do cache
-        Log::info("Lendo progresso do cache para horário {$this->horario->id}", $dadosProgresso ?? ['status' => 'Cache vazio']);
+        // Log::info("Lendo progresso do cache para horário {$this->horario->id}", $dadosProgresso ?? ['status' => 'Cache vazio']);
 
         if ($dadosProgresso) {
-            $this->geracaoAtual = $dadosProgresso['geracao_atual'] ?? 0;
-            $this->totalGeracoes = $dadosProgresso['total_geracoes'] ?? 0;
-            $this->melhorFitness = $dadosProgresso['melhor_fitness'] ?? 0.0;
-            $this->progresso = $dadosProgresso['progresso'] ?? 0;
             $this->mensagemStatus = $dadosProgresso['mensagem_status'] ?? 'Processando...'; // ✅ CRUCIAL: Valor padrão
             $this->statusGeracao = $dadosProgresso['status_geracao'] ?? 'em_progresso'; // ✅ CRUCIAL: Valor padrão
 
             if ($this->statusGeracao === 'concluido' || $this->statusGeracao === 'erro') {
                 $this->emGeracao = false;
                 // Emitir evento para parar o polling, se necessário (o wire:poll já lida com a condição $emGeracao)
-                // $this->dispatch('stopPolling');
+                $this->dispatch('stopPolling');
             }
         } else {
             // Se o cache sumiu inesperadamente, assume que a geração parou ou falhou
@@ -112,9 +113,34 @@ class Index extends Component {
             $this->progresso = 0;
             $this->geracaoAtual = 0;
             $this->melhorFitness = 0.0;
-            // $this->dispatch('stopPolling');
+            $this->dispatch('stopPolling');
         }
     }
+
+    public function atualizarStatus() {
+        $cache = Cache::get("horario_geracao_{$this->horario->id}");
+
+        if (!$cache) {
+            return;
+        }
+
+        $this->status = $cache['status'] ?? null;
+        $this->progresso = (int) ($cache['progresso'] ?? 0);
+        $this->geracaoAtual = (int) ($cache['geracao_atual'] ?? 0);
+        $this->totalGeracoes = (int) ($cache['total_geracoes'] ?? 0);
+        $this->melhorFitness = (float) ($cache['melhor_fitness'] ?? 0);
+
+        $this->emGeracao = $this->status === 'em_execucao';
+
+        if ($this->status === 'erro') {
+            $this->mensagemErro = $cache['mensagem'] ?? 'Erro desconhecido.';
+        }
+
+        Log::info("Algoritmo.Index Component: Atualizando progresso do cache para horário {$this->horario->id}");
+
+        $this->atualizarProgresso();
+    }
+
 
     public function cancelarGeracao() {
         // Implementar lógica para cancelar o job, se possível.

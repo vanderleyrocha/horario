@@ -1,0 +1,109 @@
+app
+├── Jobs
+│   └── GerarHorarioJob.php
+├── Livewire
+│   ├── Actions
+│   │   └── Logout.php
+│   ├── Algoritmo
+│   │   └── Index.php
+│   ├── Aulas
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Auth
+│   │   ├── Login.php
+│   │   └── UserManager.php
+│   ├── Disciplinas
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Horarios
+│   │   ├── Configurar.php
+│   │   ├── Create.php
+│   │   ├── GerenciarAulas.php
+│   │   ├── GerenciarRestricoes.php
+│   │   ├── Index.php
+│   │   ├── ResumoConfiguracao.php
+│   │   └── Show.php
+│   ├── Layout
+│   │   ├── Navbar.php
+│   │   └── Sidebar.php
+│   ├── Professores
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Turmas
+│   │   ├── Aulas.php
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   └── Dashboard.php
+├── Models
+│   ├── Alocacao.php
+│   ├── Aula.php
+│   ├── ConfiguracaoHorario.php
+│   ├── Disciplina.php
+│   ├── Horario.php
+│   ├── Professor.php
+│   ├── RestricaoTempo.php
+│   ├── Turma.php
+│   └── User.php
+├── Providers
+│   ├── AppServiceProvider.php
+│   └── FortifyServiceProvider.php
+├── Services
+│   └── GeneticAlgorithm
+│       ├── Genetico
+│       │   ├── DTO
+│       │   │   └── GeneticAlgorithmConfigDTO.php
+│       │   ├── Entities
+│       │   │   ├── Cromossomo.php
+│       │   │   └── Gene.php
+│       │   ├── Fitness
+│       │   │   ├── Rules
+│       │   │   │   ├── Hard
+│       │   │   │   │   ├── BloqueiosHardRule.php
+│       │   │   │   │   ├── CargaHorariaExcedidaRule.php
+│       │   │   │   │   ├── ConflitoProfessorRule.php
+│       │   │   │   │   └── ConflitoTurmaRule.php
+│       │   │   │   ├── Soft
+│       │   │   │   │   ├── AulasNaoConsecutivasRule.php
+│       │   │   │   │   ├── BloqueiosPreferenciaisRule.php
+│       │   │   │   │   ├── DistribuicaoRule.php
+│       │   │   │   │   ├── JanelasRule.php
+│       │   │   │   │   └── MaxAulasDiaRule.php
+│       │   │   │   ├── FitnessRuleInterface.php
+│       │   │   │   ├── HardRuleInterface.php
+│       │   │   │   ├── RuleResult.php
+│       │   │   │   └── SoftRuleInterface.php
+│       │   │   ├── EvaluationContext.php
+│       │   │   ├── FitnessEvaluator.php
+│       │   │   ├── FitnessResult.php
+│       │   │   ├── FitnessRuleInterface.php
+│       │   │   └── FitnessWeights.php
+│       │   ├── Metrics
+│       │   │   └── MetricsRecorder.php
+│       │   ├── Operators
+│       │   │   ├── BlockPreservingCrossover.php
+│       │   │   ├── ConflictGuidedMutation.php
+│       │   │   ├── CrossoverOperatorInterface.php
+│       │   │   ├── GeneSwapMutation.php
+│       │   │   ├── MutationOperatorInterface.php
+│       │   │   ├── SelectionOperatorInterface.php
+│       │   │   ├── SinglePointCrossover.php
+│       │   │   ├── StructuredSwapMutation.php
+│       │   │   └── TournamentSelection.php
+│       │   ├── Repositories
+│       │   │   └── ConfiguracaoHorarioReadRepository.php
+│       │   ├── Termination
+│       │   │   ├── MaxGenerationsOrFitnessCriterion.php
+│       │   │   └── TerminationCriterionInterface.php
+│       │   ├── HorarioGeneticoOrchestrator.php
+│       │   └── PopulationGenerator.php
+│       └── HorarioGeneticoService.php
+├── Traits
+│   └── ComDadosComuns.php
+└── View
+    └── Components
+        ├── AppLayout.php
+        ├── Button.php
+        └── GuestLayout.php

@@ -69,10 +69,7 @@ class Show extends Component
 
         $grade = [];
 
-        $alocacoes = $this->horario->alocacoes()
-            ->where('turma_id', $this->turmaId)
-            ->with(['disciplina', 'professor'])
-            ->get();
+        $alocacoes = $this->horario->alocacoes()->where('turma_id', $this->turmaId)->with(['disciplina', 'professor'])->get();
 
         foreach ($alocacoes as $alocacao) {
             $horarioInicio = $alocacao->horario_inicio->format('H:i');

@@ -483,3 +483,570 @@ Para alertas em tempo real ou visíveis na interface:
 
 Integração com o Frontend: Quando o algoritmo termina (ou mesmo durante a execução, se for assíncrono e você tiver um mecanismo de polling), o FitnessResult do melhor cromossomo pode ser usado.
 Componente de Alerta: Um componente Livewire simples que exibe mensagens de alerta se cromossomo->fitnessResult->hasConflicts() for verdadeiro. Você pode usar frameworks CSS como Tailwind CSS (que você já está usando) para estilizar esses alertas.
+
+
+Normalizar peso de penalidade com base em duração do turno
+Criar cache estático de intervalos
+Transformar regra em modo adaptativo (dinâmico por geração)
+Criar teste unitário de stress para validar performance
+
+1️⃣ Otimizar BloqueiosPreferenciaisRule
+2️⃣ Refatorar AulasNaoConsecutivasRule
+3️⃣ Unificar padrão de contadores em DistribuicaoRule
+4️⃣ Simplificar MaxAulasDiaRule
+5️⃣ Criar cache interno de dados derivados no FitnessEvaluator
+
+🧩 Próxima Evolução Natural
+Se quiser ir além:
+Cache de fitness parcial (memoization)
+Fitness incremental após mutação
+Avaliação paralelizada
+Penalidades normalizadas por geração
+Penalidade adaptativa dinâmica
+
+🎯 Decisão Estratégica
+Você quer agora:
+Implementar essa arquitetura completa no projeto?
+Refatorar rule por rule comigo?
+Criar versão 2 do GA com fitness incremental?
+Medir performance com profiling real?
+
+🚀 Próxima Etapa Estratégica
+Agora que o Fitness está estruturalmente correto, podemos evoluir para:
+Fitness incremental (após mutação)
+Avaliação paralela
+Penalidade adaptativa por geração
+Cache de estruturas imutáveis
+Profiling real com métricas por regra
+
+🚀 Próxima Evolução
+Agora que o core está limpo, podemos avançar para:
+Fitness incremental (ganho de 3–5x)
+Avaliação paralela
+Early stopping por convergência
+Penalidade adaptativa por geração
+Profiling real com métricas por regra
+
+Se quiser agora, podemos ir para o próximo nível:
+⚡ Fitness incremental
+⚡ Paralelização por worker
+⚡ Adaptive mutation rate
+⚡ Profiling por regra
+
+🎯 Próximo Passo Recomendado
+Agora que o core está limpo, o próximo salto real de performance é:
+⚡ Fitness incremental (avaliar apenas genes alterados) - Grande salto
+⚡ Cache de conflitos por indivíduo
+⚡ Early convergence detection
+⚡ Profiling por regra
+
+🚀 Próximo passo estratégico
+Depois que isso rodar:
+Podemos otimizar o cálculo de horário (evitar recalcular para cada gene)
+Ou avançar para fitness incremental (ganho real de performance)
+
+
+Criar Crossover híbrido adaptativo
+Implementar Repair pós-crossover
+Medir diversidade populacional
+
+🔥 Implementar CompositeMutation profissional
+🚀 Criar Strategy dinâmica via config
+📊 Criar registro automático de regras
+🧠 Implementar Adaptive Mutation Rate
+🏎️ Otimizar ainda mais o loop evolutivo
+
+
+🔬 Revisar integração com MetricsRecorder
+⚡ Implementar Fitness caching interno (grande ganho de performance)
+🧠 Evoluir para GA híbrido com busca local
+
+🔥 Transformar as regras para rodarem em modo ultra-otimizado usando índices internos do Cromossomo
+🔥 Criar versão paralelizável do FitnessEvaluator
+🔥 Implementar elitismo adaptativo
+🔥 Implementar estagnação inteligente
+🔥 Introduzir mecanismo híbrido GA + busca local
+
+
+🔥 Próximo passo recomendado
+Escolha um:
+🔥 Otimizar regras para usar índices internos
+🚀 Introduzir avaliação incremental (delta fitness)
+🧠 Implementar elitismo adaptativo
+📊 Injetar logging evolutivo avançado
+⚡ Paralelizar avaliação de fitness
+🎯 Tornar GA totalmente determinístico (seed control)
+
+Se quiser, no próximo passo posso:
+🔬 Criar HybridMutation (ConflictGuided + RandomSwap)
+🧠 Criar AdaptiveMutationRate
+🚀 Criar MultiPointBlockCrossover avançado
+📊 Criar elitismo inteligente baseado em diversidade
+
+
+🎯 Recomendações Estratégicas
+Para produção ideal:
+
+| Fase               | Operador ideal         |
+| ------------------ | ---------------------- |
+| Exploração inicial | GeneSwapMutation       |
+| Exploração tardia  | ConflictGuidedMutation |
+| Elite refinement   | ConflictGuidedMutation |
+
+
+Criar HybridMutation adaptativa baseada em estagnação.
+
+✔ Fluxo arquitetural ideal do GA (definitivo)
+
+Blindar definitivamente o Mutation para nunca mais quebrar DI
+Fazer auditoria arquitetural final do GA inteiro
+Otimizar avaliação para O(n) com índices
+Implementar paralelização de fitness
+Ou revisar performance teórica do algoritmo
+
+
+
+Novo prompt
+
+📌 CONTEXTO CONSOLIDADO – PROJETO HORÁRIO GENÉTICO
+🎯 Objetivo do Projeto
+
+Desenvolver um Sistema de Geração Automática de Horários Escolares utilizando Algoritmo Genético (GA) em PHP 8.4, Laravel 12 e Liveware 4 com:
+1. Minimização de penalidades
+2. Separação clara entre Hard e Soft constraints
+3. Arquitetura limpa
+4. Alta testabilidade
+5. Independência do Container do Laravel no núcleo do GA
+6. Execução assíncrona via Job
+
+🧠 ARQUITETURA GERAL
+Camadas principais
+1️⃣ Interface Web
+Livewire Component: Algoritmo\Index
+Dispara GerarHorarioJob
+Monitora progresso via Cache
+Atualiza status com polling
+
+2️⃣ Job Assíncrono
+GerarHorarioJob
+Implementa ShouldQueue
+Injeta HorarioGeneticoService
+Executa gerar()
+Atualiza cache
+Trata exceções
+
+3️⃣ Service
+HorarioGeneticoService Apenas delega para:
+
+HorarioGeneticoOrchestrator
+4️⃣ Orchestrator (Coração do GA)
+
+HorarioGeneticoOrchestrator Responsável por:
+Carregar dados do banco
+Construir configuração do GA
+Gerar população inicial
+Avaliar fitness
+Executar loop evolutivo
+Aplicar operadores (Selection, Crossover, Mutation)
+Controlar critério de parada
+Persistir resultado final
+Atualizar cache de progresso
+Ele NÃO depende do container para regras ou pesos.
+
+🧬 CORE DO ALGORITMO GENÉTICO
+Entidades
+Gene: Representa uma alocação:
+aulaId
+professorId
+turmaId
+disciplinaId
+diaSemana
+periodoDia
+duracaoTempos
+
+Imutável.
+
+Cromossomo
+Array de Genes
+Fitness armazenado
+
+Índices internos:
+professor
+turma
+aula
+
+Método copy() otimizado
+
+🧮 FITNESS SYSTEM
+✔ FitnessEvaluator
+Não usa container
+Não cria regras
+
+Recebe:
+FitnessWeights
+Array de Rules
+Recebe EvaluationContext por geração
+
+Separa:
+Hard penalty
+Soft penalty
+
+Minimização
+✔ EvaluationContext Contém:
+genes
+restricoesIndexadas
+cargaEsperada
+diasPreferidos
+temposPreferidos
+Totalmente desacoplado do container.
+
+✔ FitnessWeights
+
+Mapa:
+
+[ RuleClass => float weight ]
+
+Default = 1.0
+
+📏 REGRAS IMPLEMENTADAS
+
+Hard Rules
+ConflitoProfessorRule
+ConflitoTurmaRule
+CargaHorariaExcedidaRule
+BloqueiosHardRule
+
+Soft Rules
+JanelasRule
+MaxAulasDiaRule
+DistribuicaoRule
+AulasNaoConsecutivasRule
+BloqueiosPreferenciaisRule
+
+Todas implementam:
+FitnessRuleInterface
+
+Hard e Soft são diferenciadas por interface.
+
+🔄 OPERADORES
+
+SelectionOperatorInterface
+Implementação:
+TournamentSelection
+
+CrossoverOperatorInterface
+Implementação:
+BlockPreservingCrossover
+
+MutationOperatorInterface
+Implementações:
+1️⃣ GeneSwapMutation
+Mutação simples por troca.
+
+2️⃣ ConflictGuidedMutation
+Mutação inteligente:
+Testa realocações
+Avalia fitness
+Aplica somente se melhora
+
+
+🧾 CONFIGURAÇÃO DO GA
+
+GeneticAlgorithmConfigDTO Contém:
+Parâmetros do GA
+tamanhoPopulacao
+numeroGeracoes
+taxaMutacao
+taxaCrossover
+elitismCount
+targetFitness
+maxGenerationsWithoutImprovement
+
+Configuração do Horário
+aulasPorDia
+diasSemana
+horarioInicio
+duracaoAulaMinutos
+permitirJanelas
+etc.
+
+Validações internas garantem integridade.
+
+🧠 TERMINATION CRITERION
+MaxGenerationsOrFitnessCriterion
+Critérios:
+Máximo de gerações
+Target fitness
+
+Estagnação (gerações sem melhoria)
+📊 MÉTRICAS
+MetricsRecorder
+
+Registra por geração:
+Best fitness
+Average fitness
+Melhor cromossomo global (cópia defensiva)
+
+🚀 FLUXO DO ORCHESTRATOR
+Carrega dados
+Constrói DTO
+Gera população inicial
+
+Loop evolutivo:
+Avalia fitness
+Ordena
+Registra métricas
+Atualiza cache
+Evolui população
+
+Finaliza:
+Persiste alocações
+Atualiza horário
+Atualiza cache como concluído
+
+📦 ESTADO ATUAL DO SISTEMA
+✔ Arquitetura limpa
+✔ Core desacoplado
+✔ GA funcional estruturalmente
+✔ Regras separadas
+✔ Penalização ponderada
+✔ Execução assíncrona via Job
+✔ Monitoramento por cache
+✔ DTO validado
+
+🔜 PRÓXIMOS PASSOS SUGERIDOS
+Implementar paralelização futura
+Otimizar avaliação (usar índices do cromossomo)
+Adicionar penalização multi-objetivo
+Implementar Adaptive Mutation
+Adicionar logging estruturado por geração
+Criar testes de performance máxima
+Implementar explicabilidade de fitness (breakdown por regra)
+
+
+Evoluir para GA industrial (alta performance)
+Implementar algoritmo híbrido
+Otimizar para 100k+ genes
+Adicionar visualização gráfica de convergência
+Transformar em engine genérica reutilizável
+
+Estrutura de pastas e arquivos:
+
+app
+├── Jobs
+│   └── GerarHorarioJob.php
+├── Livewire
+│   ├── Actions
+│   │   └── Logout.php
+│   ├── Algoritmo
+│   │   └── Index.php
+│   ├── Aulas
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Auth
+│   │   ├── Login.php
+│   │   └── UserManager.php
+│   ├── Disciplinas
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Horarios
+│   │   ├── Configurar.php
+│   │   ├── Create.php
+│   │   ├── GerenciarAulas.php
+│   │   ├── GerenciarRestricoes.php
+│   │   ├── Index.php
+│   │   ├── ResumoConfiguracao.php
+│   │   └── Show.php
+│   ├── Layout
+│   │   ├── Navbar.php
+│   │   └── Sidebar.php
+│   ├── Professores
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Turmas
+│   │   ├── Aulas.php
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   └── Dashboard.php
+├── Models
+│   ├── Alocacao.php
+│   ├── Aula.php
+│   ├── ConfiguracaoHorario.php
+│   ├── Disciplina.php
+│   ├── Horario.php
+│   ├── Professor.php
+│   ├── RestricaoTempo.php
+│   ├── Turma.php
+│   └── User.php
+├── Providers
+│   ├── AppServiceProvider.php
+│   └── FortifyServiceProvider.php
+├── Services
+│   └── GeneticAlgorithm
+│       ├── Genetico
+│       │   ├── DTO
+│       │   │   └── GeneticAlgorithmConfigDTO.php
+│       │   ├── Entities
+│       │   │   ├── Cromossomo.php
+│       │   │   └── Gene.php
+│       │   ├── Fitness
+│       │   │   ├── Rules
+│       │   │   │   ├── Hard
+│       │   │   │   │   ├── BloqueiosHardRule.php
+│       │   │   │   │   ├── CargaHorariaExcedidaRule.php
+│       │   │   │   │   ├── ConflitoProfessorRule.php
+│       │   │   │   │   └── ConflitoTurmaRule.php
+│       │   │   │   ├── Soft
+│       │   │   │   │   ├── AulasNaoConsecutivasRule.php
+│       │   │   │   │   ├── BloqueiosPreferenciaisRule.php
+│       │   │   │   │   ├── DistribuicaoRule.php
+│       │   │   │   │   ├── JanelasRule.php
+│       │   │   │   │   └── MaxAulasDiaRule.php
+│       │   │   │   ├── FitnessRuleInterface.php
+│       │   │   │   ├── HardRuleInterface.php
+│       │   │   │   ├── RuleResult.php
+│       │   │   │   └── SoftRuleInterface.php
+│       │   │   ├── EvaluationContext.php
+│       │   │   ├── FitnessEvaluator.php
+│       │   │   ├── FitnessResult.php
+│       │   │   ├── FitnessRuleInterface.php
+│       │   │   └── FitnessWeights.php
+│       │   ├── Metrics
+│       │   │   └── MetricsRecorder.php
+│       │   ├── Operators
+│       │   │   ├── BlockPreservingCrossover.php
+│       │   │   ├── ConflictGuidedMutation.php
+│       │   │   ├── CrossoverOperatorInterface.php
+│       │   │   ├── GeneSwapMutation.php
+│       │   │   ├── MutationOperatorInterface.php
+│       │   │   ├── SelectionOperatorInterface.php
+│       │   │   ├── SinglePointCrossover.php
+│       │   │   ├── StructuredSwapMutation.php
+│       │   │   └── TournamentSelection.php
+│       │   ├── Repositories
+│       │   │   └── ConfiguracaoHorarioReadRepository.php
+│       │   ├── Termination
+│       │   │   ├── MaxGenerationsOrFitnessCriterion.php
+│       │   │   └── TerminationCriterionInterface.php
+│       │   ├── HorarioGeneticoOrchestrator.php
+│       │   └── PopulationGenerator.php
+│       └── HorarioGeneticoService.php
+├── Traits
+│   └── ComDadosComuns.php
+└── View
+    └── Components
+        ├── AppLayout.php
+        ├── Button.php
+        └── GuestLayout.php
+
+views
+├── components
+│   ├── action-message.blade.php
+│   ├── app-layout.blade.php
+│   ├── app-logo-icon.blade.php
+│   ├── app-logo.blade.php
+│   ├── auth-header.blade.php
+│   ├── auth-session-status.blade.php
+│   ├── button.blade.php
+│   ├── desktop-user-menu.blade.php
+│   ├── guest-layout.blade.php
+│   └── placeholder-pattern.blade.php
+├── flux
+│   ├── icon
+│   │   ├── book-open-text.blade.php
+│   │   ├── chevrons-up-down.blade.php
+│   │   ├── folder-git-2.blade.php
+│   │   └── layout-grid.blade.php
+│   └── navlist
+│       └── group.blade.php
+├── layouts
+│   ├── app
+│   │   ├── header.blade.php
+│   │   └── sidebar.blade.php
+│   ├── auth
+│   │   ├── card.blade.php
+│   │   ├── simple.blade.php
+│   │   └── split.blade.php
+│   ├── app.blade.php
+│   └── auth.blade.php
+├── livewire
+│   ├── algoritmo
+│   │   └── index.blade.php
+│   ├── aulas
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── auth
+│   │   ├── login.blade.php
+│   │   └── user-manager.blade.php
+│   ├── disciplinas
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── horarios
+│   │   ├── partials
+│   │   │   ├── etapa-configuracao-algoritmo-genetico.blade.php
+│   │   │   ├── etapa-configuracao-basica.blade.php
+│   │   │   └── modal-aula.blade.php
+│   │   ├── configurar.blade.php
+│   │   ├── create.blade.php
+│   │   ├── gerenciar-aulas.blade.php
+│   │   ├── gerenciar-restricoes.blade.php
+│   │   ├── index.blade.php
+│   │   ├── resumo-configuracao.blade.php
+│   │   └── show.blade.php
+│   ├── layout
+│   │   ├── navbar.blade.php
+│   │   └── sidebar.blade.php
+│   ├── professores
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── turmas
+│   │   ├── aulas.blade.php
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   └── dashboard.blade.php
+├── pages
+│   ├── auth
+│   │   ├── confirm-password.blade.php
+│   │   ├── forgot-password.blade.php
+│   │   ├── login.blade.php
+│   │   ├── register.blade.php
+│   │   ├── reset-password.blade.php
+│   │   ├── two-factor-challenge.blade.php
+│   │   └── verify-email.blade.php
+│   └── settings
+│       ├── two-factor
+│       │   └── ⚡recovery-codes.blade.php
+│       ├── layout.blade.php
+│       ├── ⚡appearance.blade.php
+│       ├── ⚡delete-user-form.blade.php
+│       ├── ⚡password.blade.php
+│       ├── ⚡profile.blade.php
+│       └── ⚡two-factor.blade.php
+├── partials
+│   ├── head.blade.php
+│   └── settings-heading.blade.php
+├── dashboard.blade.php
+└── welcome.blade.php
+
+🧠 SEQUÊNCIA RECOMENDADA (Roadmap Técnico Realista)
+Fase 1 — Performance Estrutural
+Implementar índices internos no Cromossomo
+Refatorar Hard Rules para usar índices
+Medir ganho com teste de carga (5k / 20k / 50k genes)
+
+Fase 2 — Inteligência Evolutiva
+Fitness breakdown por regra
+Adaptive mutation
+Penalização multi-objetivo ponderada
+
+Fase 3 — Industrialização
+Paralelização por chunk de população
+Logging estruturado JSON por geração
+Dashboard gráfico de convergência
+Engine desacoplada para pacote Composer

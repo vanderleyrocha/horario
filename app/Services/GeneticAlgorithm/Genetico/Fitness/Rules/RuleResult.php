@@ -2,14 +2,20 @@
 
 namespace App\Services\GeneticAlgorithm\Genetico\Fitness\Rules;
 
-class RuleResult
+final class RuleResult
 {
-    public float $score;
-    public array $conflicts;
+    public function __construct(
+        private float $penalty,
+        private array $conflicts = []
+    ) {}
 
-    public function __construct(float $score, array $conflicts = [])
+    public function getPenalty(): float
     {
-        $this->score = $score;
-        $this->conflicts = $conflicts;
+        return $this->penalty;
+    }
+
+    public function getConflicts(): array
+    {
+        return $this->conflicts;
     }
 }

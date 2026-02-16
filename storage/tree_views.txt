@@ -1,0 +1,91 @@
+views
+├── components
+│   ├── action-message.blade.php
+│   ├── app-layout.blade.php
+│   ├── app-logo-icon.blade.php
+│   ├── app-logo.blade.php
+│   ├── auth-header.blade.php
+│   ├── auth-session-status.blade.php
+│   ├── button.blade.php
+│   ├── desktop-user-menu.blade.php
+│   ├── guest-layout.blade.php
+│   └── placeholder-pattern.blade.php
+├── flux
+│   ├── icon
+│   │   ├── book-open-text.blade.php
+│   │   ├── chevrons-up-down.blade.php
+│   │   ├── folder-git-2.blade.php
+│   │   └── layout-grid.blade.php
+│   └── navlist
+│       └── group.blade.php
+├── layouts
+│   ├── app
+│   │   ├── header.blade.php
+│   │   └── sidebar.blade.php
+│   ├── auth
+│   │   ├── card.blade.php
+│   │   ├── simple.blade.php
+│   │   └── split.blade.php
+│   ├── app.blade.php
+│   └── auth.blade.php
+├── livewire
+│   ├── algoritmo
+│   │   └── index.blade.php
+│   ├── aulas
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── auth
+│   │   ├── login.blade.php
+│   │   └── user-manager.blade.php
+│   ├── disciplinas
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── horarios
+│   │   ├── partials
+│   │   │   ├── etapa-configuracao-algoritmo-genetico.blade.php
+│   │   │   ├── etapa-configuracao-basica.blade.php
+│   │   │   └── modal-aula.blade.php
+│   │   ├── configurar.blade.php
+│   │   ├── create.blade.php
+│   │   ├── gerenciar-aulas.blade.php
+│   │   ├── gerenciar-restricoes.blade.php
+│   │   ├── index.blade.php
+│   │   ├── resumo-configuracao.blade.php
+│   │   └── show.blade.php
+│   ├── layout
+│   │   ├── navbar.blade.php
+│   │   └── sidebar.blade.php
+│   ├── professores
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   ├── turmas
+│   │   ├── aulas.blade.php
+│   │   ├── create.blade.php
+│   │   ├── edit.blade.php
+│   │   └── index.blade.php
+│   └── dashboard.blade.php
+├── pages
+│   ├── auth
+│   │   ├── confirm-password.blade.php
+│   │   ├── forgot-password.blade.php
+│   │   ├── login.blade.php
+│   │   ├── register.blade.php
+│   │   ├── reset-password.blade.php
+│   │   ├── two-factor-challenge.blade.php
+│   │   └── verify-email.blade.php
+│   └── settings
+│       ├── two-factor
+│       │   └── ⚡recovery-codes.blade.php
+│       ├── layout.blade.php
+│       ├── ⚡appearance.blade.php
+│       ├── ⚡delete-user-form.blade.php
+│       ├── ⚡password.blade.php
+│       ├── ⚡profile.blade.php
+│       └── ⚡two-factor.blade.php
+├── partials
+│   ├── head.blade.php
+│   └── settings-heading.blade.php
+├── dashboard.blade.php
+└── welcome.blade.php

@@ -2,27 +2,17 @@
 
 namespace App\Services\GeneticAlgorithm\Genetico\Fitness;
 
-class FitnessWeights
+final class FitnessWeights
 {
-    private array $weights = []; // [RuleClass => weight]
+    private array $weights;
 
-    public function __construct(array $initialWeights = [])
+    public function __construct(array $weights)
     {
-        $this->weights = $initialWeights;
+        $this->weights = $weights;
     }
 
-    public function setWeight(string $ruleClass, float $weight): void
+    public function get(string $ruleClass): float
     {
-        $this->weights[$ruleClass] = $weight;
-    }
-
-    public function getWeight(string $ruleClass): float
-    {
-        return $this->weights[$ruleClass] ?? 1.0; // Peso padrão de 1.0 se não configurado
-    }
-
-    public function getAllWeights(): array
-    {
-        return $this->weights;
+        return $this->weights[$ruleClass] ?? 1.0;
     }
 }

@@ -17,5 +17,6 @@ class HorarioGeneticoService {
     public function gerar(Horario $horario): array {
         Log::info("HorarioGeneticoService@gerar");
         return $this->orchestrator->gerar($horario);
+        Log::info("Processamento concluido");
     }
 }

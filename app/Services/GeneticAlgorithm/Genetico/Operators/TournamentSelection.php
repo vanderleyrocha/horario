@@ -3,32 +3,43 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Operators;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
-use Illuminate\Support\Collection;
 
 class TournamentSelection implements SelectionOperatorInterface
 {
-    private int $tournamentSize;
+    public function __construct(private int $tournamentSize = 3) {}
 
-    public function __construct(int $tournamentSize = 3)
+    public function select(array $population, int $count): array
     {
-        $this->tournamentSize = $tournamentSize;
-    }
+        $selected = [];
 
-    public function select(Collection $population, int $selectionSize): Collection
-    {
-        $selected = new Collection();
-        for ($i = 0; $i < $selectionSize; $i++) {
-            $competitors = new Collection();
-            for ($j = 0; $j < $this->tournamentSize; $j++) {
-                $competitors->add($population->random());
-            }
-            $selected->add($competitors->sortByDesc(fn(Cromossomo $c) => $c->getFitnessScore())->first());
+        for ($i = 0; $i < $count; $i++) {
+            $selected[] = $this->runTournament($population);
         }
+
         return $selected;
     }
 
-    public function getElites(Collection $population, int $elitismCount): Collection
+    public function getElites(array $population, int $elitismCount): array
     {
-        return $population->sortByDesc(fn(Cromossomo $c) => $c->getFitnessScore())->take($elitismCount);
+        $sorted = $population;
+
+        usort($sorted, fn($a, $b) => $a->getFitness() <=> $b->getFitness());
+
+        return array_slice($sorted, 0, $elitismCount);
+    }
+
+    private function runTournament(array $population): Cromossomo
+    {
+        $best = null;
+
+        for ($i = 0; $i < $this->tournamentSize; $i++) {
+            $candidate = $population[array_rand($population)];
+
+            if (!$best || $candidate->getFitness() < $best->getFitness()) {
+                $best = $candidate;
+            }
+        }
+
+        return $best;
     }
 }

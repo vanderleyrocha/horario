@@ -2,54 +2,50 @@
 
 namespace App\Services\GeneticAlgorithm\Genetico\Entities;
 
-use App\Models\Aula;
-use App\Models\Professor;
-use App\Models\Disciplina;
-use App\Models\Turma;
-
-class Gene
+final class Gene
 {
-    public ?Aula $aula;
-    public ?Professor $professor;
-    public ?Disciplina $disciplina;
-    public ?Turma $turma;
-    public int $diaSemana;
-    public int $periodoDia;
-    public int $duracaoTempos;
+    public readonly ?int $aulaId;
+    public readonly ?int $professorId;
+    public readonly ?int $disciplinaId;
+    public readonly ?int $turmaId;
+
+    public readonly int $diaSemana;
+    public readonly int $periodoDia;
+    public readonly int $duracaoTempos;
 
     public function __construct(
-        ?Aula $aula,
+        ?int $aulaId,
         int $diaSemana,
         int $periodoDia,
         int $duracaoTempos = 1,
-        ?Professor $professor = null,
-        ?Disciplina $disciplina = null,
-        ?Turma $turma = null
+        ?int $professorId = null,
+        ?int $disciplinaId = null,
+        ?int $turmaId = null
     ) {
-        $this->aula = $aula;
+        $this->aulaId = $aulaId;
         $this->diaSemana = $diaSemana;
         $this->periodoDia = $periodoDia;
         $this->duracaoTempos = $duracaoTempos;
-        $this->professor = $professor ?? $aula?->professor;
-        $this->disciplina = $disciplina ?? $aula?->disciplina;
-        $this->turma = $turma ?? $aula?->turma;
+        $this->professorId = $professorId;
+        $this->disciplinaId = $disciplinaId;
+        $this->turmaId = $turmaId;
     }
 
     public function isEmpty(): bool
     {
-        return $this->aula === null;
+        return $this->aulaId === null;
     }
 
-    public function clone(): self
+    public function copy(): self
     {
         return new self(
-            $this->aula,
+            $this->aulaId,
             $this->diaSemana,
             $this->periodoDia,
             $this->duracaoTempos,
-            $this->professor,
-            $this->disciplina,
-            $this->turma
+            $this->professorId,
+            $this->disciplinaId,
+            $this->turmaId
         );
     }
 }

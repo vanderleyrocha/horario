@@ -11,6 +11,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class GerarHorarioJob implements ShouldQueue {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -32,12 +33,15 @@ class GerarHorarioJob implements ShouldQueue {
             $resultado = $horarioGeneticoService->gerar($this->horario);
 
             Log::info("Geração do horário #{$this->horario->id} concluída.", $resultado);
-            
         } catch (\Exception $e) {
             Log::error("Job falhou para horário #{$this->horario->id}", [
                 'exception' => $e->getMessage(),
                 'stacktrace' => $e->getTraceAsString(), // Adicionar stacktrace para depuração
             ]);
+            Cache::put("horario_geracao_{$this->horario->id}", [
+                'status' => 'erro',
+                'mensagem' => $e->getMessage(),
+            ], now()->addMinutes(10));
             // Opcional: Re-lançar a exceção se você quiser que o Job falhe e seja retentado
             // throw $e;
         }
