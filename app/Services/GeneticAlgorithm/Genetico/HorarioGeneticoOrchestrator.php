@@ -14,22 +14,22 @@ use App\Services\GeneticAlgorithm\Genetico\Operators\MutationOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Termination\TerminationCriterionInterface;
 use App\Services\GeneticAlgorithm\Genetico\Metrics\MetricsRecorder;
 
-final class HorarioGeneticoOrchestrator
-{
+final class HorarioGeneticoOrchestrator {
     public function __construct(
-        private GeneticAlgorithmConfigDTO $config,
-        private PopulationGenerator $populationGenerator,
-        private FitnessEvaluator $fitnessEvaluator,
         private SelectionOperatorInterface $selectionOperator,
         private CrossoverOperatorInterface $crossoverOperator,
         private MutationOperatorInterface $mutationOperator,
-        private TerminationCriterionInterface $terminationCriterion,
-        private MetricsRecorder $metricsRecorder,
-        private array $evaluationData
-    ) {}
+    ) {
+    }
 
-    public function gerar(): Cromossomo
-    {
+    public function gerar(
+        GeneticAlgorithmConfigDTO $config,
+        PopulationGenerator $populationGenerator,
+        FitnessEvaluator $fitnessEvaluator,
+        TerminationCriterionInterface $terminationCriterion,
+        MetricsRecorder $metricsRecorder,
+        array $evaluationData
+    ): Cromossomo {
         // ✅ CORRETO: passa tamanho da população
         $population = $this->populationGenerator->generate(
             $this->config->tamanhoPopulacao
@@ -43,8 +43,8 @@ final class HorarioGeneticoOrchestrator
 
             usort(
                 $population,
-                fn (Cromossomo $a, Cromossomo $b)
-                    => $a->getFitness() <=> $b->getFitness()
+                fn(Cromossomo $a, Cromossomo $b)
+                => $a->getFitness() <=> $b->getFitness()
             );
 
             // ✅ Compatível com MetricsRecorder
@@ -77,8 +77,7 @@ final class HorarioGeneticoOrchestrator
     |--------------------------------------------------------------------------
     */
 
-    private function avaliarPopulacao(array $population): void
-    {
+    private function avaliarPopulacao(array $population): void {
         foreach ($population as $chromosome) {
 
             $context = new EvaluationContext(
@@ -100,8 +99,7 @@ final class HorarioGeneticoOrchestrator
     |--------------------------------------------------------------------------
     */
 
-    private function evoluir(array $population): array
-    {
+    private function evoluir(array $population): array {
         $newPopulation = [];
 
         // ✅ CORRETO: usa getElites()
@@ -126,7 +124,6 @@ final class HorarioGeneticoOrchestrator
 
                 [$child1, $child2] =
                     $this->crossoverOperator->crossover($parent1, $parent2);
-
             } else {
 
                 $child1 = $parent1->copy();
@@ -151,8 +148,7 @@ final class HorarioGeneticoOrchestrator
         return $newPopulation;
     }
 
-    private function randomFloat(): float
-    {
+    private function randomFloat(): float {
         return mt_rand() / mt_getrandmax();
     }
 }
