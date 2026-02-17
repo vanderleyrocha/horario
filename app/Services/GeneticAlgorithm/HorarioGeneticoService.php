@@ -60,9 +60,9 @@ class HorarioGeneticoService {
             'temposPreferidos' => $temposPreferidos,
         ];
 
-        $config = GeneticAlgorithmConfigDTO::fromModels($horario);
+        $this->config = GeneticAlgorithmConfigDTO::fromModels($horario);
 
-        $populationGenerator = new PopulationGenerator($this->aulas, $config);
+        $populationGenerator = new PopulationGenerator($this->aulas, $this->config);
 
         $metrics = new MetricsRecorder();
 
@@ -93,13 +93,13 @@ class HorarioGeneticoService {
         $fitnessEvaluator = new FitnessEvaluator($weights, $rules);
 
         $termination = new MaxGenerationsOrFitnessCriterion(
-            maxGenerations: $config->numeroGeracoes,
-            targetFitness: $config->targetFitness,
-            maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement
+            maxGenerations: $this->config->numeroGeracoes,
+            targetFitness: $this->config->targetFitness,
+            maxGenerationsWithoutImprovement: $this->config->maxGenerationsWithoutImprovement
         );
 
         Log::info("HorarioGeneticoService@gerar");
-        $result = $this->orchestrator->gerar($config, $populationGenerator, $fitnessEvaluator, $termination, $metrics, $evaluationData);
+        $result = $this->orchestrator->gerar($this->config, $populationGenerator, $fitnessEvaluator, $termination, $metrics, $evaluationData);
         return $this->finalizarGeracao($result['cromossomo'], $result['generation']);
         Log::info("Processamento concluido");
 
@@ -158,15 +158,15 @@ class HorarioGeneticoService {
 
                 Alocacao::create([
                     'horario_id' => $this->horario->id,
-                    'aula_id' => $gene->aulaId,
-                    'professor_id' => $gene->professorId,
-                    'disciplina_id' => $gene->disciplinaId,
-                    'turma_id' => $gene->turmaId,
-                    'dia_semana' => $gene->diaSemana,
-                    'tempo' => $gene->periodoDia,
-                    'horario_inicio' => $this->getHorarioTempo($gene->periodoDia),
-                    'horario_fim' => $this->getHorarioTempoFim($gene->periodoDia),
-                    'duracao_tempos' => $gene->duracaoTempos,
+                    'aula_id' => $gene->getAulaId(),
+                    'professor_id' => $gene->getProfessorId(),
+                    'disciplina_id' => $gene->getDisciplinaId(),
+                    'turma_id' => $gene->getTurmaId(),
+                    'dia_semana' => $gene->getDiaSemana(),
+                    'tempo' => $gene->getPeriodoDia(),
+                    'horario_inicio' => $this->getHorarioTempo($gene->getPeriodoDia()),
+                    'horario_fim' => $this->getHorarioTempoFim($gene->getPeriodoDia()),
+                    'duracao_tempos' => $gene->getDuracaoTempos(),
                 ]);
             }
 

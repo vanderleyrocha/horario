@@ -14,6 +14,7 @@ final class DistribuicaoRule implements SoftRuleInterface
         $map = [];
 
         foreach ($context->genes as $gene) {
+            if ($gene->isEmpty()) continue;
             $map[$gene->getAulaId()][$gene->getDiaSemana()] = true;
         }
 

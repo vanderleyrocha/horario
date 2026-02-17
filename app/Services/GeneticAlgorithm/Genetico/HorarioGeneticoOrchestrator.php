@@ -13,6 +13,7 @@ use App\Services\GeneticAlgorithm\Genetico\Operators\CrossoverOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Operators\MutationOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Termination\TerminationCriterionInterface;
 use App\Services\GeneticAlgorithm\Genetico\Metrics\MetricsRecorder;
+use Illuminate\Support\Facades\Log;
 
 final class HorarioGeneticoOrchestrator {
     public function __construct(
@@ -31,13 +32,20 @@ final class HorarioGeneticoOrchestrator {
         array $evaluationData
     ): array {
 
- 
-        $population = $populationGenerator->generate();
+        Log::info("Gerando população inicial...");
+        try {
+            $population = $populationGenerator->generate();
+        } catch (\Exception $e) {
+            //throw $th;
+        }
+        
 
         $generation = 0;
 
-        while (true) {
+        Log::info("Iniciando algoritmo genético...");
 
+        while (true) {
+            Log::info("Geração {$generation}... Avaliando população.");
             foreach ($population as $cromossomo) {
 
                 $context = new EvaluationContext(
@@ -58,7 +66,8 @@ final class HorarioGeneticoOrchestrator {
             if ($terminationCriterion->shouldTerminate($population, $generation, $metricsRecorder->getBestCromossomoOverall())) {
                 break;
             }
-
+            $bestFitnessOverall = $metricsRecorder->getBestFitnessOverall();
+            Log::info("Melhot Fitness da geração {$generation}: {$bestFitnessOverall}. Iniciando evolução para a nova geração.");
             $population = $this->evoluir($population, $config);
 
             $generation++;

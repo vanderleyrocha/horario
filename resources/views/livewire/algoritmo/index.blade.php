@@ -117,7 +117,7 @@
                     <div class="bg-gray-50 rounded-lg p-4">
                         <p class="text-sm text-gray-600 mb-1">Melhor Fitness</p>
                         <p class="text-2xl font-bold text-gray-900">
-                            {{ number_format($melhorFitness, 2) }}%
+                            {{ number_format($melhorFitness, 2) }}
                         </p>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-4 col-span-1 md:col-span-1"> {{-- Ajustado para ocupar 1 coluna --}}

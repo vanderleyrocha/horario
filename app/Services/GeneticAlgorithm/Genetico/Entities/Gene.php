@@ -4,44 +4,47 @@ declare(strict_types=1);
 
 namespace App\Services\GeneticAlgorithm\Genetico\Entities;
 
-final readonly class Gene
-{
-    public function __construct(private int $aulaId, private int $professorId, private int $turmaId, private int $disciplinaId, 
-        private int $diaSemana, private int $periodoDia, private int $duracaoTempos)
-    {}
+final readonly class Gene {
+    public function __construct(
+        private int $aulaId,
+        private int $professorId,
+        private int $turmaId,
+        private int $disciplinaId,
+        private int $diaSemana,
+        private int $periodoDia,
+        private int $duracaoTempos
+    ) {
+    }
 
-    public function getAulaId(): int
-    {
+    public function isEmpty(): bool {
+        return $this->aulaId === null || $this->professorId === null || $this->turmaId === null || $this->disciplinaId === null || $this->diaSemana === null;
+    }
+
+    public function getAulaId(): int {
         return $this->aulaId;
     }
 
-    public function getProfessorId(): int
-    {
+    public function getProfessorId(): int {
         return $this->professorId;
     }
 
-    public function getTurmaId(): int
-    {
+    public function getTurmaId(): int {
         return $this->turmaId;
     }
 
-    public function getDisciplinaId(): int
-    {
+    public function getDisciplinaId(): int {
         return $this->disciplinaId;
     }
 
-    public function getDiaSemana(): int
-    {
+    public function getDiaSemana(): int {
         return $this->diaSemana;
     }
 
-    public function getPeriodoDia(): int
-    {
+    public function getPeriodoDia(): int {
         return $this->periodoDia;
     }
 
-    public function getDuracaoTempos(): int
-    {
+    public function getDuracaoTempos(): int {
         return $this->duracaoTempos;
     }
 
@@ -51,8 +54,7 @@ final readonly class Gene
     |--------------------------------------------------------------------------
     */
 
-    public function withDiaPeriodo(int $diaSemana, int $periodoDia): self
-    {
+    public function withDiaPeriodo(int $diaSemana, int $periodoDia): self {
         return new self(
             $this->aulaId,
             $this->professorId,
@@ -64,8 +66,7 @@ final readonly class Gene
         );
     }
 
-    public function withProfessor(int $professorId): self
-    {
+    public function withProfessor(int $professorId): self {
         return new self(
             $this->aulaId,
             $professorId,
@@ -77,8 +78,7 @@ final readonly class Gene
         );
     }
 
-    public function withTurma(int $turmaId): self
-    {
+    public function withTurma(int $turmaId): self {
         return new self(
             $this->aulaId,
             $this->professorId,

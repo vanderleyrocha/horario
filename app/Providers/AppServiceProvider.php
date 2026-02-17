@@ -26,6 +26,11 @@ class AppServiceProvider extends ServiceProvider {
 
         $this->app->bind(MutationOperatorInterface::class, GeneSwapMutation::class);
 
+        // $this->app->bind(MutationOperatorInterface::class, function ($app) {
+        //     $config = [];
+        //     return new ConflictGuidedMutation($config->aulasPorDia);
+        // });
+
     }
 
     public function boot(): void {

@@ -14,6 +14,7 @@ final class JanelasRule implements SoftRuleInterface
         $map = [];
 
         foreach ($context->genes as $gene) {
+            if ($gene->isEmpty()) continue;
             $map[$gene->getProfessorId()][$gene->getDiaSemana()][] = $gene->getPeriodoDia();
         }
 

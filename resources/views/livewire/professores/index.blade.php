@@ -148,7 +148,7 @@
                                 <div class="flex items-center">
                                     <div class="flex-shrink-0 h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center">
                                         <span class="text-white font-medium">
-                                            {{ substr($professor->nome, 0, 1) }}
+                                            {{ $professor->id }}
                                         </span>
                                     </div>
                                     <div class="ml-4">

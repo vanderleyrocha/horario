@@ -14,7 +14,7 @@ final class ConflitoProfessorRule implements HardRuleInterface
         $ocupacao = [];
 
         foreach ($context->genes as $gene) {
-
+            if ($gene->isEmpty()) continue;
             for ($i = 0; $i < $gene->getDuracaoTempos(); $i++) {
 
                 $slot = $gene->getProfessorId() . '_' . $gene->getDiaSemana() . '_' . ($gene->getPeriodoDia() + $i);

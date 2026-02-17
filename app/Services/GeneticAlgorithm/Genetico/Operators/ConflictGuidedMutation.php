@@ -19,7 +19,7 @@ final class ConflictGuidedMutation implements MutationOperatorInterface
         $gene = $genes[$index];
 
         $novoDia = random_int(1, 5);
-        $novoPeriodo = random_int(1, 6);
+        $novoPeriodo = random_int(1, 7);
 
         $novoGene = $gene->withDiaPeriodo($novoDia, $novoPeriodo);
 
