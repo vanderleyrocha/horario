@@ -100,10 +100,16 @@ class HorarioGeneticoService {
 
         Log::info("HorarioGeneticoService@gerar");
         $result = $this->orchestrator->gerar($this->config, $populationGenerator, $fitnessEvaluator, $termination, $metrics, $evaluationData);
+        
+        if (empty($result)) {
+            return [
+                'sucesso' => false,
+                'fitness' => 0,
+                'geracoes' => 0,
+                'alocacoes' => 0,
+            ];
+        }
         return $this->finalizarGeracao($result['cromossomo'], $result['generation']);
-        Log::info("Processamento concluido");
-
-        return [];
     }
 
     private function apagarAlocacoesHorario(): void {
@@ -112,7 +118,15 @@ class HorarioGeneticoService {
 
 
     private function carregarDados(): void {
-        $this->aulas = Aula::where('horario_id', $this->horario->id)->where('ativa', true)->with(['professor', 'disciplina', 'turma'])->get()->all();
+        $this->aulas = Aula::where('horario_id', $this->horario->id)
+            ->where('ativa', true)
+            ->with(['professor', 'disciplina', 'turma'])
+            ->orderBy("turma_id")
+            ->orderBy("disciplina_id")
+            ->orderBy("id")
+            ->get()
+            ->all()
+        ;
 
         $restricoes = RestricaoTempo::where('horario_id', $this->horario->id)->get()->all();
 

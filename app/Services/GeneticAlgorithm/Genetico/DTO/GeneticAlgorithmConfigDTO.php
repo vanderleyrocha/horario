@@ -28,6 +28,7 @@ final readonly class GeneticAlgorithmConfigDTO
     |--------------------------------------------------------------------------
     */
 
+    public string $horarioId;
     public string $nomeEscola;
     public int $aulasPorDia;
     public int $diasSemana;
@@ -57,6 +58,7 @@ final readonly class GeneticAlgorithmConfigDTO
         int $elitismCount,
         float $targetFitness,
         int $maxGenerationsWithoutImprovement,
+        int $horarioId,
         string $nomeEscola,
         int $aulasPorDia,
         int $diasSemana,
@@ -84,6 +86,7 @@ final readonly class GeneticAlgorithmConfigDTO
         $this->targetFitness = $targetFitness;
         $this->maxGenerationsWithoutImprovement = $maxGenerationsWithoutImprovement;
 
+        $this->horarioId = $horarioId;
         $this->nomeEscola = $nomeEscola;
         $this->aulasPorDia = $aulasPorDia;
         $this->diasSemana = $diasSemana;
@@ -156,6 +159,7 @@ final readonly class GeneticAlgorithmConfigDTO
             elitismCount: $elitismCount,
             targetFitness: $targetFitness,
             maxGenerationsWithoutImprovement: $maxGenerationsWithoutImprovement,
+            horarioId: (int) $horario->id,
             nomeEscola: (string) $config->nome_escola,
             aulasPorDia: $aulasPorDia,
             diasSemana: $diasSemana,

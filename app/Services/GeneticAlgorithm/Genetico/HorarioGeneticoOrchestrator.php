@@ -13,6 +13,7 @@ use App\Services\GeneticAlgorithm\Genetico\Operators\CrossoverOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Operators\MutationOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Termination\TerminationCriterionInterface;
 use App\Services\GeneticAlgorithm\Genetico\Metrics\MetricsRecorder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 final class HorarioGeneticoOrchestrator {
@@ -36,9 +37,13 @@ final class HorarioGeneticoOrchestrator {
         try {
             $population = $populationGenerator->generate();
         } catch (\Exception $e) {
-            //throw $th;
+            Cache::put("horario_geracao_{$config->horarioId}", [
+                'status' => 'erro',
+                'mensagem' => $e->getMessage(),
+            ], now()->addMinutes(10));
+            return [];
         }
-        
+
 
         $generation = 0;
 
@@ -71,6 +76,7 @@ final class HorarioGeneticoOrchestrator {
             $population = $this->evoluir($population, $config);
 
             $generation++;
+            $this->atualizarCache($generation, $metricsRecorder, $config);
         }
 
         return ["cromossomo" => $metricsRecorder->getBestCromossomoOverall() ?? $population[0], "generation" => $generation];
@@ -122,5 +128,15 @@ final class HorarioGeneticoOrchestrator {
 
     private function randomFloat(): float {
         return mt_rand() / mt_getrandmax();
+    }
+
+    private function atualizarCache(int $generation, MetricsRecorder $metrics, GeneticAlgorithmConfigDTO $config): void {
+        Cache::put("horario_geracao_{$config->horarioId}", [
+            'status' => 'em_execucao',
+            'geracao_atual' => $generation,
+            'total_geracoes' => $config->numeroGeracoes,
+            'melhor_fitness' => $metrics->getBestFitnessOverall(),
+            'progresso' => round(($generation / $config->numeroGeracoes) * 100, 2),
+        ], now()->addHours(2));
     }
 }

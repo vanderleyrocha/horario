@@ -32,7 +32,7 @@ final class PopulationGenerator {
         $genes = [];
 
         $aulas = $this->aulas;
-        shuffle($aulas);
+        // shuffle($aulas);
 
         $horariosBase = $this->configAG->horariosDisponiveis;
 
@@ -74,7 +74,7 @@ final class PopulationGenerator {
 
                     Log::error("Impossível alocar aula {$aula->id} sem conflito. Professor {$aula->professor->id}, Turma {$aula->turma->id}");
 
-                    throw new \RuntimeException("Configuração inviável: não há espaço suficiente para gerar população inicial válida.");
+                    throw new \RuntimeException("Configuração inviável: não há espaço suficiente para gerar população inicial válida.", 1);
                 }
 
                 $dia = $horarioEscolhido['dia'];

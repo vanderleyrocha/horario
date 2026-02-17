@@ -31,7 +31,12 @@ class GerarHorarioJob implements ShouldQueue {
 
         try {
             $resultado = $horarioGeneticoService->gerar($this->horario);
-
+            if (!$resultado['sucesso']) {
+            Cache::put("horario_geracao_{$this->horario->id}", [
+                'status' => 'erro',
+                'mensagem' => "Erro ao gerar horário.",
+            ], now()->addMinutes(10));
+            }
             Log::info("Geração do horário #{$this->horario->id} concluída.", $resultado);
         } catch (\Exception $e) {
             Log::error("Job falhou para horário #{$this->horario->id}", [
