@@ -12,19 +12,23 @@ use Illuminate\Support\Facades\Log;
 #[Layout('components.app-layout', ['title' => 'Gerar Horário'])]
 class Index extends Component {
     public Horario $horario;
+
+    // Estados principais
     public bool $emGeracao = false;
-    public ?string $statusGeracao = null; // 'iniciado', 'em_progresso', 'concluido', 'erro'
+    public bool $temErro = false;
+    public bool $concluido = false;
 
-    public int $progresso = 0;
-    public int $geracaoAtual = 0;
-    public int $totalGeracoes = 0;
-    public float $melhorFitness = 0.0;
-    public ?string $mensagemStatus = null; // ✅ ADICIONADO
+    public int $progressoPercentual = 0;
+    public string $faseProgresso = '';
 
-    public ?string $status = null;
+    public string $statusGeracao = 'pronto';
+
+    public ?string $mensagemStatus = null;
     public ?string $mensagemErro = null;
 
+    public array $erroDetalhes = [];
     public array $configuracao = [];
+    public array $mapaSaturacao = [];
 
     protected array $rules = [
         'configuracao.populacao' => 'required|integer|min:10',
@@ -33,8 +37,17 @@ class Index extends Component {
         'configuracao.taxa_crossover' => 'required|numeric|between:0,1',
     ];
 
-    public function mount(Horario $horario) {
-        $this->horario = $horario;
+    /* ============================================================
+     |  LIFECYCLE
+     ============================================================ */
+
+    public function mount(Horario $horario): void {
+        // dd($horario->id);
+        $this->horario = $horario->loadMissing([
+            'aulas.professor',
+            'aulas.turma',
+            'configuracaoHorario'
+        ]);
 
         $this->configuracao = $this->horario->configuracao ?? [
             'populacao' => 100,
@@ -42,124 +55,210 @@ class Index extends Component {
             'taxa_mutacao' => 0.3,
             'taxa_crossover' => 0.7,
         ];
-
-        $cacheKey = "horario_geracao_{$this->horario->id}";
-
-        // Log para depuração: Verifique o que está no cache ao montar
-        Log::info("Montando Algoritmo/Index para horário {$this->horario->id}. Cache existe: " . (Cache::has($cacheKey) ? 'Sim' : 'Não'));
-
-        if (Cache::has($cacheKey)) {
-            $this->emGeracao = true;
-            $this->statusGeracao = 'em_progresso'; // Assume que está em progresso se o cache existe
-            $this->atualizarProgresso(); // Carrega os dados do cache
-        } else {
-            // Se não há cache, garante que o status inicial seja 'pronto para iniciar'
-            $this->emGeracao = false;
-            $this->statusGeracao = 'pronto';
-            $this->mensagemStatus = 'Aguardando início da geração.';
-        }
-        $this->atualizarStatus();
+        $this->sincronizarComCache();
+        $this->gerarMapaSaturacao();
     }
 
-    public function updatedConfiguracao() {
-        $this->validate(); // Valida usando as regras acima
+    /* ============================================================
+     |  GERAÇÃO
+     ============================================================ */
 
-        // Joga o array local de volta para o Model e salva
-        $this->horario->configuracao = $this->configuracao;
-        $this->horario->save();
-    }
+    public function iniciarGeracao(): void {
+        $this->validate();
 
-    public function iniciarGeracao() {
-        $this->validate([
-            'horario.id' => 'required|exists:horarios,id',
-        ]);
+        $this->resetEstado();
 
         $this->emGeracao = true;
-        $this->statusGeracao = 'iniciado'; // ✅ ADICIONADO
-        $this->progresso = 0;
-        $this->geracaoAtual = 0;
-        $this->melhorFitness = 0.0;
-        $this->mensagemStatus = 'Iniciando processo de geração...'; // ✅ ADICIONADO
+        $this->statusGeracao = 'executando';
+        $this->mensagemStatus = 'Iniciando geração...';
+        Log::info("Iniciando geração de horário disparando Job", [
+            'horario_id' => $this->horario->id,
+            'horario_nome' => $this->horario->nome,
+        ]);
 
-        // Dispara o Job assíncrono
-        Log::info("Algoritmo.Index Component: dispatch Job para horário {$this->horario->id}");
         GerarHorarioJob::dispatch($this->horario);
 
-        // O polling começará a buscar atualizações do cache
         $this->dispatch('startPolling');
     }
 
-    public function atualizarProgresso(): void {
-        $cacheKey = "horario_geracao_{$this->horario->id}";
-        $dadosProgresso = Cache::get($cacheKey);
-
-        // Log para depuração: Verifique os dados lidos do cache
-        // Log::info("Lendo progresso do cache para horário {$this->horario->id}", $dadosProgresso ?? ['status' => 'Cache vazio']);
-
-        if ($dadosProgresso) {
-            $this->mensagemStatus = $dadosProgresso['mensagem_status'] ?? 'Processando...'; // ✅ CRUCIAL: Valor padrão
-            $this->statusGeracao = $dadosProgresso['status_geracao'] ?? 'em_progresso'; // ✅ CRUCIAL: Valor padrão
-
-            if ($this->statusGeracao === 'concluido' || $this->statusGeracao === 'erro') {
-                $this->emGeracao = false;
-                // Emitir evento para parar o polling, se necessário (o wire:poll já lida com a condição $emGeracao)
-                $this->dispatch('stopPolling');
-            }
-        } else {
-            // Se o cache sumiu inesperadamente, assume que a geração parou ou falhou
-            $this->emGeracao = false;
-            $this->statusGeracao = 'erro';
-            $this->mensagemStatus = 'A geração foi interrompida ou o cache expirou.';
-            $this->progresso = 0;
-            $this->geracaoAtual = 0;
-            $this->melhorFitness = 0.0;
-            $this->dispatch('stopPolling');
-        }
-    }
-
-    public function atualizarStatus() {
-        $cache = Cache::get("horario_geracao_{$this->horario->id}");
+    public function atualizarStatus(): void {
+        $cache = Cache::get($this->cacheKey());
 
         if (!$cache) {
             return;
         }
 
-        $this->status = $cache['status'] ?? null;
-        $this->progresso = (int) ($cache['progresso'] ?? 0);
-        $this->geracaoAtual = (int) ($cache['geracao_atual'] ?? 0);
-        $this->totalGeracoes = (int) ($cache['total_geracoes'] ?? 0);
-        $this->melhorFitness = (float) ($cache['melhor_fitness'] ?? 0);
-
-        $this->emGeracao = $this->status === 'em_execucao';
-
-        if ($this->status === 'erro') {
-            $this->mensagemErro = $cache['mensagem'] ?? 'Erro desconhecido.';
+        if (($cache['status'] ?? null) === 'erro') {
+            $this->aplicarErro($cache['erro'] ?? []);
+            return;
         }
 
-        Log::info("Algoritmo.Index Component: Atualizando progresso do cache para horário {$this->horario->id}");
+        if (($cache['status'] ?? null) === 'concluido') {
+            $this->emGeracao = false;
+            $this->concluido = true;
+            $this->statusGeracao = 'concluido';
+            $this->mensagemStatus = 'Horário gerado com sucesso.';
+            $this->dispatch('stopPolling');
+        }
 
-        $this->atualizarProgresso();
+        if (($cache['status'] ?? null) === 'executando') {
+
+            $this->progressoPercentual = $cache['percentual'] ?? 0;
+            $this->faseProgresso = $cache['fase'] ?? '';
+            $this->mensagemStatus = $cache['mensagem'] ?? '';
+
+            return;
+        }
     }
 
+    public function cancelarGeracao(): void {
+        Cache::forget($this->cacheKey());
 
-    public function cancelarGeracao() {
-        // Implementar lógica para cancelar o job, se possível.
-        // Por enquanto, apenas remove o cache para parar o polling e reseta o status.
-        Cache::forget("horario_geracao_{$this->horario->id}");
-        $this->horario->update(['status' => 'rascunho']);
-        $this->emGeracao = false;
+        $this->resetEstado();
         $this->statusGeracao = 'cancelado';
-        $this->mensagemStatus = 'Geração cancelada pelo usuário.';
+        $this->mensagemStatus = 'Geração cancelada.';
+    }
+
+    public function gerarNovamente(): void {
+        $this->resetEstado();
+        $this->iniciarGeracao();
+    }
+
+    /* ============================================================
+     |  ESTADO
+     ============================================================ */
+
+    private function aplicarErro(array $erro): void {
+        $this->resetEstado();
+
+        $this->temErro = true;
+        $this->statusGeracao = 'erro';
+
+        $this->mensagemErro = $erro['mensagem'] ?? 'Erro desconhecido.';
+        $this->erroDetalhes = $erro;
+
+        /*
+        |--------------------------------------------------------------------------
+        | SALVAR DIAGNÓSTICO AUTOMATICAMENTE
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($erro['dados'])) {
+
+            $this->horario->diagnostico_json = $erro['dados'];
+
+            $this->horario->indice_risco =
+                $erro['dados']['risk_index']
+                ?? $this->calcularRiscoFallback($erro['dados']);
+
+            $this->horario->status = 'rascunho';
+            $this->horario->save();
+        }
+
         $this->dispatch('stopPolling');
     }
 
-    public function visualizarResultado() {
-        return redirect()->route('horarios.show', $this->horario);
+    private function resetEstado(): void {
+        $this->emGeracao = false;
+        $this->temErro = false;
+        $this->concluido = false;
+        $this->mensagemErro = null;
+        $this->erroDetalhes = [];
+    }
+
+    private function sincronizarComCache(): void {
+        $cache = Cache::get($this->cacheKey());
+
+        if (!$cache) {
+            $this->statusGeracao = 'pronto';
+            $this->mensagemStatus = 'Aguardando geração.';
+            return;
+        }
+
+        if (($cache['status'] ?? null) === 'erro') {
+            $this->aplicarErro($cache['erro'] ?? []);
+        }
+    }
+
+    private function cacheKey(): string {
+        return "horario_geracao_{$this->horario->id}";
+    }
+
+    /* ============================================================
+     |  MAPA SATURAÇÃO
+     ============================================================ */
+
+    private function gerarMapaSaturacao(): void {
+        if (!$this->horario->configuracaoHorario) {
+            $this->mapaSaturacao = [];
+            return;
+        }
+
+        $dias = $this->horario->configuracaoHorario->dias_semana ?? 0;
+        $tempos = $this->horario->configuracaoHorario->aulas_por_dia ?? 0;
+
+        if ($dias <= 0 || $tempos <= 0) {
+            $this->mapaSaturacao = [];
+            return;
+        }
+
+        $capacidade = $dias * $tempos;
+
+        $professores = [];
+        $turmas = [];
+
+        foreach ($this->horario->aulas as $aula) {
+
+            $duracao = match ($aula->tipo) {
+                'simples' => 1,
+                'dupla' => 2,
+                'tripla' => 3,
+                default => 1,
+            };
+
+            $carga = $aula->aulas_semana * $duracao;
+
+            if ($aula->professor) {
+                $professores[$aula->professor->nome] =
+                    ($professores[$aula->professor->nome] ?? 0) + $carga;
+            }
+
+            if ($aula->turma) {
+                $turmas[$aula->turma->nome] =
+                    ($turmas[$aula->turma->nome] ?? 0) + $carga;
+            }
+        }
+
+        $this->mapaSaturacao = [
+            'professores' => collect($professores)->map(fn($c, $n) => [
+                'nome' => $n,
+                'percentual' => round(($c / $capacidade) * 100, 1)
+            ])->values()->toArray(),
+
+            'turmas' => collect($turmas)->map(fn($c, $n) => [
+                'nome' => $n,
+                'percentual' => round(($c / $capacidade) * 100, 1)
+            ])->values()->toArray(),
+        ];
+    }
+
+    private function calcularRiscoFallback(array $dados): int {
+        $saturacao = isset($dados['global_saturation']) ? (float) str_replace('%', '', $dados['global_saturation']) : 0;
+
+        $turmas = count($dados['turmas'] ?? []);
+        $professores = count($dados['professores'] ?? []);
+
+        $deficit = 0;
+        foreach ($dados['aulas_duplas'] ?? [] as $b) {
+            $deficit += $b['deficit'] ?? 0;
+        }
+
+        $risco = $saturacao + ($turmas * 10) + ($professores * 8) + ($deficit * 5);
+
+        return (int) min(100, round($risco));
     }
 
     public function render() {
-        // Garante que o horário e suas relações estejam atualizados
-        $this->horario->loadMissing(['aulas', 'restricoes', 'configuracaoHorario']);
         return view('livewire.algoritmo.index');
     }
 }

@@ -9,6 +9,7 @@ use Livewire\Component;
 use Livewire\Attributes\Layout;
 use App\Traits\ComDadosComuns;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 
 #[Layout('components.app-layout', ['title' => 'Configurar Horário'])]
 class Configurar extends Component {
@@ -79,6 +80,7 @@ class Configurar extends Component {
     }
 
     public function render() {
+        Log::info("Renderizando view livewire.horarios.configurar via app\Livewire\Horarios\Configurar.php");
         return view('livewire.horarios.configurar');
     }
 

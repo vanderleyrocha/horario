@@ -11,10 +11,8 @@ use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Dashboard'])]
-class Dashboard extends Component
-{
-    public function getStatsProperty(): array
-    {
+class Dashboard extends Component {
+    public function getStatsProperty(): array {
         return [
             [
                 'label' => 'Professores',
@@ -51,8 +49,7 @@ class Dashboard extends Component
         ];
     }
 
-    public function getRecentActivitiesProperty(): array
-    {
+    public function getRecentActivitiesProperty(): array {
         $activities = [];
 
         // Últimos horários gerados
@@ -89,21 +86,22 @@ class Dashboard extends Component
         }
 
         // Ordenar por data
-        usort($activities, fn($a, $b) => 
+        usort(
+            $activities,
+            fn($a, $b) =>
             strtotime('-' . $a['time']) <=> strtotime('-' . $b['time'])
         );
 
         return array_slice($activities, 0, 5);
     }
 
-    public function getCargaHorariaInfoProperty(): array
-    {
+    public function getCargaHorariaInfoProperty(): array {
         $totalCargaHoraria = Disciplina::sum('carga_horaria_semanal');
         $totalProfessores = Professor::where('ativo', true)->count();
         $totalTurmas = Turma::where('ativa', true)->count();
 
-        $cargaMediaPorProfessor = $totalProfessores > 0 
-            ? round($totalCargaHoraria / $totalProfessores, 1) 
+        $cargaMediaPorProfessor = $totalProfessores > 0
+            ? round($totalCargaHoraria / $totalProfessores, 1)
             : 0;
 
         return [
@@ -114,8 +112,7 @@ class Dashboard extends Component
         ];
     }
 
-    public function render()
-    {
+    public function render() {
         return view('livewire.dashboard');
     }
 }

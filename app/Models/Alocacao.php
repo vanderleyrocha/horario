@@ -68,4 +68,8 @@ class Alocacao extends Model {
     public function scopeEditaveis($query) {
         return $query->where('bloqueada', false);
     }
+
+    public function execucao() {
+        return $this->belongsTo(ExecucaoAlgoritmo::class);
+    }
 }

@@ -1,0 +1,12 @@
+horarios
+├── partials
+│   ├── etapa-configuracao-algoritmo-genetico.blade.php
+│   ├── etapa-configuracao-basica.blade.php
+│   └── modal-aula.blade.php
+├── configurar.blade.php
+├── create.blade.php
+├── gerenciar-aulas.blade.php
+├── gerenciar-restricoes.blade.php
+├── index.blade.php
+├── resumo-configuracao.blade.php
+└── show.blade.php

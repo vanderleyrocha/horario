@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\GeneticAlgorithm\Genetico;
 
+use App\Services\GeneticAlgorithm\Genetico\Repair\GreedyRepairOperator;
 use App\Services\GeneticAlgorithm\Genetico\DTO\GeneticAlgorithmConfigDTO;
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
 use App\Services\GeneticAlgorithm\Genetico\Fitness\EvaluationContext;
@@ -13,7 +14,7 @@ use App\Services\GeneticAlgorithm\Genetico\Operators\CrossoverOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Operators\MutationOperatorInterface;
 use App\Services\GeneticAlgorithm\Genetico\Termination\TerminationCriterionInterface;
 use App\Services\GeneticAlgorithm\Genetico\Metrics\MetricsRecorder;
-use Illuminate\Support\Facades\Cache;
+use Closure;
 use Illuminate\Support\Facades\Log;
 
 final class HorarioGeneticoOrchestrator {
@@ -21,6 +22,7 @@ final class HorarioGeneticoOrchestrator {
         private SelectionOperatorInterface $selectionOperator,
         private CrossoverOperatorInterface $crossoverOperator,
         private MutationOperatorInterface $mutationOperator,
+        private GreedyRepairOperator $repairOperator
     ) {
     }
 
@@ -30,27 +32,19 @@ final class HorarioGeneticoOrchestrator {
         FitnessEvaluator $fitnessEvaluator,
         TerminationCriterionInterface $terminationCriterion,
         MetricsRecorder $metricsRecorder,
-        array $evaluationData
+        array $evaluationData,
+        ?Closure $progressCallback = null
     ): array {
 
-        Log::info("Gerando população inicial...");
-        try {
-            $population = $populationGenerator->generate();
-        } catch (\Exception $e) {
-            Cache::put("horario_geracao_{$config->horarioId}", [
-                'status' => 'erro',
-                'mensagem' => $e->getMessage(),
-            ], now()->addMinutes(10));
-            return [];
-        }
-
-
+        $population = $populationGenerator->generate();
         $generation = 0;
 
-        Log::info("Iniciando algoritmo genético...");
-
         while (true) {
-            Log::info("Geração {$generation}... Avaliando população.");
+
+            if ($progressCallback) {
+                $progressCallback(fase: 'evolucao', atual: $generation, total: $config->numeroGeracoes);
+            }
+
             foreach ($population as $cromossomo) {
 
                 $context = new EvaluationContext(
@@ -71,22 +65,20 @@ final class HorarioGeneticoOrchestrator {
             if ($terminationCriterion->shouldTerminate($population, $generation, $metricsRecorder->getBestCromossomoOverall())) {
                 break;
             }
-            $bestFitnessOverall = $metricsRecorder->getBestFitnessOverall();
-            Log::info("Melhot Fitness da geração {$generation}: {$bestFitnessOverall}. Iniciando evolução para a nova geração.");
-            $population = $this->evoluir($population, $config);
 
             $generation++;
-            $this->atualizarCache($generation, $metricsRecorder, $config);
+
+            $population = $this->evoluir($population, $config);
         }
 
-        return ["cromossomo" => $metricsRecorder->getBestCromossomoOverall() ?? $population[0], "generation" => $generation];
+        return [
+            "cromossomo" => $metricsRecorder->getBestCromossomoOverall() ?? $population[0] ?? null,
+            "generation" => $generation
+        ];
     }
-
 
     private function evoluir(array $population, GeneticAlgorithmConfigDTO $config): array {
         $newPopulation = [];
-
-        // ✅ CORRETO: usa getElites()
         $elites = $this->selectionOperator->getElites($population, $config->elitismCount);
 
         foreach ($elites as $elite) {
@@ -95,26 +87,27 @@ final class HorarioGeneticoOrchestrator {
 
         while (count($newPopulation) < $config->tamanhoPopulacao) {
 
-            $parents = $this->selectionOperator->select($population, 2);
+            [$parent1, $parent2] = $this->selectionOperator->select($population, 2);
 
-            $parent1 = $parents[0];
-            $parent2 = $parents[1];
-
-            if ($this->randomFloat() < $config->taxaCrossover) {
-                [$child1, $child2] =  $this->crossoverOperator->crossover($parent1, $parent2);
+            if (mt_rand() / mt_getrandmax() < $config->taxaCrossover) {
+                [$child1, $child2] = $this->crossoverOperator->crossover($parent1, $parent2);
             } else {
-
                 $child1 = $parent1->copy();
                 $child2 = $parent2->copy();
             }
 
-            if ($this->randomFloat() < $config->taxaMutacao) {
+            if (mt_rand() / mt_getrandmax() < $config->taxaMutacao) {
                 $this->mutationOperator->mutate($child1);
             }
 
-            if ($this->randomFloat() < $config->taxaMutacao) {
+            if (mt_rand() / mt_getrandmax() < $config->taxaMutacao) {
                 $this->mutationOperator->mutate($child2);
             }
+
+            // 🔥 Repair imediato
+            $this->repairOperator->repair($child1, $config->horariosDisponiveis, $config->aulasPorDia);
+
+            $this->repairOperator->repair($child2, $config->horariosDisponiveis, $config->aulasPorDia);
 
             $newPopulation[] = $child1;
 
@@ -124,19 +117,5 @@ final class HorarioGeneticoOrchestrator {
         }
 
         return $newPopulation;
-    }
-
-    private function randomFloat(): float {
-        return mt_rand() / mt_getrandmax();
-    }
-
-    private function atualizarCache(int $generation, MetricsRecorder $metrics, GeneticAlgorithmConfigDTO $config): void {
-        Cache::put("horario_geracao_{$config->horarioId}", [
-            'status' => 'em_execucao',
-            'geracao_atual' => $generation,
-            'total_geracoes' => $config->numeroGeracoes,
-            'melhor_fitness' => $metrics->getBestFitnessOverall(),
-            'progresso' => round(($generation / $config->numeroGeracoes) * 100, 2),
-        ], now()->addHours(2));
     }
 }

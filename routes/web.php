@@ -42,13 +42,23 @@ Route::middleware('auth')->group(function () {
     Route::get('/disciplinas/{disciplina}/editar', Disciplinas\Edit::class)->name('disciplinas.edit');
 
     // Horários
-    Route::get('/horarios', Horarios\Index::class)->name('horarios.index');
-    Route::get('/horarios/criar', Horarios\Create::class)->name('horarios.create');
-    Route::get('/horarios/{horario}', Horarios\Show::class)->name('horarios.show');
-    Route::get('/horarios/{horario}/configurar', Configurar::class)->name('horarios.configurar');
+    /*
+|--------------------------------------------------------------------------
+| MÓDULO HORÁRIOS
+|--------------------------------------------------------------------------
+*/
+
+    Route::prefix('horarios')->name('horarios.')->group(function () {
+
+        Route::get('/', Horarios\Index::class)->name('index');
+        Route::get('/criar', Horarios\Create::class)->name('create');
+
+        // SPA DE GERENCIAMENTO
+        Route::get('/{horario}/manage', Horarios\Manage::class)->name('manage');
+    });
 
     // ✅ CORRIGIDO: Adicionar parâmetro {horario} na rota
-    Route::get('/algoritmo/{horario?}', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
+    Route::get('/algoritmo/{horario}', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
 
     // Profile e Configurações (temporário)
     Route::get('/users', UserManager::class)->name('users.index');
@@ -59,4 +69,4 @@ Route::middleware('auth')->group(function () {
     Route::get('/teste/alocacoes', [TesteController::class, 'alocacoes'])->name('teste.alocacoes');
 });
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';

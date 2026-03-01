@@ -106,4 +106,13 @@ class Horario extends Model {
     public function scopePorSemestre($query, $semestre) {
         return $query->where('semestre', $semestre);
     }
+
+    public function execucoes() {
+        return $this->hasMany(ExecucaoAlgoritmo::class);
+    }
+
+    public function execucaoAtiva() {
+        return $this->hasOne(ExecucaoAlgoritmo::class)
+            ->where('ativa', true);
+    }
 }

@@ -3,11 +3,10 @@
 namespace App\Services\GeneticAlgorithm\Genetico\Operators;
 
 use App\Services\GeneticAlgorithm\Genetico\Entities\Cromossomo;
+use Illuminate\Support\Facades\Log;
 
-final class BlockPreservingCrossover implements CrossoverOperatorInterface
-{
-    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array
-    {
+final class BlockPreservingCrossover implements CrossoverOperatorInterface {
+    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array {
         $size = $pai1->count();
         if ($size < 2) {
             return [$pai1->copy(), $pai2->copy()];
@@ -16,8 +15,8 @@ final class BlockPreservingCrossover implements CrossoverOperatorInterface
         $start = random_int(0, $size - 2);
         $end   = random_int($start + 1, $size - 1);
 
-        $p1 = $pai1->getGenes();
-        $p2 = $pai2->getGenes();
+        $p1 = array_values($pai1->getGenes());
+        $p2 = array_values($pai2->getGenes());
 
         $child1 = $p1;
         $child2 = $p2;

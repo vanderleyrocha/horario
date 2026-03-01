@@ -6,8 +6,7 @@ use App\Models\Horario;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
-final readonly class GeneticAlgorithmConfigDTO
-{
+final readonly class GeneticAlgorithmConfigDTO {
     /*
     |--------------------------------------------------------------------------
     | PARÂMETROS DO GA
@@ -104,8 +103,7 @@ final readonly class GeneticAlgorithmConfigDTO
         $this->horariosDisponiveis = $horariosDisponiveis;
     }
 
-    public static function fromModels(Horario $horario): self
-    {
+    public static function fromModels(Horario $horario): self {
         $configAG = $horario->configuracao ?? [];
         $config = $horario->configuracaoHorario;
 
@@ -176,17 +174,41 @@ final readonly class GeneticAlgorithmConfigDTO
         );
     }
 
-    private static function assertPositive(int $value, string $field): void
-    {
+    private static function assertPositive(int $value, string $field): void {
         if ($value <= 0) {
             throw new InvalidArgumentException("$field must be > 0");
         }
     }
 
-    private static function assertRange(float $value, float $min, float $max, string $field): void
-    {
+    private static function assertRange(float $value, float $min, float $max, string $field): void {
         if ($value < $min || $value > $max) {
             throw new InvalidArgumentException("$field must be between $min and $max");
         }
+    }
+
+    public function toArray(): array {
+        return [
+            'tamanhoPopulacao' => $this->tamanhoPopulacao,
+            'numeroGeracoes' => $this->numeroGeracoes,
+            'taxaMutacao' => $this->taxaMutacao,
+            'taxaCrossover' => $this->taxaCrossover,
+            'elitismCount' => $this->elitismCount,
+            'targetFitness' => $this->targetFitness,
+            'maxGenerationsWithoutImprovement' => $this->maxGenerationsWithoutImprovement,
+            'horarioId' => $this->horarioId,
+            'nomeEscola' => $this->nomeEscola,
+            'aulasPorDia' => $this->aulasPorDia,
+            'diasSemana' => $this->diasSemana,
+            'horarioInicio' => $this->horarioInicio,
+            'horarioFim' => $this->horarioFim,
+            'duracaoAulaMinutos' => $this->duracaoAulaMinutos,
+            'duracaoIntervaloMinutos' => $this->duracaoIntervaloMinutos,
+            'horariosIntervalos' => $this->horariosIntervalos,
+            'duracoesIntervalos' => $this->duracoesIntervalos,
+            'permitirJanelas' => $this->permitirJanelas,
+            'agruparDisciplinas' => $this->agruparDisciplinas,
+            'maxAulasSeguidas' => $this->maxAulasSeguidas,
+            'horariosDisponiveis' => $this->horariosDisponiveis,
+        ];
     }
 }

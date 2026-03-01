@@ -8,6 +8,7 @@ use App\Models\Aula;
 use App\Models\RestricaoTempo;
 use Livewire\Component;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class ResumoConfiguracao extends Component {
     public Horario $horario;
@@ -77,44 +78,25 @@ class ResumoConfiguracao extends Component {
             ->toArray();
     }
 
-    public function getAulasPorTurmaProperty(): Collection
-    {
-        $alocacoesValidas = $this->horario->alocacoes->filter(function ($alocacao) {
-            return $alocacao->aula !== null;
-        });
+    public function getAulasPorTurmaProperty(): Collection {
+        return $this->horario->aulas->groupBy('turma_id')->map(function ($aulasDaTurma) {
 
-        $aulasPorTurma = $alocacoesValidas->groupBy(fn($alocacao) => optional($alocacao->aula)->turma_id);
-
-        return $aulasPorTurma->map(function ($alocacoesDaTurma, $turmaId) {
-            if ($turmaId === null || $alocacoesDaTurma->isEmpty()) {
-                return null;
-            }
-
-            $firstAlocacao = $alocacoesDaTurma->first();
-
-            if (!$firstAlocacao->aula || !$firstAlocacao->aula->turma) {
-                return null;
-            }
-
-            $turma = $firstAlocacao->aula->turma;
-
-            $horarioDaTurma = [];
-            foreach ($alocacoesDaTurma as $alocacao) {
-                if ($alocacao->aula && $alocacao->aula->disciplina) {
-                    $horarioDaTurma[$alocacao->dia_semana][$alocacao->tempo] = $alocacao;
-                }
-            }
+            $turma = $aulasDaTurma->first()->turma;
 
             return [
                 'turma' => $turma,
-                'horario_detalhado' => $horarioDaTurma,
-                'total_aulas' => $alocacoesDaTurma->count(),
-                'total_tempos' => $alocacoesDaTurma->sum(function ($alocacao) {
-                    return $alocacao->duracao_tempos;
+                'total_aulas' => $aulasDaTurma->count(),
+                'total_tempos' => $aulasDaTurma->sum(function ($aula) {
+                    return $aula->aulas_semana * match ($aula->tipo) {
+                        'simples' => 1,
+                        'dupla' => 2,
+                        'tripla' => 3,
+                        default => 1,
+                    };
                 }),
-                'disciplinas' => $alocacoesDaTurma->pluck('aula.disciplina')->filter()->unique('id'),
+                'disciplinas' => $aulasDaTurma->pluck('disciplina')->unique('id'),
             ];
-        })->filter();
+        });
     }
 
     public function getProntoParaGerarProperty() {
@@ -124,8 +106,7 @@ class ResumoConfiguracao extends Component {
         return $config && $aulas > 0;
     }
 
-    public function iniciarGeracao()
-    {
+    public function iniciarGeracao() {
         if (!$this->prontoParaGerar) {
             session()->flash('error', 'Configure o horário antes de gerar!');
             return;
@@ -139,6 +120,7 @@ class ResumoConfiguracao extends Component {
     }
 
     public function render() {
+        Log::info("Renderizando view livewire.horarios.resumo-configuracao via app\Livewire\Horarios\ResumoConfiguracao.php");
         return view('livewire.horarios.resumo-configuracao', [
             'estatisticas' => $this->estatisticas,
             'restricoes' => $this->restricoes,

@@ -40,6 +40,9 @@
 
             {{-- Etapa 5: Resumo e Geração (antiga Etapa 4) --}}
             @if ($etapaAtual === 5)
+                @php
+                    Illuminate\Support\Facades\Log::info("Renderizando etapa resumo e geração para o horário ID: {$horario->id} via livewire.horarios.configurar");
+                @endphp
                 @livewire('horarios.resumo-configuracao', ['horario' => $horario])
             @endif
         </div>
@@ -48,14 +51,13 @@
             <div class="mt-6 flex justify-between">
                 <button type="button" wire:click="etapaAnterior"
                     class="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
-                    << Anterior 
-                </button>
-                @if ($etapaAtual != 5)
-                    <button type="button" wire:click="proximaEtapa"
-                        class="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
-                        Próxima >>
-                    </button>
-                @endif
+                    << Anterior </button>
+                        @if ($etapaAtual != 5)
+                            <button type="button" wire:click="proximaEtapa"
+                                class="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
+                                Próxima >>
+                            </button>
+                        @endif
             </div>
         @endif
     </div>

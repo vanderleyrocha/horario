@@ -4,15 +4,15 @@
 namespace App\Livewire\Horarios;
 
 use App\Models\Horario;
+use App\Models\Professor;
 use App\Models\Turma;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Visualizar Horário'])]
-class Show extends Component
-{
+class Show extends Component {
     public Horario $horario;
-    public ?int $turmaId = null;
+    public ?int $entidadeId = null;
     public string $view = 'turmas'; // 'turmas' ou 'professores'
 
     protected $queryString = [
@@ -20,18 +20,16 @@ class Show extends Component
         'view' => ['except' => 'turmas'],
     ];
 
-    public function mount(Horario $horario): void
-    {
+    public function mount(Horario $horario): void {
         $this->horario = $horario;
 
         // Selecionar primeira turma se nenhuma foi selecionada
-        if (!$this->turmaId && $turmas = Turma::ativa()->first()) {
-            $this->turmaId = $turmas->id;
+        if (!$this->entidadeId && $turmas = Turma::ativa()->first()) {
+            $this->entidadeId = $turmas->id;
         }
     }
 
-    public function getDiasSemanaProperty(): array
-    {
+    public function getDiasSemanaProperty(): array {
         return [
             'segunda' => 'Segunda-feira',
             'terca' => 'Terça-feira',
@@ -41,8 +39,7 @@ class Show extends Component
         ];
     }
 
-    public function getHorariosProperty(): array
-    {
+    public function getHorariosProperty(): array {
         return [
             '07:00' => '07:00 - 07:50',
             '08:00' => '08:00 - 08:50',
@@ -61,42 +58,58 @@ class Show extends Component
         ];
     }
 
-    public function getGradeProperty(): array
-    {
-        if (!$this->turmaId) {
+    public function getGradeProperty(): array {
+        if (!$this->horario->execucaoAtiva) {
             return [];
         }
 
+        $alocacoes = $this->horario
+            ->execucaoAtiva
+            ->alocacoes()
+            ->with(['disciplina', 'professor', 'turma'])
+            ->get();
+
         $grade = [];
 
-        $alocacoes = $this->horario->alocacoes()->where('turma_id', $this->turmaId)->with(['disciplina', 'professor'])->get();
+        if ($this->view === 'turmas') {
 
-        foreach ($alocacoes as $alocacao) {
-            $horarioInicio = $alocacao->horario_inicio->format('H:i');
-            $grade[$alocacao->dia_semana][$horarioInicio] = $alocacao;
+            foreach ($alocacoes->where('turma_id', $this->turmaId) as $alocacao) {
+                $hora = $alocacao->horario_inicio->format('H:i');
+                $grade[$alocacao->dia_semana][$hora] = $alocacao;
+            }
+        } elseif ($this->view === 'professores') {
+
+            foreach ($alocacoes->where('professor_id', $this->turmaId) as $alocacao) {
+                $hora = $alocacao->horario_inicio->format('H:i');
+                $grade[$alocacao->dia_semana][$hora] = $alocacao;
+            }
         }
 
         return $grade;
     }
 
-    public function getTurmasProperty()
-    {
+    public function getEntidadesProperty() {
+        if ($this->view === 'turmas') {
+            return Turma::ativa()->orderBy('nome')->get();
+        }
+
+        return Professor::ativo()->orderBy('nome')->get();
+    }
+
+    public function getTurmasProperty() {
         return Turma::ativa()->orderBy('nome')->get();
     }
 
-    public function generateSchedule(): void
-    {
+    public function generateSchedule(): void {
         // Redirecionar para página de geração
-        $this->redirect(route('algoritmo.index', ['horario_id' => $this->horario->id]));
+        $this->redirect(route('algoritmo.index', $this->horario->id));
     }
 
-    public function exportPdf(): void
-    {
+    public function exportPdf(): void {
         session()->flash('info', 'Funcionalidade de exportação será implementada em breve.');
     }
 
-    public function render()
-    {
+    public function render() {
         return view('livewire.horarios.show');
     }
 }

@@ -1,5 +1,4 @@
 <?php
-// app/Jobs/GerarHorarioJob.php
 
 namespace App\Jobs;
 
@@ -10,56 +9,56 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class GerarHorarioJob implements ShouldQueue {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 600; // 10 minutos
+    public $timeout = 600;
     public $tries = 1;
 
-    public Horario $horario;
-
-    public function __construct(Horario $horario) {
-        $this->horario = $horario;
-        Log::info("__construct GerarHorarioJob");
+    public function __construct(public Horario $horario) {
     }
 
-    public function handle(HorarioGeneticoService $horarioGeneticoService) {
-        Log::info("Iniciando geração do horário #{$this->horario->id}");
-
+    public function handle(HorarioGeneticoService $service): void {
         try {
-            $resultado = $horarioGeneticoService->gerar($this->horario);
-            if (!$resultado['sucesso']) {
-            Cache::put("horario_geracao_{$this->horario->id}", [
-                'status' => 'erro',
-                'mensagem' => "Erro ao gerar horário.",
-            ], now()->addMinutes(10));
-            }
-            Log::info("Geração do horário #{$this->horario->id} concluída.", $resultado);
-        } catch (\Exception $e) {
-            Log::error("Job falhou para horário #{$this->horario->id}", [
-                'exception' => $e->getMessage(),
-                'stacktrace' => $e->getTraceAsString(), // Adicionar stacktrace para depuração
+            Log::info("Iniciando Job de geração de horário", [
+                'horario_id' => $this->horario->id,
+                'horario_nome' => $this->horario->nome,
             ]);
+            $resultado = $service->gerar($this->horario);
+
+            if (!$resultado['sucesso']) {
+
+                Cache::put("horario_geracao_{$this->horario->id}", [
+                    'status' => 'erro',
+                    'erro' => $resultado['erro'],
+                ], now()->addMinutes(30));
+
+                return;
+            }
+
+            Cache::put("horario_geracao_{$this->horario->id}", [
+                'status' => 'concluido',
+                'mensagem_status' => 'Horário gerado com sucesso.'
+            ], now()->addMinutes(30));
+        } catch (\Throwable $e) {
+
+            Log::error("Erro crítico no Job", [
+                'exception' => $e->getMessage()
+            ]);
+
             Cache::put("horario_geracao_{$this->horario->id}", [
                 'status' => 'erro',
-                'mensagem' => $e->getMessage(),
-            ], now()->addMinutes(10));
-            // Opcional: Re-lançar a exceção se você quiser que o Job falhe e seja retentado
-            // throw $e;
+                'erro' => [
+                    'codigo' => 'AG-500',
+                    'categoria' => 'ERRO_SISTEMA',
+                    'mensagem' => 'Erro crítico durante execução do Job.',
+                    'severidade' => 'CRITICA',
+                    'dados' => ['exception' => $e->getMessage()],
+                ]
+            ], now()->addMinutes(30));
         }
-    }
-
-
-    public function failed(\Throwable $exception): void {
-        Log::error("Job falhou para horário #{$this->horario->id}", [
-            'exception' => $exception->getMessage(),
-        ]);
-
-        $this->horario->update([
-            'status' => 'rascunho',
-        ]);
     }
 }
