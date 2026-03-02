@@ -1,0 +1,15 @@
+app/Modules/AG
+│
+├── Domain
+│   ├── Core
+│   ├── Operators
+│   ├── Fitness
+│   ├── Termination
+│   ├── Repair
+│   ├── Metrics
+│   └── Contracts
+│
+├── Application
+│   └── GeneticAlgorithmEngine.php
+│
+└── Support

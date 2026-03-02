@@ -7,9 +7,7 @@ use App\Livewire\Dashboard;
 use App\Livewire\Professores;
 use App\Livewire\Turmas;
 use App\Livewire\Disciplinas;
-use App\Livewire\Horarios;
 use App\Livewire\Aulas;
-use App\Livewire\Horarios\Configurar;
 
 use App\Livewire\Auth\UserManager;
 
@@ -50,11 +48,11 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('horarios')->name('horarios.')->group(function () {
 
-        Route::get('/', Horarios\Index::class)->name('index');
-        Route::get('/criar', Horarios\Create::class)->name('create');
+        Route::get('/', App\Modules\Horarios\UI\Livewire\Index::class)->name('index');
+        Route::get('/criar', App\Modules\Horarios\UI\Livewire\Create::class)->name('create');
 
         // SPA DE GERENCIAMENTO
-        Route::get('/{horario}/manage', Horarios\Manage::class)->name('manage');
+        Route::get('/{horario}/manage', App\Modules\Horarios\UI\Livewire\Manage::class)->name('manage');
     });
 
     // ✅ CORRIGIDO: Adicionar parâmetro {horario} na rota

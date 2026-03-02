@@ -8,9 +8,12 @@ use DirectoryIterator;
 class GenerateTree extends Command {
     protected $signature = 'tree:generate 
         {path : Caminho da pasta base}
-        {--output=tree.txt : Arquivo de saída}';
+        {--output=tree.txt : Arquivo de saída}
+        {--exclude=* : Nomes de subpastas a excluir da listagem (pode ser usado múltiplas vezes)}';
 
-    protected $description = 'Gera um arquivo .txt com a árvore de diretórios e arquivos';
+    protected $description = 'Gera um arquivo .txt com a árvore de diretórios e arquivos, com opção de excluir pastas.';
+
+    private array $excludedDirs = [];
 
     public function handle(): int {
         $basePath = realpath($this->argument('path'));
@@ -19,6 +22,8 @@ class GenerateTree extends Command {
             $this->error('Caminho inválido.');
             return Command::FAILURE;
         }
+
+        $this->excludedDirs = $this->option('exclude') ?? [];
 
         $lines   = [];
         $lines[] = basename($basePath);
@@ -39,6 +44,7 @@ class GenerateTree extends Command {
      * - hierarquia real
      * - pastas primeiro
      * - ordem alfabética
+     * - exclusão de pastas configuradas em $excludedDirs
      */
     private function renderDirectory(string $path, array &$lines, string $prefix = ''): void {
         $directories = [];
@@ -49,10 +55,16 @@ class GenerateTree extends Command {
                 continue;
             }
 
+            $name = $item->getFilename();
+
             if ($item->isDir()) {
-                $directories[] = $item->getFilename();
+                // Se o nome da pasta estiver na lista de exclusão, ignore completamente
+                if (in_array($name, $this->excludedDirs)) {
+                    continue;
+                }
+                $directories[] = $name;
             } else {
-                $files[] = $item->getFilename();
+                $files[] = $name;
             }
         }
 
