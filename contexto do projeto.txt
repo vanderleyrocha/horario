@@ -1,0 +1,315 @@
+Sistema de Geração Inteligente de Horários Escolares com Algoritmo Genético Modular desenvolvido em PHP, Laravel 12 e LiveWare 4
+1. Visão Geral
+
+O projeto consiste na implementação de um Sistema Inteligente de Geração de Horários Escolares baseado em Algoritmo Genético (AG), desenvolvido sob uma arquitetura modular, desacoplada e orientada a domínio.
+
+O objetivo é construir um motor genético genérico e reutilizável (módulo AG) e, sobre ele, implementar o problema específico de geração de horários escolares (módulo Horários), garantindo:
+
+Separação rigorosa entre domínio do problema e engine evolutiva
+
+Escalabilidade matemática
+
+Evolução incremental da estratégia genética
+
+Integração controlada com frontend via progress reporting
+
+Persistência estruturada de métricas e diagnósticos
+
+2. Princípios Arquiteturais
+
+O projeto segue os seguintes princípios:
+
+2.1 Arquitetura Modular
+
+Separação clara entre:
+
+Modules/
+ ├── AG         → Engine genética genérica
+ └── Horarios   → Problema específico de horário escolar
+
+A engine não conhece:
+
+Eloquent
+
+Models Laravel
+
+Banco de dados
+
+Livewire
+
+UI
+
+O módulo Horários não contém lógica evolutiva.
+
+2.2 Clean Architecture Adaptada
+
+Divisão interna do módulo AG:
+
+AG
+├── Domain
+│   ├── Core
+│   ├── Operators
+│   ├── Fitness
+│   ├── Termination
+│   ├── Repair
+│   ├── Metrics
+│   └── Analysis
+├── Application
+├── Infrastructure
+└── Support
+
+Domain → lógica matemática pura
+
+Application → orquestração da engine
+
+Infrastructure → geração de população e cache
+
+Support → DTOs, exceções e erros estruturados
+
+3. Objetivos Técnicos
+3.1 Resolver o Problema NP-Difícil de Geração de Horários
+
+O sistema deve:
+
+Evitar conflitos professor/turma
+
+Respeitar carga horária
+
+Considerar aulas duplas/triplas
+
+Minimizar janelas
+
+Melhorar distribuição semanal
+
+Considerar bloqueios obrigatórios e preferenciais
+
+3.2 Implementar Fitness Estruturado
+
+Fitness dividido em:
+
+Penalidades Hard (inviabilizam solução)
+
+Penalidades Soft (otimizam qualidade)
+
+Resultado formal:
+
+FitnessResult:
+- score
+- totalPenalty
+- hardPenalty
+- softPenalty
+
+Maximização como padrão.
+
+3.3 Implementar Diagnóstico Estrutural Pré-Execução
+
+Antes de rodar o AG:
+
+Análise de saturação global
+
+Sobrecarga por turma
+
+Sobrecarga por professor
+
+Deficit de blocos contínuos
+
+Índice matemático de risco (0–100)
+
+Classificação qualitativa (MINIMO → CRITICO)
+
+Execução pode ser bloqueada automaticamente se risco crítico.
+
+4. Fluxo Operacional
+4.1 Pipeline Completo
+Livewire Manage
+      ↓
+GerarHorarioJob
+      ↓
+GenerateScheduleAction
+      ↓
+PopulationGenerator
+      ↓
+GeneticAlgorithmEngine
+      ↓
+Persistência
+4.2 Fases do Processamento
+
+Análise estrutural
+
+Geração da população inicial
+
+Evolução por gerações
+
+Persistência da melhor solução
+
+Armazenamento de métricas
+
+Finalização e retorno ao frontend
+
+5. Comunicação com Frontend
+
+A comunicação é feita exclusivamente por:
+
+ProgressReporterInterface
+
+Implementação atual:
+
+CacheProgressReporter
+
+Permite:
+
+Barra de progresso da população inicial
+
+Barra de progresso da evolução
+
+Status por fase
+
+Melhor fitness atual
+
+Mensagens estruturadas
+
+Report de erro com AGError
+
+Nenhum componente de domínio conhece Livewire.
+
+6. Evoluções Planejadas
+
+O projeto prevê expansão para:
+
+6.1 Critérios Avançados de Terminação
+
+Critério híbrido (fitness + diversidade)
+
+Terminação baseada em variância
+
+Adaptive termination inteligente
+
+6.2 Métrica Formal de Diversidade Genética
+
+Possíveis abordagens:
+
+Distância de Hamming entre cromossomos
+
+Entropia da população
+
+Variância do fitness
+
+Índice de dispersão genética
+
+6.3 Engine Multi-Estratégia
+
+Suporte a:
+
+Múltiplos operadores de crossover
+
+Múltiplos operadores de mutação
+
+Estratégia adaptativa dinâmica
+
+Ilhas genéticas paralelas
+
+6.4 Paralelização
+
+Arquitetura preparada para:
+
+Evolução por ilhas
+
+Workers paralelos
+
+Migração de elites
+
+6.5 Persistência Científica
+
+Registrar por geração:
+
+Melhor fitness
+
+Média
+
+Variância
+
+Diversidade
+
+Taxa de mutação efetiva
+
+Objetivo: permitir análise estatística real do comportamento do algoritmo.
+
+7. Modelo Matemático do RiskIndex
+
+Planeja-se formalizar:
+
+RiskIndex = f(
+  saturacao_global,
+  excesso_turmas,
+  excesso_professores,
+  deficit_blocos,
+  entropia_estrutural
+)
+
+Normalizado entre 0 e 100.
+
+8. Critérios de Qualidade Arquitetural
+
+O projeto exige:
+
+Nenhuma dependência circular
+
+Nenhum uso de Eloquent no Domain
+
+Nenhuma lógica genética no módulo Horários
+
+Nenhum Service monolítico
+
+Nenhum operador conhecendo Laravel
+
+9. Resultado Esperado
+
+Ao final da evolução arquitetural:
+
+Engine genética genérica reutilizável
+
+Sistema de horário cientificamente fundamentado
+
+Diagnóstico estrutural formal
+
+Painel visual com métricas por geração
+
+Persistência histórica de execuções
+
+Arquitetura limpa e escalável
+
+10. Estado Atual
+
+Concluído:
+
+Arquitetura modular
+
+Engine genética
+
+PopulationGenerator híbrido adaptativo
+
+TerminationCriterion
+
+RepairOperator
+
+Diagnóstico estrutural
+
+Integração com Job
+
+Em andamento:
+
+Consolidação do ScheduleProblem
+
+Refatoração completa das Rules
+
+Evolução da comunicação com frontend
+
+Métricas por geração
+
+Estratégias híbridas de convergência
+
+📌 Conclusão
+
+Este projeto não é apenas um gerador de horários.
+
+É uma plataforma evolutiva modular para resolução de problemas combinatórios complexos, com base matemática formal, arquitetura desacoplada e potencial de expansão para modelos avançados de otimização evolutiva.

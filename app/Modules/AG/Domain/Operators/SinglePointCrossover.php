@@ -19,8 +19,8 @@ final class SinglePointCrossover implements CrossoverOperatorInterface {
         $genes1 = [];
         $genes2 = [];
 
-        $p1Genes = $pai1->getGenes();
-        $p2Genes = $pai2->getGenes();
+        $p1Genes = $pai1->genes();
+        $p2Genes = $pai2->genes();
 
         for ($i = 0; $i < $size; $i++) {
             if ($i < $point) {

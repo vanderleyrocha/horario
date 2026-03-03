@@ -23,6 +23,7 @@ class Manage extends Component {
     }
 
     public function render() {
+        dd($this->horario);
         return view('livewire.horarios.manage');
     }
 }

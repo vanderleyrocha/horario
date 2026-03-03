@@ -1,0 +1,159 @@
+app
+├── Actions
+│   └── Fortify
+│       ├── CreateNewUser.php
+│       └── ResetUserPassword.php
+├── Concerns
+│   ├── PasswordValidationRules.php
+│   └── ProfileValidationRules.php
+├── Console
+│   └── Commands
+│       ├── CreateStructureFromTxt.php
+│       ├── GenerateTree.php
+│       └── InsertAulas.php
+├── Http
+│   └── Controllers
+│       ├── Controller.php
+│       └── TesteController.php
+├── Jobs
+│   └── GerarHorarioJob.php
+├── Livewire
+│   ├── Actions
+│   │   └── Logout.php
+│   ├── Ag
+│   │   └── DiagnosticoInviabilidade.php
+│   ├── Algoritmo
+│   │   ├── HistoricoExecucoes.php
+│   │   └── Index.php
+│   ├── Aulas
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Auth
+│   │   ├── Login.php
+│   │   └── UserManager.php
+│   ├── Disciplinas
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Layout
+│   │   ├── Navbar.php
+│   │   └── Sidebar.php
+│   ├── Professores
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Turmas
+│   │   ├── Aulas.php
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   └── Dashboard.php
+├── Models
+│   ├── Alocacao.php
+│   ├── Aula.php
+│   ├── ConfiguracaoHorario.php
+│   ├── Disciplina.php
+│   ├── ExecucaoAlgoritmo.php
+│   ├── Horario.php
+│   ├── Professor.php
+│   ├── RestricaoTempo.php
+│   ├── Turma.php
+│   └── User.php
+├── Modules
+│   ├── AG
+│   │   ├── Application
+│   │   │   ├── GeneticAlgorithmEngine.php
+│   │   │   └── RunGeneticAlgorithm.php
+│   │   ├── Domain
+│   │   │   ├── Analysis
+│   │   │   │   ├── DTO
+│   │   │   │   │   └── FeasibilityReport.php
+│   │   │   │   └── ScheduleFeasibilityAnalyzer.php
+│   │   │   ├── Contracts
+│   │   │   │   ├── GeneticProblem.php
+│   │   │   │   └── ProgressReporterInterface.php
+│   │   │   ├── Core
+│   │   │   │   └── Entities
+│   │   │   │       ├── Cromossomo.php
+│   │   │   │       └── Gene.php
+│   │   │   ├── Entities
+│   │   │   ├── Fitness
+│   │   │   │   ├── Rules
+│   │   │   │   │   ├── Hard
+│   │   │   │   │   │   ├── BloqueiosHardRule.php
+│   │   │   │   │   │   ├── CargaHorariaExcedidaRule.php
+│   │   │   │   │   │   ├── ConflitoProfessorRule.php
+│   │   │   │   │   │   └── ConflitoTurmaRule.php
+│   │   │   │   │   ├── Soft
+│   │   │   │   │   │   ├── AulasNaoConsecutivasRule.php
+│   │   │   │   │   │   ├── BloqueiosPreferenciaisRule.php
+│   │   │   │   │   │   ├── DistribuicaoRule.php
+│   │   │   │   │   │   ├── JanelasRule.php
+│   │   │   │   │   │   └── MaxAulasDiaRule.php
+│   │   │   │   │   ├── FitnessRuleInterface.php
+│   │   │   │   │   ├── HardRuleInterface.php
+│   │   │   │   │   ├── RuleResult.php
+│   │   │   │   │   └── SoftRuleInterface.php
+│   │   │   │   ├── EvaluationContext.php
+│   │   │   │   ├── FitnessEvaluator.php
+│   │   │   │   ├── FitnessResult.php
+│   │   │   │   ├── FitnessRuleInterface.php
+│   │   │   │   └── FitnessWeights.php
+│   │   │   ├── Metrics
+│   │   │   │   └── MetricsRecorder.php
+│   │   │   ├── Operators
+│   │   │   │   ├── BlockPreservingCrossover.php
+│   │   │   │   ├── ConflictGuidedMutation.php
+│   │   │   │   ├── CrossoverOperatorInterface.php
+│   │   │   │   ├── GeneSwapMutation.php
+│   │   │   │   ├── MutationOperatorInterface.php
+│   │   │   │   ├── SelectionOperatorInterface.php
+│   │   │   │   ├── SinglePointCrossover.php
+│   │   │   │   ├── StructuredSwapMutation.php
+│   │   │   │   └── TournamentSelection.php
+│   │   │   ├── Repair
+│   │   │   │   └── GreedyRepairOperator.php
+│   │   │   ├── Services
+│   │   │   │   └── GeneticAlgorithm.php
+│   │   │   └── Termination
+│   │   │       ├── MaxGenerationsOrFitnessCriterion.php
+│   │   │       └── TerminationCriterionInterface.php
+│   │   ├── Infrastructure
+│   │   │   ├── Population
+│   │   │   │   └── PopulationGenerator.php
+│   │   │   └── Progress
+│   │   │       └── CacheProgressReporter.php
+│   │   └── Support
+│   │       ├── DTO
+│   │       │   └── GeneticAlgorithmConfigDTO.php
+│   │       ├── Exceptions
+│   │       │   └── InviableScheduleException.php
+│   │       ├── AGError.php
+│   │       └── AGErrorFactory.php
+│   └── Horarios
+│       ├── Application
+│       │   └── GenerateScheduleAction.php
+│       ├── Domain
+│       │   ├── Services
+│       │   │   └── ScheduleProblem.php
+│       │   └── RiskIndexCalculator.php
+│       └── UI
+│           └── Livewire
+│               ├── Configurar.php
+│               ├── Create.php
+│               ├── GerenciarAulas.php
+│               ├── GerenciarRestricoes.php
+│               ├── Index.php
+│               ├── Manage.php
+│               ├── ResumoConfiguracao.php
+│               └── Show.php
+├── Providers
+│   ├── AppServiceProvider.php
+│   └── FortifyServiceProvider.php
+├── Traits
+│   └── ComDadosComuns.php
+└── View
+    └── Components
+        ├── AppLayout.php
+        ├── Button.php
+        └── GuestLayout.php

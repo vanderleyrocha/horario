@@ -6,6 +6,7 @@ use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 use App\Modules\AG\Domain\Core\Entities\Gene;
 
 final class StructuredSwapMutation implements MutationOperatorInterface {
+
     public function mutate(Cromossomo $cromossomo): void {
         $size = $cromossomo->count();
 

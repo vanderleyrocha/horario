@@ -225,3 +225,213 @@ resources/views/livewire/
 ├── turmas/ (index, create, edit) ✅
 ├── disciplinas/ (index, create, edit) ✅
 └── horarios/ (index, create, show) ✅
+
+
+
+
+PROMPT PARA NOVO CICLO DE DESENVOLVIMENTO
+
+Reestruturação arquitetural completa do sistema de geração de horários utilizando Algoritmo Genético
+Estamos dando continuidade à reestruturação arquitetural completa do sistema de geração de horários utilizando Algoritmo Genético.
+
+Já concluímos:
+
+PASSO 1 — Criação do módulo AG totalmente desacoplado
+PASSO 2 — Criação do contrato do problema (GeneticProblem + abstrações)
+PASSO 3 — Criação da nova Engine Genética modular, com:
+
+SelectionOperatorInterface
+
+CrossoverOperatorInterface
+
+MutationOperatorInterface
+
+TerminationCriterionInterface
+
+RepairOperator
+
+MetricsRecorder
+
+ProgressReporterInterface
+
+PopulationGenerator
+
+ScheduleFeasibilityAnalyzer
+
+Estrutura Domain / Application / Infrastructure / Support consolidada
+
+A estrutura atual do projeto está organizada em:
+
+Modules/AG (Engine Genética)
+
+Modules/Horarios (Domínio do problema)
+
+Jobs/GerarHorarioJob.php
+
+Livewire SPA já existente (Manage, Diagnóstico, etc.)
+
+Agora precisamos finalizar:
+
+PASSO 4 — Criar problema específico de Horário
+PASSO 5 — Integrar definitivamente ao módulo Horários e ao Livewire
+
+🎯 OBJETIVOS DO NOVO CICLO
+1️⃣ Consolidar o problema específico de Horário
+
+Implementar definitivamente ScheduleProblem no módulo Horarios
+
+Refatorar HardRules e SoftRules para aderirem 100% ao novo FitnessEvaluator
+
+Garantir que Rules não dependam de Eloquent
+
+Adaptar EvaluationContext
+
+Garantir que toda penalização retorne RuleResult estruturado
+
+2️⃣ Conectar Engine + Action + Job + Livewire Manage
+
+Fluxo desejado:
+
+Livewire Manage
+→ dispatch GerarHorarioJob
+→ Job usa GenerateScheduleAction
+→ Action usa PopulationGenerator + Engine
+→ Engine usa ProgressReporter
+→ CacheProgressReporter alimenta barra de progresso no frontend
+
+Precisamos:
+
+Barra de progresso para geração da população inicial
+
+Barra de progresso para evolução das gerações
+
+Separação clara de fases:
+
+análise estrutural
+
+população inicial
+
+evolução
+
+finalização
+
+3️⃣ Persistência automática
+
+Implementar:
+
+Persistência automática do melhor cromossomo a cada melhoria significativa
+
+Salvamento automático do diagnóstico estrutural
+
+Salvamento das métricas por geração no banco (ExecucaoAlgoritmo)
+
+4️⃣ Evoluções Avançadas da Engine
+
+Implementar ou estruturar base para:
+
+🔬 Critério híbrido de convergência (fitness + diversidade)
+📊 Terminação baseada em variância da população
+🧠 Adaptive termination inteligente
+🚀 Paralelização por ilhas genéticas
+🔬 Otimização matemática da convergência
+📊 Métrica formal de diversidade genética
+🧠 Engine multi-estratégia (Strategy Pattern para operadores)
+
+5️⃣ Camada Matemática Formal
+
+Implementar formalmente:
+
+Cálculo matemático consistente do RiskIndex
+
+Índice baseado em:
+
+saturação
+
+entropia estrutural
+
+gargalos por entidade
+
+densidade de blocos
+
+Normalização 0–100
+
+Classificação MINIMO → CRITICO
+
+6️⃣ Prevenção automática antes de rodar o AG
+
+Antes de executar o algoritmo:
+
+Validar risco estrutural
+
+Bloquear execução se risco crítico
+
+Exibir diagnóstico no painel SPA
+
+Permitir override administrativo
+
+7️⃣ Painel Visual Avançado
+
+Revisar Livewire SPA:
+
+Painel de inviabilidade com abas
+
+Painel de métricas por geração (gráfico)
+
+Exibição de:
+
+melhor fitness
+
+média
+
+variância
+
+diversidade genética
+
+Histórico de execuções
+
+⚙️ DIRETRIZES IMPORTANTES
+
+Manter arquitetura modular limpa
+
+Não misturar Eloquent com Domain
+
+Engine deve continuar completamente desacoplada
+
+Horários deve ser apenas implementação de problema
+
+ProgressReporter deve ser a única ponte para frontend
+
+Nenhum operador deve conhecer Laravel
+
+🧠 PRIORIDADE DE IMPLEMENTAÇÃO
+
+Siga esta ordem:
+
+Finalizar ScheduleProblem
+
+Refatorar Rules
+
+Integrar Action + Job corretamente
+
+Implementar barra de progresso real
+
+Persistência automática
+
+Métricas por geração
+
+Critérios híbridos e diversidade
+
+📌 IMPORTANTE
+
+A arquitetura atual está estável e modular.
+
+Não retroceder para padrões antigos.
+Não recriar Service monolítico.
+Não acoplar Engine ao Horario.
+
+Toda evolução deve preservar:
+
+Modules/AG → Engine genérica
+Modules/Horarios → Problema específico
+
+Agora, inicie pelo PASSO 4 — consolidando definitivamente o ScheduleProblem e refatorando as Rules para aderirem completamente à nova Engine.

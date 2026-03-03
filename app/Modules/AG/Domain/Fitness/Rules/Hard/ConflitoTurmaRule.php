@@ -11,7 +11,7 @@ final class ConflitoTurmaRule implements HardRuleInterface {
         $penalty = 0.0;
         $ocupacao = [];
 
-        foreach ($context->genes as $gene) {
+        foreach ($context->genes() as $gene) {
             if ($gene->isEmpty()) continue;
             for ($i = 0; $i < $gene->getDuracaoTempos(); $i++) {
 

@@ -10,9 +10,9 @@ final class BloqueiosPreferenciaisRule implements SoftRuleInterface {
     public function evaluate(EvaluationContext $context): RuleResult {
         $penalty = 0.0;
 
-        foreach ($context->genes as $gene) {
+        foreach ($context->genes() as $gene) {
             if ($gene->isEmpty()) continue;
-            $preferidos = $context->diasPreferidos[$gene->getAulaId()] ?? [];
+            $preferidos = $context->diasPreferidos()[$gene->getAulaId()] ?? [];
 
             if (!in_array($gene->getDiaSemana(), $preferidos)) {
                 $penalty++;

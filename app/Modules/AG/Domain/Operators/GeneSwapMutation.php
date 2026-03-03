@@ -3,7 +3,6 @@
 namespace App\Modules\AG\Domain\Operators;
 
 use App\Modules\AG\Domain\Core\Entities\Cromossomo;
-use App\Modules\AG\Domain\Core\Entities\Gene;
 
 final class GeneSwapMutation implements MutationOperatorInterface {
     public function mutate(Cromossomo $cromossomo): void {

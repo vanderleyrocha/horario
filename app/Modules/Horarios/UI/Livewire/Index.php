@@ -3,7 +3,6 @@
 namespace App\Modules\Horarios\UI\Livewire;
 
 use App\Models\Horario;
-use Illuminate\Http\RedirectResponse;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -91,6 +90,7 @@ class Index extends Component {
         $this->showDiagnostico = false;
         $this->diagnosticoSelecionado = [];
     }
+
     public function render() {
         $horarios = Horario::query()
             ->when(
@@ -110,7 +110,7 @@ class Index extends Component {
             )
             ->orderBy('created_at', 'desc')
             ->paginate(10);
-
+        
         return view('livewire.horarios.index', [
             'horarios' => $horarios,
         ]);

@@ -5,7 +5,7 @@ namespace App\Modules\AG\Domain\Fitness;
 use App\Models\ConfiguracaoHorario;
 use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 use App\Modules\AG\Domain\Fitness\Rules\RuleResult;
-use App\Services\GeneticAlgorithm\Genetico\DTO\GeneticAlgorithmConfigDTO;
+use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
 use Illuminate\Support\Collection;
 
 interface FitnessRuleInterface {

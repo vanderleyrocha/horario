@@ -11,7 +11,7 @@ final class MaxAulasDiaRule implements SoftRuleInterface {
         $penalty = 0.0;
         $contador = [];
 
-        foreach ($context->genes as $gene) {
+        foreach ($context->genes() as $gene) {
             if ($gene->isEmpty()) continue;
             $contador[$gene->getTurmaId()][$gene->getDiaSemana()] = ($contador[$gene->getTurmaId()][$gene->getDiaSemana()] ?? 0) + 1;
         }

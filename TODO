@@ -1069,9 +1069,10 @@ Ou implementar persistência automática de erros no banco
 
 Implementar persistência automática do melhor cromossomo
 Criar Painel Visual de Métricas por geração
-Implementar paralelização futura
 Implementar salvamento automático do diagnóstico estrutural
-
+Revisar o painel visual de inviabilidade (Livewire SPA Tabs)
+Implementar cálculo matemático formal do RiskIndex
+Implementar prevenção automática antes de rodar o AG
 
 Se quiser, próximo passo estratégico é:
 
@@ -1092,3 +1093,10 @@ Sem tocar na engine.
 
 
 
+PASSO 1 — Criar módulo AG
+PASSO 2 — Criar contrato do problema
+PASSO 3 — Criar Engine Genética
+PASSO 4 — Criar problema específico de Horário
+PASSO 5 — Criar Action no módulo Horários
+
+Conectar esse novo módulo ao Livewire Manage

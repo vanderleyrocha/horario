@@ -10,7 +10,7 @@ final class BloqueiosHardRule implements HardRuleInterface {
     public function evaluate(EvaluationContext $context): RuleResult {
         $penalty = 0.0;
 
-        foreach ($context->genes as $gene) {
+        foreach ($context->genes() as $gene) {
             if ($gene->isEmpty()) continue;
             if (
                 isset($context->restricoesIndexadas['professor'][$gene->getProfessorId()][$gene->getDiaSemana()][$gene->getPeriodoDia()])
