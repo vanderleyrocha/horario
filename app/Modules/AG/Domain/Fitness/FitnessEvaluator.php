@@ -3,39 +3,42 @@
 namespace App\Modules\AG\Domain\Fitness;
 
 use App\Modules\AG\Domain\Core\Entities\Cromossomo;
-use App\Modules\AG\Domain\Fitness\Rules\HardRuleInterface;
-use App\Modules\AG\Domain\Fitness\Rules\SoftRuleInterface;
+use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
+use App\Modules\Horarios\Domain\Evaluation\Contracts\RuleInterface;
 
 final class FitnessEvaluator {
     /**
-     * @param array<\App\Modules\AG\Domain\Fitness\Rules\FitnessRuleInterface> $rules
+     * @param RuleInterface[] $rules
      */
-    public function __construct(
-        private readonly FitnessWeights $weights,
-        private readonly array $rules
-    ) {
+    public function __construct(private readonly FitnessWeights $weights, private readonly array $rules) {
     }
 
-    public function evaluate(Cromossomo $cromossomo): FitnessResult {
-        $context = new EvaluationContext($cromossomo);
+    public function evaluate(Cromossomo $cromossomo, EvaluationContext $context): FitnessResult {
 
         $hardPenalty = 0.0;
         $softPenalty = 0.0;
 
         foreach ($this->rules as $rule) {
 
-            $result = $rule->evaluate($context);
-
-            $penalty = max(0.0, $result->getPenalty());
-            $weight  = $this->weights->get($rule::class);
-
-            $weightedPenalty = $penalty * $weight;
-
-            if ($rule instanceof HardRuleInterface) {
-                $hardPenalty += $weightedPenalty;
+            if (!$rule instanceof RuleInterface) {
+                throw new \InvalidArgumentException('All rules must implement RuleInterface');
             }
 
-            if ($rule instanceof SoftRuleInterface) {
+            $result = $rule->evaluate($context);
+
+            $basePenalty = max(0.0, $result->penalty());
+
+            if ($basePenalty === 0.0) {
+                continue;
+            }
+
+            $weight = $this->weights->get($rule::class);
+
+            $weightedPenalty = $basePenalty * $weight;
+
+            if ($rule->isHard()) {
+                $hardPenalty += $weightedPenalty;
+            } else {
                 $softPenalty += $weightedPenalty;
             }
         }
@@ -49,7 +52,6 @@ final class FitnessEvaluator {
          */
         $score = max(0.0, 100.0 - $totalPenalty);
 
-        // Persistimos fitness diretamente no cromossomo
         $cromossomo->setFitness($score);
 
         return new FitnessResult(

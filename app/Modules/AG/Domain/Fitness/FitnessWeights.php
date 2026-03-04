@@ -50,18 +50,18 @@ final class FitnessWeights {
      */
     public static function default(): self {
         return new self([
-            // Hard rules (peso alto)
-            \App\Modules\AG\Domain\Fitness\Rules\Hard\ConflitoProfessorRule::class => 10.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Hard\ConflitoTurmaRule::class => 10.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Hard\CargaHorariaExcedidaRule::class => 8.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Hard\BloqueiosHardRule::class => 6.0,
+            // Hard Rules
+            \App\Modules\Horarios\Domain\Evaluation\HardRules\TeacherConflictRule::class => 10.0,
+            \App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule::class => 10.0,
+            \App\Modules\Horarios\Domain\Evaluation\HardRules\WorkloadExceededRule::class => 8.0,
+            \App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule::class => 6.0,
 
-            // Soft rules (peso menor)
-            \App\Modules\AG\Domain\Fitness\Rules\Soft\JanelasRule::class => 2.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Soft\DistribuicaoRule::class => 2.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Soft\MaxAulasDiaRule::class => 1.5,
-            \App\Modules\AG\Domain\Fitness\Rules\Soft\AulasNaoConsecutivasRule::class => 1.0,
-            \App\Modules\AG\Domain\Fitness\Rules\Soft\BloqueiosPreferenciaisRule::class => 1.0,
+            // Soft Rules
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule::class => 2.0,
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\DistributionRule::class => 2.0,
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\MaxLessonsPerDayRule::class => 1.5,
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\ConsecutiveLessonRule::class => 1.0,
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\PreferredTimeRule::class => 1.0,
         ]);
     }
 }

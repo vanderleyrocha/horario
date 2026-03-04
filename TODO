@@ -1100,3 +1100,61 @@ PASSO 4 — Criar problema específico de Horário
 PASSO 5 — Criar Action no módulo Horários
 
 Conectar esse novo módulo ao Livewire Manage
+
+➡ Implementaremos pipeline de progresso real
+➡ Critério híbrido de convergência
+
+
+☑ Entregar a estrutura completa de diretórios pronta para commit
+ Especificar o contrato formal de ScheduleData
+ iniciar imediatamente a integração Action + Job
+☑ Implementar ScheduleDataBuilder (ponte Eloquent → Domain)
+
+ Implementação da métrica formal de diversidade genética
+ Estrutura preparada para Island Model paralelo
+☑ Implementar EvaluationContextBuilder
+ Estruturar a persistência automática incremental
+
+☑ Refatorar todas as rules, FitnessEvaluator e EvaluationContext 
+ Projetar HybridTerminationCriterion
+ Consolidar definitivamente o 
+☑ Evoluir o Cromossomo para pré-calcular mapas derivados
+ Implementar RiskIndex matemático 0–100
+ 
+☑ Consolidar definitivamente o ScheduleProblem conectando todas as regras.
+
+
+RepairOperatorInterface ainda não foi implementada,
+ 
+ Evoluir o contrato GeneticProblem (está fraco e antigo).
+☑ Refatorar GeneticAlgorithmEngine para usar o novo contrato
+ Consolidar definitivamente GenerateScheduleAction  com a nova estrutura
+☑ Implementar Elitism Strategy
+ 
+ 
+ Genetic Diversity Metric para evitar convergência prematura
+ Depois disso podemos implementar:
+ Hybrid Termination
+ Adaptive Mutation
+ Island Model Parallel
+ implementação matemática correta baseada em distância de Hamming entre cromossomos, otimizada para seu modelo de Gene.
+☑ implementação científica do DiversityCalculator baseada em distância genética entre cromossomos (para destravar HybridTermination)
+
+Próxima evolução científica recomendada
+
+O próximo passo usado em motores avançados é adicionar:
+
+Cache incremental de conflitos
+conflictScore
+softPenaltyCache
+hardPenaltyCache
+
+Próxima evolução científica recomendada
+
+O próximo passo usado em motores avançados é adicionar:
+
+Cache incremental de conflitos
+conflictScore
+softPenaltyCache
+hardPenaltyCache
+ 

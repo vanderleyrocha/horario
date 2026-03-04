@@ -1,15 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\Contracts;
 
+use App\Modules\AG\Domain\Core\Entities\Cromossomo;
+use App\Modules\AG\Domain\Fitness\FitnessResult;
+
 interface GeneticProblem {
-    public function createIndividual(): mixed;
+    /**
+     * Cria um indivíduo inicial válido ou parcialmente válido.
+     */
+    public function createIndividual(): Cromossomo;
 
-    public function fitness(mixed $individual): float;
+    /**
+     * Avalia completamente o indivíduo.
+     */
+    public function evaluate(Cromossomo $individual): FitnessResult;
 
-    public function crossover(mixed $parentA, mixed $parentB): mixed;
+    /**
+     * Repara indivíduo após crossover/mutation.
+     */
+    public function repair(Cromossomo $individual): Cromossomo;
 
-    public function mutate(mixed $individual): mixed;
-
-    public function isFeasible(mixed $individual): bool;
+    /**
+     * Verifica se o indivíduo é estruturalmente viável.
+     */
+    public function isFeasible(Cromossomo $individual): bool;
 }

@@ -1,71 +1,137 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\Metrics;
 
 use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 
 final class MetricsRecorder {
-    private array $generationData = [];
+    /**
+     * @var array<int,array<string,mixed>>
+     */
+    private array $generationMetrics = [];
 
-    private ?Cromossomo $bestOverall = null;
+    private float $bestFitnessOverall = 0.0;
 
-    private float $bestFitnessOverall = -INF; // Maximização
+    private ?DiversityCalculatorInterface $diversityCalculator = null;
 
+    /**
+     * Permite injetar cálculo de diversidade genética
+     */
+    public function setDiversityCalculator(
+        DiversityCalculatorInterface $calculator
+    ): void {
+        $this->diversityCalculator = $calculator;
+    }
+
+    /**
+     * Registra métricas de uma geração
+     *
+     * @param Cromossomo[] $population
+     */
     public function record(int $generation, array $population): void {
         if (empty($population)) {
             return;
         }
 
-        $bestFitness = -INF;
-        $worstFitness = INF;
-        $bestIndividual = null;
+        $fitnessValues = array_map(
+            fn(Cromossomo $c) => $c->fitness(),
+            $population
+        );
 
-        $sum = 0.0;
-        $count = count($population);
+        $best = max($fitnessValues);
 
-        foreach ($population as $cromossomo) {
-
-            $fitness = $cromossomo->fitness();
-
-            $sum += $fitness;
-
-            if ($fitness > $bestFitness) {
-                $bestFitness = $fitness;
-                $bestIndividual = $cromossomo;
-            }
-
-            if ($fitness < $worstFitness) {
-                $worstFitness = $fitness;
-            }
+        if ($best > $this->bestFitnessOverall) {
+            $this->bestFitnessOverall = $best;
         }
 
-        $averageFitness = $sum / $count;
+        $average = $this->calculateAverage($fitnessValues);
 
-        // Atualiza melhor global
-        if ($bestFitness > $this->bestFitnessOverall) {
+        $variance = $this->calculateVariance($fitnessValues, $average);
 
-            $this->bestFitnessOverall = $bestFitness;
+        $diversity = 0.0;
 
-            // cópia defensiva
-            $this->bestOverall = $bestIndividual?->copy();
+        if ($this->diversityCalculator !== null) {
+            $diversity = $this->diversityCalculator->calculate($population);
         }
 
-        $this->generationData[$generation] = [
-            'best_fitness' => $bestFitness,
-            'average_fitness' => $averageFitness,
-            'worst_fitness' => $worstFitness,
+        $this->generationMetrics[] = [
+            'generation' => $generation,
+            'best_fitness' => $best,
+            'average_fitness' => $average,
+            'variance' => $variance,
+            'diversity' => $diversity,
         ];
     }
 
-    public function bestOverall(): ?Cromossomo {
-        return $this->bestOverall;
+    /**
+     * Média do fitness
+     *
+     * @param float[] $values
+     */
+    private function calculateAverage(array $values): float {
+        if (empty($values)) {
+            return 0.0;
+        }
+
+        return array_sum($values) / count($values);
     }
 
+    /**
+     * Variância do fitness
+     *
+     * @param float[] $values
+     */
+    private function calculateVariance(array $values, float $mean): float {
+        $sum = 0.0;
+
+        foreach ($values as $value) {
+            $sum += ($value - $mean) ** 2;
+        }
+
+        return $sum / count($values);
+    }
+
+    /**
+     * Melhor fitness de toda execução
+     */
     public function bestFitnessOverall(): float {
         return $this->bestFitnessOverall;
     }
 
+    /**
+     * Dados completos por geração
+     *
+     * @return array<int,array<string,mixed>>
+     */
     public function generationData(): array {
-        return $this->generationData;
+        return $this->generationMetrics;
+    }
+
+    /**
+     * Última geração registrada
+     */
+    public function lastGeneration(): ?array {
+        if (empty($this->generationMetrics)) {
+            return null;
+        }
+
+        return $this->generationMetrics[array_key_last($this->generationMetrics)];
+    }
+
+    /**
+     * Número total de gerações registradas
+     */
+    public function generationCount(): int {
+        return count($this->generationMetrics);
+    }
+
+    /**
+     * Limpa histórico
+     */
+    public function reset(): void {
+        $this->generationMetrics = [];
+        $this->bestFitnessOverall = 0.0;
     }
 }

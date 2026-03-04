@@ -5,35 +5,12 @@ namespace App\Modules\AG\Domain\Operators;
 use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 
 final class GeneSwapMutation implements MutationOperatorInterface {
-    public function mutate(Cromossomo $cromossomo): void {
-        $size = $cromossomo->count();
+    public function mutate(Cromossomo $individual): Cromossomo {
+        $i = random_int(0, $individual->count() - 1);
+        $j = random_int(0, $individual->count() - 1);
 
-        if ($size < 2) {
-            return;
-        }
+        $individual->swapGenes($i, $j);
 
-        $genes = $cromossomo->genes();
-
-        $indexA = random_int(0, $size - 1);
-        $indexB = random_int(0, $size - 1);
-
-        if ($indexA === $indexB) {
-            return;
-        }
-
-        $geneA = $genes[$indexA];
-        $geneB = $genes[$indexB];
-
-        // Evita swaps entre durações diferentes
-        if ($geneA->duracaoTempos() !== $geneB->duracaoTempos()) {
-            return;
-        }
-
-        // Evita conflito estrutural direto
-        if ($geneA->conflictsWith($geneB)) {
-            return;
-        }
-
-        $cromossomo->swapGenes($indexA, $indexB);
+        return $individual;
     }
 }
