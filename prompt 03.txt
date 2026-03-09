@@ -1,0 +1,313 @@
+CONTEXTO
+
+Estamos desenvolvendo um solver avançado de School Timetabling baseado em:
+
+Genetic Algorithm
++
+Local Search
++
+Adaptive Large Neighborhood Search
++
+Island Model
+
+O objetivo é evoluir esse solver até o nível de solvers usados em competições internacionais, como:
+
+International Timetabling Competition
+ITC 2007
+ITC 2019
+
+e comparáveis a sistemas como:
+
+UniTime
+OptaPlanner
+Timefold
+OBJETIVO DO CHAT
+
+Quero que você atue como um grupo de pesquisa em otimização combinatória e projete a evolução deste solver para atingir nível competitivo internacional.
+
+Você deve raciocinar como especialista em:
+
+Metaheuristics
+Evolutionary Computation
+Constraint Optimization
+Hyper-heuristics
+School Timetabling
+ARQUITETURA ATUAL DO SOLVER
+
+O solver atual possui:
+
+Genetic Algorithm híbrido
+Island Model
+Kempe Chains
+ALNS
+Fitness incremental
+Diversity control
+REPRESENTAÇÃO
+
+Cada indivíduo é um:
+
+Cromossomo
+
+composto por:
+
+Gene
+(aula, professor, turma, dia, período, duração)
+CONSTRAINTS
+Hard
+Teacher conflict
+Class conflict
+Workload exceeded
+Mandatory blocks
+Soft
+Distribution
+Windows
+Preferred times
+Max lessons per day
+Consecutive lessons
+COMPONENTES IMPLEMENTADOS
+Genetic Algorithm
+Tournament Selection
+Conflict Graph Crossover
+Adaptive Mutation
+Mutations
+StructuredSwapMutation
+GeneSwapMutation
+ConflictGuidedMutation
+Intensification
+Kempe Chains
+KempeChainNeighborhoodSearch
+ALNS
+
+Destroy operators:
+
+RandomDestroyOperator
+ConflictDestroyOperator
+ClusterDestroyOperator
+
+Repair operators:
+
+GreedyRepairOperator
+RegretInsertionOperator
+Island Model
+4 ilhas
+migração periódica
+Diversity
+Entropy
+Hamming distance
+Fitness sharing
+Fitness
+Delta evaluation
+RuleDependencyGraph
+AffectedRegion
+INFRAESTRUTURA
+
+Backend:
+
+PHP
+Laravel
+
+Frontend:
+
+Livewire
+
+Execução:
+
+Queue jobs
+IMPORTANTE
+
+O solver já é relativamente avançado, mas ainda não atingiu nível state-of-the-art acadêmico.
+
+SUA TAREFA
+
+Quero que você projete a evolução científica do solver.
+
+Sua resposta deve refletir técnicas usadas em papers acadêmicos e solvers de competição.
+
+ETAPA 1 — CLASSIFICAÇÃO DO SOLVER
+
+Primeiro, classifique o solver atual:
+
+Ele é mais próximo de:
+
+Genetic Algorithm
+Memetic Algorithm
+Hybrid Evolutionary Solver
+Hyper-heuristic solver
+
+Explique.
+
+ETAPA 2 — ANÁLISE CIENTÍFICA PROFUNDA
+
+Analise o solver sob cinco perspectivas:
+
+1 — Representação do problema
+
+Avalie:
+
+gene encoding
+schedule representation
+timeslot modelling
+2 — Operadores evolutivos
+
+Avalie:
+
+selection
+crossover
+mutation
+3 — Intensificação
+
+Avalie:
+
+Kempe chains
+LNS
+local search
+4 — Diversidade
+
+Avalie:
+
+entropy
+niching
+fitness sharing
+crowding
+5 — Avaliação
+
+Avalie:
+
+fitness
+delta fitness
+constraint propagation
+ETAPA 3 — IDENTIFIQUE O QUE FALTA PARA NÍVEL ITC
+
+Liste técnicas avançadas usadas em solvers de competição que ainda não foram implementadas.
+
+Exemplos possíveis:
+
+Ejection chains
+Large step Markov chains
+Strategic oscillation
+Path relinking
+Guided local search
+Constraint propagation
+Learning hyper-heuristics
+Move acceptance strategies
+
+Explique o impacto de cada uma.
+
+ETAPA 4 — PROJETE UM SOLVER DE TIMETABLING TOP-10
+
+Proponha uma arquitetura completa de solver competitivo.
+
+Ela deve incluir:
+
+Population search
+Local search
+Large neighborhood search
+Hyper-heuristics
+Learning strategies
+ETAPA 5 — HIPER-HEURÍSTICAS
+
+Projete um sistema de:
+
+Hyper-heuristics
+
+que escolha dinamicamente entre:
+
+mutations
+destroy operators
+repair operators
+local search moves
+
+Explique:
+
+reinforcement learning
+multi-armed bandit
+adaptive operator selection
+ETAPA 6 — RUIN-AND-RECREATE AVANÇADO
+
+Proponha uma arquitetura moderna de:
+
+Ruin and Recreate
+
+com:
+
+large destroy sets
+conflict graphs
+cluster removal
+ETAPA 7 — EJECTION CHAINS
+
+Projete um sistema de:
+
+Ejection chains
+
+para resolver conflitos complexos.
+
+Explique:
+
+graph modeling
+chain moves
+multi-swap moves
+ETAPA 8 — MULTI-OBJECTIVE OPTIMIZATION
+
+Projete suporte para:
+
+Pareto optimization
+NSGA-II
+Crowding distance
+
+para melhorar diversidade.
+
+ETAPA 9 — LEARNING HEURISTICS
+
+Projete um sistema de aprendizado de heurísticas usando:
+
+reinforcement learning
+operator performance tracking
+adaptive probabilities
+ETAPA 10 — ESCALABILIDADE
+
+Explique como o solver pode escalar para:
+
+1000+ aulas
+100 professores
+50 turmas
+
+sem explosão de complexidade.
+
+ETAPA 11 — ARQUITETURA FINAL DO SOLVER
+
+Proponha a arquitetura final:
+
+Hybrid evolutionary solver
++
+Hyper-heuristic layer
++
+Large neighborhood search
++
+Advanced local search
+ETAPA 12 — ROADMAP CIENTÍFICO
+
+Crie um roadmap em fases:
+
+FASE 1 — estabilidade do solver
+FASE 2 — intensificação
+FASE 3 — diversidade científica
+FASE 4 — hyper-heuristics
+FASE 5 — solver competitivo
+RESULTADO ESPERADO
+
+Sua resposta deve conter:
+
+diagnóstico científico
+arquitetura de solver top-tier
+lista de técnicas avançadas
+plano de evolução do solver
+IMPORTANTE
+
+Explique:
+
+por que cada técnica funciona
+qual o impacto esperado
+qual a complexidade de implementação
+OBJETIVO FINAL
+
+Projetar um solver de timetabling competitivo com nível próximo aos melhores solvers acadêmicos.

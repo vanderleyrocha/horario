@@ -1,0 +1,61 @@
+Horarios
+├── Application
+│   ├── GenerateScheduleAction.php
+│   ├── PersistBestSolutionService.php
+│   └── ScheduleExecutionRecorder.php
+├── Domain
+│   ├── Analysis
+│   │   ├── DTO
+│   │   │   └── FeasibilityReport.php
+│   │   └── ScheduleFeasibilityAnalyzer.php
+│   ├── Builders
+│   │   ├── EvaluationContextBuilder.php
+│   │   ├── GeneMapper.php
+│   │   └── ScheduleDataBuilder.php
+│   ├── Evaluation
+│   │   ├── Contracts
+│   │   │   ├── HardRuleInterface.php
+│   │   │   ├── RuleInterface.php
+│   │   │   └── SoftRuleInterface.php
+│   │   ├── HardRules
+│   │   │   ├── ClassConflictRule.php
+│   │   │   ├── MandatoryBlockViolationRule.php
+│   │   │   ├── TeacherConflictRule.php
+│   │   │   └── WorkloadExceededRule.php
+│   │   ├── SoftRules
+│   │   │   ├── ConsecutiveLessonRule.php
+│   │   │   ├── DistributionRule.php
+│   │   │   ├── MaxLessonsPerDayRule.php
+│   │   │   ├── PreferredTimeRule.php
+│   │   │   └── WindowPenaltyRule.php
+│   │   ├── EvaluationContext.php
+│   │   └── RuleResult.php
+│   ├── Problem
+│   │   └── ScheduleProblem.php
+│   ├── Risk
+│   │   ├── RiskClassification.php
+│   │   ├── RiskIndexCalculator.php
+│   │   ├── SaturationCalculator.php
+│   │   └── StructuralEntropyCalculator.php
+│   ├── Services
+│   │   ├── ScheduleRandomGenerator.php
+│   │   └── ScheduleRepairService.php
+│   └── ValueObjects
+│       ├── BlockRequirement.php
+│       ├── ClassData.php
+│       ├── LessonData.php
+│       ├── ProfessorData.php
+│       ├── ProfessorLoad.php
+│       ├── ScheduleData.php
+│       ├── TimeSlot.php
+│       └── TurmaLoad.php
+└── UI
+    └── Livewire
+        ├── Configurar.php
+        ├── Create.php
+        ├── GerenciarAulas.php
+        ├── GerenciarRestricoes.php
+        ├── Index.php
+        ├── Manage.php
+        ├── ResumoConfiguracao.php
+        └── Show.php

@@ -62,63 +62,157 @@ app
 ├── Modules
 │   ├── AG
 │   │   ├── Application
+│   │   │   ├── Progress
+│   │   │   │   └── EvolutionProgress.php
 │   │   │   ├── GeneticAlgorithmEngine.php
+│   │   │   ├── IslandModelCoordinator.php
+│   │   │   ├── PopulationFitnessEvaluator.php
 │   │   │   └── RunGeneticAlgorithm.php
 │   │   ├── Domain
-│   │   │   ├── Analysis
-│   │   │   │   ├── DTO
-│   │   │   │   │   └── FeasibilityReport.php
-│   │   │   │   └── ScheduleFeasibilityAnalyzer.php
+│   │   │   ├── ConflictGraph
+│   │   │   │   ├── ConflictEdge.php
+│   │   │   │   ├── ConflictGraph.php
+│   │   │   │   ├── ConflictGraphBuilder.php
+│   │   │   │   ├── ConflictGraphUpdater.php
+│   │   │   │   └── ConflictNode.php
 │   │   │   ├── Contracts
+│   │   │   │   ├── FitnessEvaluatorInterface.php
 │   │   │   │   ├── GeneticProblem.php
 │   │   │   │   └── ProgressReporterInterface.php
-│   │   │   ├── Core
+│   │   │   ├── Diversity
+│   │   │   ├── Evolution
+│   │   │   │   ├── IslandModel
+│   │   │   │   │   ├── BestIndividualsMigration.php
+│   │   │   │   │   ├── Island.php
+│   │   │   │   │   ├── IslandModelEngine.php
+│   │   │   │   │   └── MigrationPolicyInterface.php
+│   │   │   │   └── Window
+│   │   │   │       └── WindowCalculator.php
+│   │   │   ├── Fitness
+│   │   │   │   ├── Delta
+│   │   │   │   │   ├── Dependency
+│   │   │   │   │   │   ├── Dependency.php
+│   │   │   │   │   │   ├── RuleDependency.php
+│   │   │   │   │   │   ├── RuleDependencyBuilder.php
+│   │   │   │   │   │   └── RuleDependencyGraph.php
+│   │   │   │   │   ├── AffectedRegion.php
+│   │   │   │   │   ├── AffectedRegionFactory.php
+│   │   │   │   │   ├── DeltaEvaluableRule.php
+│   │   │   │   │   ├── DeltaFitnessEvaluator.php
+│   │   │   │   │   └── FitnessDelta.php
+│   │   │   │   ├── Incremental
+│   │   │   │   │   └── IncrementalRule.php
+│   │   │   │   ├── FitnessEvaluator.php
+│   │   │   │   ├── FitnessResult.php
+│   │   │   │   └── FitnessWeights.php
+│   │   │   ├── HyperHeuristic
+│   │   │   │   ├── LearningHyperHeuristicController.php
+│   │   │   │   ├── OperatorPerformanceTracker.php
+│   │   │   │   ├── OperatorRewardCalculator.php
+│   │   │   │   ├── OperatorScore.php
+│   │   │   │   └── OperatorSelectionStrategy.php
+│   │   │   ├── Intensification
+│   │   │   │   ├── Kempe
+│   │   │   │   │   ├── KempeChain.php
+│   │   │   │   │   ├── KempeChainBuilder.php
+│   │   │   │   │   ├── KempeChainMoveOperator.php
+│   │   │   │   │   └── KempeNeighborhoodSearch.php
+│   │   │   │   ├── LNS
+│   │   │   │   │   ├── ALNS
+│   │   │   │   │   │   ├── AdaptiveLargeNeighborhoodSearch.php
+│   │   │   │   │   │   ├── OperatorPerformance.php
+│   │   │   │   │   │   ├── OperatorScoreManager.php
+│   │   │   │   │   │   ├── OperatorSelector.php
+│   │   │   │   │   │   └── RouletteWheelSelector.php
+│   │   │   │   │   ├── Conflict
+│   │   │   │   │   │   ├── Conflict.php
+│   │   │   │   │   │   ├── ConflictDetector.php
+│   │   │   │   │   │   └── ConflictSet.php
+│   │   │   │   │   ├── Destroy
+│   │   │   │   │   │   ├── ClusterDestroyOperator.php
+│   │   │   │   │   │   ├── ConflictDestroyOperator.php
+│   │   │   │   │   │   ├── DestroyOperatorInterface.php
+│   │   │   │   │   │   └── RandomDestroyOperator.php
+│   │   │   │   │   ├── DTO
+│   │   │   │   │   │   └── PartialSolution.php
+│   │   │   │   │   ├── Repair
+│   │   │   │   │   │   ├── GreedyRebuildOperator.php
+│   │   │   │   │   │   ├── LNSRepairAdapter.php
+│   │   │   │   │   │   ├── RegretInsertionOperator.php
+│   │   │   │   │   │   └── RepairOperatorInterface.php
+│   │   │   │   │   └── LargeNeighborhoodSearch.php
+│   │   │   │   └── LocalSearch
+│   │   │   ├── Landscape
+│   │   │   │   ├── LandscapeAnalyzer.php
+│   │   │   │   ├── LandscapeDetector.php
+│   │   │   │   ├── LandscapeEngine.php
+│   │   │   │   ├── LandscapeMetrics.php
+│   │   │   │   ├── LandscapeResponse.php
+│   │   │   │   ├── LandscapeResponseStrategy.php
+│   │   │   │   └── LandscapeState.php
+│   │   │   ├── Metrics
+│   │   │   │   ├── DTO
+│   │   │   │   │   └── GenerationMetrics.php
+│   │   │   │   ├── DiversityCalculatorInterface.php
+│   │   │   │   ├── GeneticDistance.php
+│   │   │   │   ├── HammingDiversityCalculator.php
+│   │   │   │   ├── MetricsRecorder.php
+│   │   │   │   ├── PopulationEntropyCalculator.php
+│   │   │   │   └── PopulationStatistics.php
+│   │   │   ├── Operators
+│   │   │   │   ├── Adaptive
+│   │   │   │   │   ├── AdaptiveMutationController.php
+│   │   │   │   │   ├── AdaptiveMutationOperator.php
+│   │   │   │   │   ├── AdaptiveOperatorSelector.php
+│   │   │   │   │   └── OperatorPerformanceTracker.php
+│   │   │   │   ├── Crossover
+│   │   │   │   │   ├── BlockPreservingCrossover.php
+│   │   │   │   │   ├── ConflictGraphCrossoverOperator.php
+│   │   │   │   │   ├── CrossoverOperatorInterface.php
+│   │   │   │   │   └── SinglePointCrossover.php
+│   │   │   │   ├── Elitism
+│   │   │   │   │   ├── ElitismStrategyInterface.php
+│   │   │   │   │   └── TopEliteStrategy.php
+│   │   │   │   ├── Mutation
+│   │   │   │   │   ├── Interfaces
+│   │   │   │   │   │   ├── AdaptiveOperatorInterface.php
+│   │   │   │   │   │   └── DiversityAwareMutationInterface.php
+│   │   │   │   │   ├── AdaptiveDiversityMutation.php
+│   │   │   │   │   ├── ConflictGuidedMutation.php
+│   │   │   │   │   ├── GeneSwapMutation.php
+│   │   │   │   │   ├── MutationOperatorInterface.php
+│   │   │   │   │   └── StructuredSwapMutation.php
+│   │   │   │   ├── Replacement
+│   │   │   │   │   ├── CrowdingReplacement.php
+│   │   │   │   │   ├── ReplacementStrategyInterface.php
+│   │   │   │   │   ├── SimilarityReplacement.php
+│   │   │   │   │   └── WorstIndividualReplacement.php
+│   │   │   │   └── Selection
+│   │   │   │       ├── FitnessSharing
+│   │   │   │       │   ├── FitnessSharingCalculator.php
+│   │   │   │       │   ├── GeneticDistance.php
+│   │   │   │       │   └── SharingFunction.php
+│   │   │   │       ├── SelectionOperatorInterface.php
+│   │   │   │       └── TournamentSelection.php
+│   │   │   ├── Repair
+│   │   │   │   ├── GreedyRepairOperator.php
+│   │   │   │   └── RepairOperatorInterface.php
+│   │   │   ├── Representation
 │   │   │   │   └── Entities
 │   │   │   │       ├── Cromossomo.php
 │   │   │   │       └── Gene.php
-│   │   │   ├── Entities
-│   │   │   ├── Fitness
-│   │   │   │   ├── Rules
-│   │   │   │   │   ├── Hard
-│   │   │   │   │   │   ├── BloqueiosHardRule.php
-│   │   │   │   │   │   ├── CargaHorariaExcedidaRule.php
-│   │   │   │   │   │   ├── ConflitoProfessorRule.php
-│   │   │   │   │   │   └── ConflitoTurmaRule.php
-│   │   │   │   │   ├── Soft
-│   │   │   │   │   │   ├── AulasNaoConsecutivasRule.php
-│   │   │   │   │   │   ├── BloqueiosPreferenciaisRule.php
-│   │   │   │   │   │   ├── DistribuicaoRule.php
-│   │   │   │   │   │   ├── JanelasRule.php
-│   │   │   │   │   │   └── MaxAulasDiaRule.php
-│   │   │   │   │   ├── FitnessRuleInterface.php
-│   │   │   │   │   ├── HardRuleInterface.php
-│   │   │   │   │   ├── RuleResult.php
-│   │   │   │   │   └── SoftRuleInterface.php
-│   │   │   │   ├── EvaluationContext.php
-│   │   │   │   ├── FitnessEvaluator.php
-│   │   │   │   ├── FitnessResult.php
-│   │   │   │   ├── FitnessRuleInterface.php
-│   │   │   │   └── FitnessWeights.php
-│   │   │   ├── Metrics
-│   │   │   │   └── MetricsRecorder.php
-│   │   │   ├── Operators
-│   │   │   │   ├── BlockPreservingCrossover.php
-│   │   │   │   ├── ConflictGuidedMutation.php
-│   │   │   │   ├── CrossoverOperatorInterface.php
-│   │   │   │   ├── GeneSwapMutation.php
-│   │   │   │   ├── MutationOperatorInterface.php
-│   │   │   │   ├── SelectionOperatorInterface.php
-│   │   │   │   ├── SinglePointCrossover.php
-│   │   │   │   ├── StructuredSwapMutation.php
-│   │   │   │   └── TournamentSelection.php
-│   │   │   ├── Repair
-│   │   │   │   └── GreedyRepairOperator.php
-│   │   │   ├── Services
-│   │   │   │   └── GeneticAlgorithm.php
 │   │   │   └── Termination
+│   │   │       ├── FitnessThresholdCriterion.php
+│   │   │       ├── HybridTerminationCriterion.php
+│   │   │       ├── MaxGenerationsCriterion.php
 │   │   │       ├── MaxGenerationsOrFitnessCriterion.php
-│   │   │       └── TerminationCriterionInterface.php
+│   │   │       ├── TerminationCriterionInterface.php
+│   │   │       └── VarianceBasedTerminationCriterion.php
 │   │   ├── Infrastructure
+│   │   │   ├── Metrics
+│   │   │   │   └── ExecutionMetricsRecorder.php
+│   │   │   ├── Parallel
+│   │   │   │   └── AsyncFitnessEvaluator.php
 │   │   │   ├── Population
 │   │   │   │   └── PopulationGenerator.php
 │   │   │   └── Progress
@@ -132,11 +226,55 @@ app
 │   │       └── AGErrorFactory.php
 │   └── Horarios
 │       ├── Application
-│       │   └── GenerateScheduleAction.php
+│       │   ├── GenerateScheduleAction.php
+│       │   ├── PersistBestSolutionService.php
+│       │   └── ScheduleExecutionRecorder.php
 │       ├── Domain
-│       │   ├── Services
+│       │   ├── Analysis
+│       │   │   ├── DTO
+│       │   │   │   └── FeasibilityReport.php
+│       │   │   └── ScheduleFeasibilityAnalyzer.php
+│       │   ├── Builders
+│       │   │   ├── EvaluationContextBuilder.php
+│       │   │   ├── GeneMapper.php
+│       │   │   └── ScheduleDataBuilder.php
+│       │   ├── Evaluation
+│       │   │   ├── Contracts
+│       │   │   │   ├── HardRuleInterface.php
+│       │   │   │   ├── RuleInterface.php
+│       │   │   │   └── SoftRuleInterface.php
+│       │   │   ├── HardRules
+│       │   │   │   ├── ClassConflictRule.php
+│       │   │   │   ├── MandatoryBlockViolationRule.php
+│       │   │   │   ├── TeacherConflictRule.php
+│       │   │   │   └── WorkloadExceededRule.php
+│       │   │   ├── SoftRules
+│       │   │   │   ├── ConsecutiveLessonRule.php
+│       │   │   │   ├── DistributionRule.php
+│       │   │   │   ├── MaxLessonsPerDayRule.php
+│       │   │   │   ├── PreferredTimeRule.php
+│       │   │   │   └── WindowPenaltyRule.php
+│       │   │   ├── EvaluationContext.php
+│       │   │   └── RuleResult.php
+│       │   ├── Problem
 │       │   │   └── ScheduleProblem.php
-│       │   └── RiskIndexCalculator.php
+│       │   ├── Risk
+│       │   │   ├── RiskClassification.php
+│       │   │   ├── RiskIndexCalculator.php
+│       │   │   ├── SaturationCalculator.php
+│       │   │   └── StructuralEntropyCalculator.php
+│       │   ├── Services
+│       │   │   ├── ScheduleRandomGenerator.php
+│       │   │   └── ScheduleRepairService.php
+│       │   └── ValueObjects
+│       │       ├── BlockRequirement.php
+│       │       ├── ClassData.php
+│       │       ├── LessonData.php
+│       │       ├── ProfessorData.php
+│       │       ├── ProfessorLoad.php
+│       │       ├── ScheduleData.php
+│       │       ├── TimeSlot.php
+│       │       └── TurmaLoad.php
 │       └── UI
 │           └── Livewire
 │               ├── Configurar.php

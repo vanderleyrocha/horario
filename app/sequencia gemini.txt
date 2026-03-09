@@ -1,0 +1,55 @@
+1. Avaliação do Código Atual e Adaptações Necessárias
+✅ O que está excelente (Manter como está):
+DTOs (GenerationMetrics e EvolutionProgress): A adição do campo $landscapeState foi uma ótima sacada para o ALNS, pois permite rastrear se o algoritmo está explorando, intensificando ou escapando de ótimos locais.
+
+ExecutionMetricsRecorder: A lógica de batchSize = 25 e os métodos startExecution, recordGeneration e flush estão exatos. Ele garante alta performance de I/O.
+
+Adoção de Filas: O Index.php (Livewire) importa App\Jobs\GerarHorarioJob. Isso indica que você já percebeu que a geração deve rodar em background.
+
+⚠️ O que precisa de Adaptação (Gargalos de Integração):
+A. Descompasso no GenerateScheduleAction
+Atualmente, a action injeta um ScheduleExecutionRecorder $recorder, mas os arquivos novos utilizam ExecutionMetricsRecorder. Além disso, a action parece estar executando o runner de forma síncrona ($this->runner->execute(...)), gravando os dados apenas no final.
+
+Solução: O GenerateScheduleAction deve delegar a execução para o GerarHorarioJob. O Job será responsável por instanciar o ExecutionMetricsRecorder, registrar o início (startExecution) e iniciar o GA.
+
+B. O MetricsRecorder (Domínio) isolado
+O MetricsRecorder atual guarda as métricas em memória ($this->generationMetrics[]), mas não as despacha em tempo real para o banco (via ExecutionMetricsRecorder) nem para o frontend (via Cache).
+
+Solução: O MetricsRecorder deve receber uma interface de ProgressReporterInterface ou emitir eventos que o Job escute para fazer o meio-de-campo entre a memória, o Cache (Livewire) e o Banco (DB).
+
+C. O Frontend Livewire (Index.php e index.blade.php)
+O frontend atual é binário/simples: exibe uma barra de progresso baseada em $progressoPercentual e texto. Ele não está preparado para ler o DTO EvolutionProgress e não possui a estrutura do Chart.js.
+
+2. Próximos Passos (Plano de Ação)
+Para atingir o objetivo de um painel científico completo com gráficos em tempo real, proponho seguirmos esta ordem de implementação. Se estiver de acordo, posso fornecer o código completo de cada etapa a seguir:
+
+Passo 1: Revisar o Fluxo de Execução (Job + Action)
+Precisamos garantir que a requisição web inicie o GerarHorarioJob, retorne a tela de carregamento para o usuário (Livewire), e o Job faça o trabalho pesado em background, disparando atualizações para o Cache.
+
+Ação: Refatorar GenerateScheduleAction.php e criar/ajustar o GerarHorarioJob.php.
+
+Passo 2: O Orquestrador de Progresso (O Elo Perdido)
+Criar uma implementação de ProgressReporterInterface chamada CacheAndDbProgressReporter. Essa classe será injetada no Algoritmo Genético. A cada geração, ela:
+
+Pega os dados do MetricsRecorder.
+
+Envia para o ExecutionMetricsRecorder (que fará o buffer para o DB).
+
+Atualiza uma chave no Redis/Cache com o DTO EvolutionProgress para o Livewire ler instantaneamente.
+
+Passo 3: Atualizar o Livewire (Index.php)
+Modificar a função atualizarStatus() (que roda via wire:poll.2000ms) para buscar o EvolutionProgress no Cache.
+
+Em vez de apenas $progressoPercentual, o Livewire passará a ter propriedades como $bestFitness, $entropy, $mutationRate.
+
+O componente emitirá um evento do navegador (ex: dispatch('metrics-updated', data)) para que o Javascript atualize os gráficos.
+
+Passo 4: Implementar o Painel Científico (index.blade.php)
+Vamos substituir a barra de progresso simples por um dashboard tático.
+
+Ação: Adicionar os Canvas do Chart.js e a lógica em Alpine.js (ou Vanilla JS) que escuta os eventos do Livewire e plota a curva de Fitness e a curva de Entropia/Diversidade em tempo real.
+
+Como você prefere avançar?
+Podemos começar atacando o Passo 1 e 2 (ajustar o Job, o Action e criar a ponte do ProgressReporter) para garantir que os dados de cada geração estão chegando no Banco e no Cache com segurança?
+
+Assim que a "tubulação" de dados estiver sólida, partimos para a renderização visual (Chart.js) no passo seguinte.

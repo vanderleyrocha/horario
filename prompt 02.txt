@@ -1,0 +1,424 @@
+PROMPT PARA CONTINUAR O DESENVOLVIMENTO
+CONTEXTO DO PROJETO
+
+Estamos desenvolvendo um solver de geração automática de horários escolares (School Timetabling) utilizando Algoritmos Genéticos avançados, inspirado em arquiteturas usadas em competições como:
+
+ITC2007
+
+ITC2019
+
+UniTime Solver
+
+OptaPlanner
+
+O projeto é implementado em Laravel + PHP, com arquitetura modular baseada em Domain Driven Design, e frontend Livewire.
+
+O objetivo é construir um solver de nível competitivo, com:
+
+GA híbrido
+
+intensificação via ALNS
+
+múltiplas heurísticas
+
+controle matemático de diversidade
+
+análise de viabilidade estrutural
+
+integração científica com métricas completas
+
+ARQUITETURA ATUAL DO SOLVER
+Estrutura principal
+AG
+├ Domain
+│ ├ Representation
+│ │ ├ Cromossomo
+│ │ └ Gene
+│
+│ ├ Fitness
+│ │ ├ FitnessEvaluator
+│ │ ├ FitnessResult
+│ │ ├ DeltaFitnessEvaluator
+│ │ ├ AffectedRegion
+│ │ └ RuleDependencyGraph
+│
+│ ├ Operators
+│ │ ├ Selection
+│ │ │ └ TournamentSelection (com Fitness Sharing)
+│ │ ├ Crossover
+│ │ │ └ ConflictGraphCrossoverOperator
+│ │ ├ Mutation
+│ │ │ ├ StructuredSwapMutation
+│ │ │ ├ GeneSwapMutation
+│ │ │ └ ConflictGuidedMutation
+│ │ ├ Replacement
+│ │ │ └ WorstIndividualReplacement
+│ │ └ AdaptiveMutationController
+│
+│ ├ Metrics
+│ │ ├ MetricsRecorder
+│ │ ├ PopulationEntropyCalculator
+│ │ └ HammingDiversityCalculator
+│
+│ ├ Intensification
+│ │ ├ KempeChainNeighborhoodSearch
+│ │ └ ALNS
+│ │     ├ AdaptiveLargeNeighborhoodSearch
+│ │     ├ DestroyOperators
+│ │     └ RepairOperators
+│
+│ ├ Evolution
+│ │ └ IslandModel
+│ │     ├ IslandModelEngine
+│ │     ├ Island
+│ │     └ MigrationPolicy
+│
+└ Application
+  ├ GeneticAlgorithmEngine
+  └ RunGeneticAlgorithm
+ARQUITETURA DO HORÁRIOS (DOMÍNIO DO PROBLEMA)
+Horarios
+├ Domain
+│ ├ Builders
+│ │ ├ ScheduleDataBuilder
+│ │ └ EvaluationContextBuilder
+│ │
+│ ├ Problem
+│ │ └ ScheduleProblem
+│ │
+│ ├ Evaluation
+│ │ ├ HardRules
+│ │ │ ├ TeacherConflictRule
+│ │ │ ├ ClassConflictRule
+│ │ │ ├ MandatoryBlockViolationRule
+│ │ │ └ WorkloadExceededRule
+│ │
+│ │ ├ SoftRules
+│ │ │ ├ WindowPenaltyRule
+│ │ │ ├ DistributionRule
+│ │ │ ├ PreferredTimeRule
+│ │ │ └ MaxLessonsPerDayRule
+│ │
+│ │ ├ EvaluationContext
+│ │ └ RuleResult
+│
+│ └ Risk
+│   ├ RiskIndexCalculator
+│   ├ SaturationCalculator
+│   └ StructuralEntropyCalculator
+ALGORITMO GENÉTICO IMPLEMENTADO
+Representação
+
+Indivíduo:
+
+Cromossomo
+
+Contém:
+
+Gene
+(aula, professor, turma, dia, período, duração)
+MECANISMOS EVOLUTIVOS IMPLEMENTADOS
+Seleção
+
+Tournament Selection com:
+
+Fitness Sharing
+
+Formula:
+
+f'i = fi / Σ sh(d(i,j))
+
+onde:
+
+sh(d) = 1 - (d/σ)^α
+Crossover
+ConflictGraphCrossoverOperator
+
+baseado em:
+
+Conflict Graph
+Mutação adaptativa
+
+Mutation pool:
+
+StructuredSwapMutation
+GeneSwapMutation
+ConflictGuidedMutation
+
+controlado por:
+
+AdaptiveMutationController
+Intensificação
+
+Implementado:
+
+Kempe Chain Neighborhood
+ALNS (Adaptive Large Neighborhood Search)
+
+Destroy operators:
+
+RandomDestroyOperator
+ConflictDestroyOperator
+ClusterDestroyOperator
+
+Repair operators:
+
+GreedyRepairOperator
+RegretInsertionOperator
+Controle de diversidade
+
+Implementado:
+
+PopulationEntropyCalculator
+HammingDiversityCalculator
+
+usado para:
+
+AdaptiveMutationController
+Arquitetura evolutiva
+Island Model
+4 ilhas
+120 indivíduos
+migração a cada 25 gerações
+PIPELINE DE EXECUÇÃO
+
+Fluxo atual:
+
+Livewire
+ ↓
+GenerateScheduleAction
+ ↓
+RunGeneticAlgorithm
+ ↓
+IslandModelEngine
+ ↓
+GeneticAlgorithmEngine
+ ↓
+Evolution + ALNS
+ ↓
+Best Solution
+ ↓
+PersistBestSolutionService
+INTEGRAÇÃO ATUAL COM LIVEWIRE
+
+O frontend já possui:
+
+Componente
+Livewire/Algoritmo/Index.php
+
+Responsável por:
+
+iniciar geração
+
+acompanhar progresso
+
+exibir erros
+
+mostrar diagnóstico de inviabilidade
+
+Comunicação atual com o frontend
+
+Usa:
+
+ProgressReporterInterface
+
+Implementação atual:
+
+CacheProgressReporter
+
+Fluxo:
+
+GA → Cache → Livewire Polling
+PROBLEMA ATUAL
+
+Hoje as métricas do algoritmo não são persistidas cientificamente.
+
+Atualmente apenas:
+
+MetricsRecorder
+
+existe em memória.
+
+Isso impede:
+
+análise científica
+
+gráficos de convergência
+
+comparação entre execuções
+
+OBJETIVO DO PRÓXIMO PASSO
+
+Antes de implementar novas melhorias no GA, precisamos:
+
+REESTRUTURAR A INTEGRAÇÃO FRONTEND + ALGORITMO
+
+com:
+
+persistência científica de métricas
++
+visualização Livewire
+MÓDULO A IMPLEMENTAR
+AG
+└ Infrastructure
+   └ Metrics
+      └ ExecutionMetricsRecorder
+NOVAS TABELAS
+schedule_executions
+id
+schedule_id
+start_time
+end_time
+population_size
+generations
+parameters_json
+best_fitness
+schedule_generation_metrics
+execution_id
+generation
+best_fitness
+avg_fitness
+variance
+diversity
+entropy
+mutation_rate
+stagnation
+COLETA DE MÉTRICAS
+
+Fluxo:
+
+MetricsRecorder
+      ↓
+GenerationMetrics DTO
+      ↓
+ExecutionMetricsRecorder
+      ↓
+Database
+NOVO DTO
+GenerationMetrics
+
+Campos:
+
+generation
+bestFitness
+avgFitness
+variance
+diversity
+entropy
+mutationRate
+stagnation
+INTEGRAÇÃO AVANÇADA COM LIVEWIRE
+
+Novo DTO:
+
+EvolutionProgress
+
+Campos:
+
+phase
+generation
+maxGenerations
+bestFitness
+avgFitness
+diversity
+entropy
+mutationRate
+stagnation
+elapsedTime
+VISUALIZAÇÃO NO FRONTEND
+
+Pretendemos adicionar:
+
+gráficos em tempo real
+
+usando:
+
+Chart.js
+
+Exibir:
+
+fitness curve
+diversity curve
+entropy curve
+MELHORIAS DE INTERFACE
+
+Planejadas:
+
+visualização de horários
+
+grade semanal
+
+cores por professor
+
+blocos de aula
+
+edição manual
+drag & drop timetable
+painel científico
+
+Mostrar:
+
+convergência
+diversidade
+entropia
+MELHORIAS FUTURAS DO SOLVER
+
+Após integração com frontend:
+
+1️⃣ Finalizar cálculo formal do RiskIndex
+
+baseado em:
+
+saturation
+constraint density
+structural entropy
+2️⃣ Diversity-aware Selection
+
+Implementar:
+
+Fitness Sharing
++
+Crowding Distance
+3️⃣ Pareto Selection
+
+para otimizar simultaneamente:
+
+hard constraints
+soft constraints
+distribution quality
+teacher preferences
+OBJETIVO DO PRÓXIMO CHAT
+
+No próximo chat precisamos:
+
+1️⃣ revisar arquitetura Livewire atual
+2️⃣ criar módulo ExecutionMetricsRecorder
+3️⃣ integrar métricas com GA
+4️⃣ salvar métricas por geração
+5️⃣ integrar gráficos no frontend
+6️⃣ revisar fluxo de execução do algoritmo
+
+PEDIDO
+
+Analise toda a arquitetura atual apresentada e proponha:
+
+1️⃣ arquitetura completa de persistência de métricas
+2️⃣ código do ExecutionMetricsRecorder
+3️⃣ integração com MetricsRecorder
+4️⃣ integração com GenerateScheduleAction
+5️⃣ DTO GenerationMetrics
+6️⃣ DTO EvolutionProgress
+7️⃣ ajustes no Livewire Algoritmo\Index
+8️⃣ estrutura de gráficos Livewire + Chart.js
+
+Além disso, avalie a viabilidade de:
+
+RiskIndex matemático
+
+painel de convergência
+
+edição drag-and-drop de horários
+
+logs científicos de execução
+
+O objetivo é transformar o sistema em um solver científico completo de geração de horários.

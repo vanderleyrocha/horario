@@ -2,63 +2,144 @@
 
 namespace App\Modules\AG\Domain\Fitness;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
+use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Fitness\Delta\DeltaFitnessEvaluator;
+use App\Modules\AG\Domain\Fitness\Dependency\RuleDependencyBuilder;
+use App\Modules\AG\Domain\Fitness\Dependency\RuleDependencyGraph;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
-use App\Modules\Horarios\Domain\Evaluation\Contracts\RuleInterface;
 
 final class FitnessEvaluator {
     /**
-     * @param RuleInterface[] $rules
+     * Cache por assinatura estrutural
      */
+    private array $cache = [];
+
+    private DeltaFitnessEvaluator $deltaEvaluator;
+
+    /**
+     * Rule Dependency Graph
+     */
+    private RuleDependencyGraph $dependencyGraph;
+
     public function __construct(private readonly FitnessWeights $weights, private readonly array $rules) {
+
+        $this->deltaEvaluator = new DeltaFitnessEvaluator($weights);
+
+        $this->dependencyGraph = RuleDependencyBuilder::build($rules);
     }
 
     public function evaluate(Cromossomo $cromossomo, EvaluationContext $context): FitnessResult {
+
+        $signature = $cromossomo->signature();
+
+        /**
+         * Cache por assinatura estrutural
+         */
+        if (isset($this->cache[$signature])) {
+
+            $cached = $this->cache[$signature];
+
+            $cromossomo->setFitness($cached->score());
+
+            return $cached;
+        }
 
         $hardPenalty = 0.0;
         $softPenalty = 0.0;
 
         foreach ($this->rules as $rule) {
 
-            if (!$rule instanceof RuleInterface) {
-                throw new \InvalidArgumentException('All rules must implement RuleInterface');
-            }
-
             $result = $rule->evaluate($context);
 
-            $basePenalty = max(0.0, $result->penalty());
+            $penalty = $result->penalty();
 
-            if ($basePenalty === 0.0) {
+            if ($penalty === 0.0) {
                 continue;
             }
 
             $weight = $this->weights->get($rule::class);
 
-            $weightedPenalty = $basePenalty * $weight;
+            $weighted = $penalty * $weight;
 
             if ($rule->isHard()) {
-                $hardPenalty += $weightedPenalty;
+                $hardPenalty += $weighted;
             } else {
-                $softPenalty += $weightedPenalty;
+                $softPenalty += $weighted;
             }
         }
 
         $totalPenalty = $hardPenalty + $softPenalty;
 
-        /**
-         * Modelo de Score:
-         * 100 = solução perfeita
-         * Penalidade reduz score
-         */
         $score = max(0.0, 100.0 - $totalPenalty);
 
         $cromossomo->setFitness($score);
 
-        return new FitnessResult(
+        $result = new FitnessResult(
             score: $score,
             totalPenalty: $totalPenalty,
             hardPenalty: $hardPenalty,
             softPenalty: $softPenalty
         );
+
+        $this->cache[$signature] = $result;
+
+        return $result;
+    }
+
+    /**
+     * Avaliação incremental usando Delta + Rule Dependency Graph
+     */
+    public function evaluateDelta(
+        Cromossomo $cromossomo,
+        EvaluationContext $context,
+        AffectedRegion $region,
+        FitnessResult $previous
+    ): FitnessResult {
+
+        /**
+         * Determina quais regras são afetadas
+         */
+        $affectedRuleClasses =
+            $this->dependencyGraph
+            ->affectedRules($region);
+
+        /**
+         * Filtra as regras realmente necessárias
+         */
+        $affectedRules = [];
+
+        foreach ($this->rules as $rule) {
+
+            if (in_array($rule::class, $affectedRuleClasses, true)) {
+                $affectedRules[] = $rule;
+            }
+        }
+
+        /**
+         * Se nenhuma regra foi detectada (fallback seguro)
+         */
+        if (empty($affectedRules)) {
+            return $this->evaluate($cromossomo, $context);
+        }
+
+        /**
+         * Executa Delta Fitness apenas nas regras afetadas
+         */
+        $result =
+            $this->deltaEvaluator->evaluateDelta(
+                $previous,
+                $context,
+                $region,
+                $affectedRules
+            );
+
+        $cromossomo->setFitness($result->score());
+
+        return $result;
+    }
+
+    public function clearCache(): void {
+        $this->cache = [];
     }
 }

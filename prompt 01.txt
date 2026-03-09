@@ -1,0 +1,1261 @@
+PROMPT PARA CONTINUAR O DESENVOLVIMENTO
+CONTEXTO DO PROJETO
+
+Estamos desenvolvendo um solver de geração automática de horários escolares (School Timetabling) utilizando Algoritmos Genéticos avançados, inspirado em arquiteturas usadas em competições como:
+
+ITC2007
+
+ITC2019
+
+UniTime Solver
+
+OptaPlanner
+
+O projeto é implementado em Laravel + PHP, com arquitetura modular baseada em Domain Driven Design, e frontend Livewire.
+
+O objetivo é construir um solver de nível competitivo, com:
+
+GA híbrido
+
+intensificação via ALNS
+
+múltiplas heurísticas
+
+controle matemático de diversidade
+
+análise de viabilidade estrutural
+
+integração científica com métricas completas
+
+ARQUITETURA ATUAL DO SOLVER
+Estrutura principal
+AG
+├ Domain
+│ ├ Representation
+│ │ ├ Cromossomo
+│ │ └ Gene
+│
+│ ├ Fitness
+│ │ ├ FitnessEvaluator
+│ │ ├ FitnessResult
+│ │ ├ DeltaFitnessEvaluator
+│ │ ├ AffectedRegion
+│ │ └ RuleDependencyGraph
+│
+│ ├ Operators
+│ │ ├ Selection
+│ │ │ └ TournamentSelection (com Fitness Sharing)
+│ │ ├ Crossover
+│ │ │ └ ConflictGraphCrossoverOperator
+│ │ ├ Mutation
+│ │ │ ├ StructuredSwapMutation
+│ │ │ ├ GeneSwapMutation
+│ │ │ └ ConflictGuidedMutation
+│ │ ├ Replacement
+│ │ │ └ WorstIndividualReplacement
+│ │ └ AdaptiveMutationController
+│
+│ ├ Metrics
+│ │ ├ MetricsRecorder
+│ │ ├ PopulationEntropyCalculator
+│ │ └ HammingDiversityCalculator
+│
+│ ├ Intensification
+│ │ ├ KempeChainNeighborhoodSearch
+│ │ └ ALNS
+│ │     ├ AdaptiveLargeNeighborhoodSearch
+│ │     ├ DestroyOperators
+│ │     └ RepairOperators
+│
+│ ├ Evolution
+│ │ └ IslandModel
+│ │     ├ IslandModelEngine
+│ │     ├ Island
+│ │     └ MigrationPolicy
+│
+└ Application
+  ├ GeneticAlgorithmEngine
+  └ RunGeneticAlgorithm
+ARQUITETURA DO HORÁRIOS (DOMÍNIO DO PROBLEMA)
+Horarios
+├ Domain
+│ ├ Builders
+│ │ ├ ScheduleDataBuilder
+│ │ └ EvaluationContextBuilder
+│ │
+│ ├ Problem
+│ │ └ ScheduleProblem
+│ │
+│ ├ Evaluation
+│ │ ├ HardRules
+│ │ │ ├ TeacherConflictRule
+│ │ │ ├ ClassConflictRule
+│ │ │ ├ MandatoryBlockViolationRule
+│ │ │ └ WorkloadExceededRule
+│ │
+│ │ ├ SoftRules
+│ │ │ ├ WindowPenaltyRule
+│ │ │ ├ DistributionRule
+│ │ │ ├ PreferredTimeRule
+│ │ │ └ MaxLessonsPerDayRule
+│ │
+│ │ ├ EvaluationContext
+│ │ └ RuleResult
+│
+│ └ Risk
+│   ├ RiskIndexCalculator
+│   ├ SaturationCalculator
+│   └ StructuralEntropyCalculator
+ALGORITMO GENÉTICO IMPLEMENTADO
+Representação
+
+Indivíduo:
+
+Cromossomo
+
+Contém:
+
+Gene
+(aula, professor, turma, dia, período, duração)
+MECANISMOS EVOLUTIVOS IMPLEMENTADOS
+Seleção
+
+Tournament Selection com:
+
+Fitness Sharing
+
+Formula:
+
+f'i = fi / Σ sh(d(i,j))
+
+onde:
+
+sh(d) = 1 - (d/σ)^α
+Crossover
+ConflictGraphCrossoverOperator
+
+baseado em:
+
+Conflict Graph
+Mutação adaptativa
+
+Mutation pool:
+
+StructuredSwapMutation
+GeneSwapMutation
+ConflictGuidedMutation
+
+controlado por:
+
+AdaptiveMutationController
+Intensificação
+
+Implementado:
+
+Kempe Chain Neighborhood
+ALNS (Adaptive Large Neighborhood Search)
+
+Destroy operators:
+
+RandomDestroyOperator
+ConflictDestroyOperator
+ClusterDestroyOperator
+
+Repair operators:
+
+GreedyRepairOperator
+RegretInsertionOperator
+Controle de diversidade
+
+Implementado:
+
+PopulationEntropyCalculator
+HammingDiversityCalculator
+
+usado para:
+
+AdaptiveMutationController
+Arquitetura evolutiva
+Island Model
+4 ilhas
+120 indivíduos
+migração a cada 25 gerações
+PIPELINE DE EXECUÇÃO
+
+Fluxo atual:
+
+Livewire
+ ↓
+GenerateScheduleAction
+ ↓
+RunGeneticAlgorithm
+ ↓
+IslandModelEngine
+ ↓
+GeneticAlgorithmEngine
+ ↓
+Evolution + ALNS
+ ↓
+Best Solution
+ ↓
+PersistBestSolutionService
+INTEGRAÇÃO ATUAL COM LIVEWIRE
+
+O frontend já possui:
+
+Componente
+Livewire/Algoritmo/Index.php
+
+Responsável por:
+
+iniciar geração
+
+acompanhar progresso
+
+exibir erros
+
+mostrar diagnóstico de inviabilidade
+
+Comunicação atual com o frontend
+
+Usa:
+
+ProgressReporterInterface
+
+Implementação atual:
+
+CacheProgressReporter
+
+Fluxo:
+
+GA → Cache → Livewire Polling
+PROBLEMA ATUAL
+
+Hoje as métricas do algoritmo não são persistidas cientificamente.
+
+Atualmente apenas:
+
+MetricsRecorder
+
+existe em memória.
+
+Isso impede:
+
+análise científica
+
+gráficos de convergência
+
+comparação entre execuções
+
+OBJETIVO DO PRÓXIMO PASSO
+
+Antes de implementar novas melhorias no GA, precisamos:
+
+REESTRUTURAR A INTEGRAÇÃO FRONTEND + ALGORITMO
+
+com:
+
+persistência científica de métricas
++
+visualização Livewire
+MÓDULO A IMPLEMENTAR
+AG
+└ Infrastructure
+   └ Metrics
+      └ ExecutionMetricsRecorder
+NOVAS TABELAS
+schedule_executions
+id
+schedule_id
+start_time
+end_time
+population_size
+generations
+parameters_json
+best_fitness
+schedule_generation_metrics
+execution_id
+generation
+best_fitness
+avg_fitness
+variance
+diversity
+entropy
+mutation_rate
+stagnation
+COLETA DE MÉTRICAS
+
+Fluxo:
+
+MetricsRecorder
+      ↓
+GenerationMetrics DTO
+      ↓
+ExecutionMetricsRecorder
+      ↓
+Database
+NOVO DTO
+GenerationMetrics
+
+Campos:
+
+generation
+bestFitness
+avgFitness
+variance
+diversity
+entropy
+mutationRate
+stagnation
+INTEGRAÇÃO AVANÇADA COM LIVEWIRE
+
+Novo DTO:
+
+EvolutionProgress
+
+Campos:
+
+phase
+generation
+maxGenerations
+bestFitness
+avgFitness
+diversity
+entropy
+mutationRate
+stagnation
+elapsedTime
+VISUALIZAÇÃO NO FRONTEND
+
+Pretendemos adicionar:
+
+gráficos em tempo real
+
+usando:
+
+Chart.js
+
+Exibir:
+
+fitness curve
+diversity curve
+entropy curve
+MELHORIAS DE INTERFACE
+
+Planejadas:
+
+visualização de horários
+
+grade semanal
+
+cores por professor
+
+blocos de aula
+
+edição manual
+drag & drop timetable
+painel científico
+
+Mostrar:
+
+convergência
+diversidade
+entropia
+MELHORIAS FUTURAS DO SOLVER
+
+Após integração com frontend:
+
+1️⃣ Finalizar cálculo formal do RiskIndex
+
+baseado em:
+
+saturation
+constraint density
+structural entropy
+2️⃣ Diversity-aware Selection
+
+Implementar:
+
+Fitness Sharing
++
+Crowding Distance
+3️⃣ Pareto Selection
+
+para otimizar simultaneamente:
+
+hard constraints
+soft constraints
+distribution quality
+teacher preferences
+OBJETIVO DO PRÓXIMO CHAT
+
+No próximo chat precisamos:
+
+1️⃣ revisar arquitetura Livewire atual
+2️⃣ criar módulo ExecutionMetricsRecorder
+3️⃣ integrar métricas com GA
+4️⃣ salvar métricas por geração
+5️⃣ integrar gráficos no frontend
+6️⃣ revisar fluxo de execução do algoritmo
+
+PEDIDO
+
+Analise toda a arquitetura atual apresentada e proponha:
+
+1️⃣ arquitetura completa de persistência de métricas
+2️⃣ código do ExecutionMetricsRecorder
+3️⃣ integração com MetricsRecorder
+4️⃣ integração com GenerateScheduleAction
+5️⃣ DTO GenerationMetrics
+6️⃣ DTO EvolutionProgress
+7️⃣ ajustes no Livewire Algoritmo\Index
+8️⃣ estrutura de gráficos Livewire + Chart.js
+
+Além disso, avalie a viabilidade de:
+
+RiskIndex matemático
+
+painel de convergência
+
+edição drag-and-drop de horários
+
+logs científicos de execução
+
+O objetivo é transformar o sistema em um solver científico completo de geração de horários.
+
+
+
+======= 1
+
+
+
+PROPOSTA DE IMPLEMENTAÇÃO
+1️⃣ Arquitetura de Persistência Científica de Métricas
+
+Hoje você possui:
+
+GeneticAlgorithmEngine
+   ↓
+MetricsRecorder (in-memory)
+
+Precisamos transformar isso em um pipeline científico persistente.
+
+Arquitetura proposta
+GeneticAlgorithmEngine
+        │
+        ▼
+MetricsRecorder (Domain)
+        │
+        ▼
+GenerationMetrics DTO
+        │
+        ▼
+ExecutionMetricsRecorder (Infrastructure)
+        │
+        ▼
+Database
+
+Separação por camada:
+
+Camada	Responsabilidade
+Domain	coleta matemática
+Application	orquestra execução
+Infrastructure	persistência
+Frontend	visualização
+Estrutura final
+AG
+├ Domain
+│ ├ Metrics
+│ │ ├ MetricsRecorder
+│ │ ├ PopulationEntropyCalculator
+│ │ ├ HammingDiversityCalculator
+│ │ └ DTO
+│ │     └ GenerationMetrics
+│
+├ Application
+│ └ Progress
+│     └ EvolutionProgress
+│
+└ Infrastructure
+   └ Metrics
+      └ ExecutionMetricsRecorder
+2️⃣ DTO — GenerationMetrics
+
+Este DTO representa uma geração do algoritmo.
+
+AG\Domain\Metrics\DTO\GenerationMetrics.php
+<?php
+
+namespace App\Modules\AG\Domain\Metrics\DTO;
+
+class GenerationMetrics
+{
+    public int $generation;
+
+    public float $bestFitness;
+
+    public float $avgFitness;
+
+    public float $variance;
+
+    public float $diversity;
+
+    public float $entropy;
+
+    public float $mutationRate;
+
+    public int $stagnation;
+
+    public function __construct(
+        int $generation,
+        float $bestFitness,
+        float $avgFitness,
+        float $variance,
+        float $diversity,
+        float $entropy,
+        float $mutationRate,
+        int $stagnation
+    ) {
+        $this->generation = $generation;
+        $this->bestFitness = $bestFitness;
+        $this->avgFitness = $avgFitness;
+        $this->variance = $variance;
+        $this->diversity = $diversity;
+        $this->entropy = $entropy;
+        $this->mutationRate = $mutationRate;
+        $this->stagnation = $stagnation;
+    }
+}
+
+Este DTO é 100% matemático (sem dependência de Laravel).
+
+3️⃣ ExecutionMetricsRecorder
+
+Este componente fica em Infrastructure, pois escreve no banco.
+
+AG\Infrastructure\Metrics\ExecutionMetricsRecorder.php
+<?php
+
+namespace App\Modules\AG\Infrastructure\Metrics;
+
+use Illuminate\Support\Facades\DB;
+use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
+
+class ExecutionMetricsRecorder
+{
+    private int $executionId;
+
+    public function startExecution(
+        int $scheduleId,
+        int $populationSize,
+        int $generations,
+        array $parameters
+    ): int {
+
+        $this->executionId = DB::table('schedule_executions')->insertGetId([
+            'schedule_id' => $scheduleId,
+            'start_time' => now(),
+            'population_size' => $populationSize,
+            'generations' => $generations,
+            'parameters_json' => json_encode($parameters)
+        ]);
+
+        return $this->executionId;
+    }
+
+    public function recordGeneration(GenerationMetrics $metrics): void
+    {
+        DB::table('schedule_generation_metrics')->insert([
+            'execution_id' => $this->executionId,
+            'generation' => $metrics->generation,
+            'best_fitness' => $metrics->bestFitness,
+            'avg_fitness' => $metrics->avgFitness,
+            'variance' => $metrics->variance,
+            'diversity' => $metrics->diversity,
+            'entropy' => $metrics->entropy,
+            'mutation_rate' => $metrics->mutationRate,
+            'stagnation' => $metrics->stagnation
+        ]);
+    }
+
+    public function finishExecution(float $bestFitness): void
+    {
+        DB::table('schedule_executions')
+            ->where('id', $this->executionId)
+            ->update([
+                'end_time' => now(),
+                'best_fitness' => $bestFitness
+            ]);
+    }
+}
+4️⃣ Integração com MetricsRecorder
+
+O MetricsRecorder calcula as métricas e entrega o DTO.
+
+MetricsRecorder
+public function collectGenerationMetrics(
+    int $generation,
+    array $population,
+    float $mutationRate,
+    int $stagnation
+): GenerationMetrics {
+
+    $best = $this->bestFitness($population);
+    $avg = $this->averageFitness($population);
+    $variance = $this->variance($population);
+
+    $diversity = $this->diversityCalculator->calculate($population);
+    $entropy = $this->entropyCalculator->calculate($population);
+
+    return new GenerationMetrics(
+        $generation,
+        $best,
+        $avg,
+        $variance,
+        $diversity,
+        $entropy,
+        $mutationRate,
+        $stagnation
+    );
+}
+5️⃣ Integração com GeneticAlgorithmEngine
+
+Dentro do loop evolutivo:
+
+for generation
+
+Fluxo:
+
+evolution step
+↓
+metricsRecorder
+↓
+ExecutionMetricsRecorder
+↓
+ProgressReporter
+
+Exemplo:
+
+$metrics = $this->metricsRecorder->collectGenerationMetrics(
+    $generation,
+    $population,
+    $mutationRate,
+    $stagnation
+);
+
+$this->executionMetricsRecorder->recordGeneration($metrics);
+6️⃣ DTO EvolutionProgress (Frontend)
+
+Este DTO transporta estado do algoritmo → Livewire.
+
+AG\Application\Progress\EvolutionProgress.php
+class EvolutionProgress
+{
+    public string $phase;
+
+    public int $generation;
+
+    public int $maxGenerations;
+
+    public float $bestFitness;
+
+    public float $avgFitness;
+
+    public float $diversity;
+
+    public float $entropy;
+
+    public float $mutationRate;
+
+    public int $stagnation;
+
+    public float $elapsedTime;
+
+    public function toArray(): array
+    {
+        return get_object_vars($this);
+    }
+}
+7️⃣ Integração com Livewire
+
+Fluxo final:
+
+GA
+ ↓
+ExecutionMetricsRecorder
+ ↓
+CacheProgressReporter
+ ↓
+Cache
+ ↓
+Livewire polling
+ ↓
+Chart.js
+Livewire Algoritmo\Index
+
+Adicionar propriedades:
+
+public $fitnessCurve = [];
+public $diversityCurve = [];
+public $entropyCurve = [];
+
+Receber progresso:
+
+public function updateProgress()
+{
+    $data = Cache::get("ga_progress_{$this->executionId}");
+
+    if (!$data) {
+        return;
+    }
+
+    $this->fitnessCurve[] = $data['bestFitness'];
+    $this->diversityCurve[] = $data['diversity'];
+    $this->entropyCurve[] = $data['entropy'];
+
+    $this->dispatch('updateCharts', $data);
+}
+8️⃣ Gráficos com Chart.js
+Estrutura
+resources/js/components/evolution-charts.js
+
+Exemplo:
+
+const fitnessChart = new Chart(ctxFitness, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Best Fitness',
+            data: []
+        }]
+    }
+});
+
+Atualização:
+
+Livewire.on('updateCharts', data => {
+
+    fitnessChart.data.labels.push(data.generation);
+    fitnessChart.data.datasets[0].data.push(data.bestFitness);
+
+    diversityChart.data.datasets[0].data.push(data.diversity);
+
+    entropyChart.data.datasets[0].data.push(data.entropy);
+
+    fitnessChart.update();
+    diversityChart.update();
+    entropyChart.update();
+
+});
+9️⃣ Painel Científico do Solver
+
+Depois dessa implementação você poderá mostrar:
+
+Convergence Curve
+Fitness variance
+Genetic diversity
+Entropy
+Mutation dynamics
+Stagnation detection
+
+Isso transforma o solver em instrumento científico de pesquisa.
+
+🔟 RiskIndex Matemático (Viabilidade)
+
+Seu conceito é extremamente válido.
+
+Sugestão formal:
+
+RiskIndex = w1*S + w2*C + w3*E + w4*B
+
+onde:
+
+S = saturation ratio
+C = constraint density
+E = structural entropy
+B = block deficit ratio
+
+Normalização:
+
+RiskIndex ∈ [0,100]
+
+Classificação:
+
+Range	Status
+0–20	baixo
+20–40	moderado
+40–60	alto
+60–80	crítico
+80–100	inviável
+11️⃣ Drag-and-Drop Timetable (viabilidade)
+
+Totalmente viável.
+
+Arquitetura:
+
+Livewire
++
+Alpine.js
++
+interact.js
+
+Modelo visual:
+
+Teacher color
+Class row
+Time column
+
+Evento:
+
+drag lesson
+↓
+AJAX
+↓
+re-evaluate local constraints
+
+Pode usar:
+
+DeltaFitnessEvaluator
+
+para recalcular apenas região afetada.
+
+12️⃣ Scientific Logs de Execução
+
+Adicionar tabela:
+
+schedule_execution_logs
+
+Para eventos como:
+
+mutation rate change
+island migration
+ALNS activation
+stagnation detected
+diversity collapse
+
+Isso permite análise pós-execução.
+
+⭐ Avaliação do Projeto
+
+Seu solver já contém técnicas que muitos sistemas comerciais não possuem:
+
+✔ Island Model
+✔ ALNS
+✔ Kempe Chain
+✔ Adaptive mutation
+✔ Diversity control
+✔ Conflict graph crossover
+
+Com a camada científica que você está adicionando, ele se aproxima de:
+
+UniTime
+OptaPlanner research mode
+ITC competition solvers
+
+💡 Recomendação estratégica importante
+
+O próximo grande salto do solver será implementar:
+
+Search Landscape Analysis Engine
++
+Hyper-Heuristic Controller
+
+Isso permite o solver mudar automaticamente a estratégia de busca.
+
+Posso te mostrar no próximo passo:
+
+1️⃣ Arquitetura do painel científico completo do solver
+2️⃣ Engine de análise do landscape de busca
+3️⃣ Learning Hyper-Heuristic Controller (nível ITC champion)
+4️⃣ Move Acceptance Engine estilo Late Acceptance Hill Climbing
+
+Essas técnicas elevam o solver para nível de pesquisa internacional.
+
+
+========
+
+A construção de um Painel Científico do Solver transforma o sistema de um simples gerador de horários em uma plataforma de experimentação científica em otimização combinatória.
+
+Esse painel permitirá:
+
+análise da dinâmica evolutiva
+
+comparação entre execuções
+
+identificação de colapso de diversidade
+
+detecção de stagnation
+
+estudo do landscape de busca
+
+Vou estruturar a proposta em 7 camadas arquiteturais, mantendo consistência com sua arquitetura DDD + Laravel + Livewire.
+
+1️⃣ Objetivo do Painel Científico
+
+O painel deve permitir observar o comportamento do algoritmo ao longo da execução.
+
+Ele deve responder perguntas como:
+
+O algoritmo está convergindo ou estagnou?
+
+A diversidade genética colapsou?
+
+O crossover está explorando novas regiões do espaço?
+
+O ALNS realmente melhora o fitness?
+
+Qual foi o ponto de inflexão da convergência?
+
+2️⃣ Arquitetura Geral do Painel Científico
+
+Arquitetura proposta:
+
+Solver
+   ↓
+MetricsRecorder
+   ↓
+ExecutionMetricsRecorder
+   ↓
+Database
+   ↓
+ScientificMetricsRepository
+   ↓
+SolverAnalyticsService
+   ↓
+Livewire ScientificDashboard
+   ↓
+Chart.js
+
+Separação de responsabilidades:
+
+Camada	Responsabilidade
+Domain	cálculo matemático
+Infrastructure	persistência
+Application	agregação científica
+UI	visualização
+3️⃣ Estrutura do Módulo Científico
+
+Novo módulo dentro do sistema:
+
+SolverAnalytics
+├ Domain
+│ ├ Metrics
+│ │ ├ ConvergenceAnalyzer
+│ │ ├ DiversityAnalyzer
+│ │ ├ EntropyAnalyzer
+│ │ └ StagnationAnalyzer
+│
+├ Application
+│ └ SolverAnalyticsService
+│
+└ Infrastructure
+   └ ScientificMetricsRepository
+
+Esse módulo não interfere no GA, apenas analisa os dados.
+
+4️⃣ Métricas Científicas do Painel
+
+O painel deve mostrar 3 categorias de métricas.
+
+4.1 Métricas de Convergência
+
+Baseadas no fitness.
+
+Gráficos
+Best Fitness
+Average Fitness
+Fitness Variance
+
+Interpretabilidade:
+
+Situação	Diagnóstico
+best sobe rápido	boa exploração
+avg aproxima best	convergência
+variance colapsa	perda de diversidade
+4.2 Métricas de Diversidade
+
+Usando suas implementações:
+
+HammingDiversityCalculator
+PopulationEntropyCalculator
+
+Gráficos:
+
+Genetic Diversity
+Population Entropy
+
+Interpretabilidade:
+
+Situação	Diagnóstico
+diversidade alta	exploração
+diversidade baixa	convergência
+queda abrupta	takeover genético
+4.3 Métricas de Dinâmica Evolutiva
+
+Monitorar o controle adaptativo.
+
+Gráficos:
+
+Mutation Rate
+Stagnation
+ALNS Activation
+Migration Events
+
+Isso permite entender:
+
+quando o solver muda estratégia
+5️⃣ Layout do Painel Científico
+
+Estrutura da tela:
+
+Solver Dashboard
+────────────────────────────
+
+Execution Info
+Population
+Generations
+Elapsed Time
+Best Fitness
+
+────────────────────────────
+
+Convergence
+
+[ Fitness Chart ]
+
+────────────────────────────
+
+Diversity
+
+[ Diversity Chart ]
+[ Entropy Chart ]
+
+────────────────────────────
+
+Evolution Dynamics
+
+[ Mutation Rate ]
+[ Stagnation ]
+[ Migration Events ]
+
+────────────────────────────
+
+Search Landscape
+
+Exploration vs Exploitation
+Local minima detection
+6️⃣ Gráficos Científicos
+
+Sugestão de 6 gráficos principais.
+
+1️⃣ Fitness Curve
+Generation → Best Fitness
+
+Detecta convergência.
+
+2️⃣ Population Average Fitness
+Generation → Avg Fitness
+
+Mostra aproximação da população.
+
+3️⃣ Fitness Variance
+Variance ↓ → convergência
+4️⃣ Genetic Diversity
+Hamming Distance média
+5️⃣ Population Entropy
+
+Baseado na distribuição de genes.
+
+6️⃣ Mutation Rate
+
+Mostra ação do:
+
+AdaptiveMutationController
+7️⃣ ScientificMetricsRepository
+
+Responsável por buscar métricas no banco.
+
+SolverAnalytics\Infrastructure\ScientificMetricsRepository
+
+Exemplo:
+
+class ScientificMetricsRepository
+{
+    public function getExecutionMetrics(int $executionId)
+    {
+        return DB::table('schedule_generation_metrics')
+            ->where('execution_id', $executionId)
+            ->orderBy('generation')
+            ->get();
+    }
+}
+8️⃣ SolverAnalyticsService
+
+Esse serviço transforma dados brutos em indicadores científicos.
+
+SolverAnalytics\Application\SolverAnalyticsService
+
+Exemplo:
+
+class SolverAnalyticsService
+{
+    public function buildDashboardData($metrics)
+    {
+        return [
+            'fitness_curve' => $metrics->pluck('best_fitness'),
+            'avg_curve' => $metrics->pluck('avg_fitness'),
+            'variance' => $metrics->pluck('variance'),
+            'diversity' => $metrics->pluck('diversity'),
+            'entropy' => $metrics->pluck('entropy'),
+            'mutation' => $metrics->pluck('mutation_rate'),
+        ];
+    }
+}
+9️⃣ Componente Livewire
+
+Novo componente:
+
+Livewire/Solver/ScientificDashboard.php
+
+Responsável por:
+
+carregar execução
+renderizar gráficos
+atualizar em tempo real
+
+Exemplo:
+
+class ScientificDashboard extends Component
+{
+    public $executionId;
+
+    public $metrics;
+
+    public function mount($executionId)
+    {
+        $this->metrics = app(SolverAnalyticsService::class)
+            ->getDashboardData($executionId);
+    }
+
+    public function render()
+    {
+        return view('livewire.solver.dashboard');
+    }
+}
+10️⃣ Atualização em Tempo Real
+
+Fluxo:
+
+GA
+ ↓
+CacheProgressReporter
+ ↓
+Cache
+ ↓
+Livewire Polling
+ ↓
+Chart.js
+
+Polling recomendado:
+
+1 segundo
+11️⃣ Detecção de Estagnação Científica
+
+Podemos detectar automaticamente:
+
+fitness improvement < ε
+por N gerações
+
+Implementação:
+
+StagnationAnalyzer
+
+Exemplo:
+
+Δfitness < 0.001
+por 40 gerações
+12️⃣ Análise do Landscape de Busca
+
+O painel pode detectar:
+
+exploration phase
+exploitation phase
+local minima
+diversity collapse
+
+Exemplo:
+
+entropy ↓
+variance ↓
+fitness constante
+
+→ local optimum detectado
+
+13️⃣ Comparação entre Execuções
+
+O painel deve permitir:
+
+comparar execuções
+
+Exemplo:
+
+Execução	Melhor Fitness	Gerações
+1	92.4	600
+2	95.1	520
+14️⃣ Replay da Execução
+
+Possível funcionalidade avançada:
+
+replay generation by generation
+
+Útil para:
+
+debug científico
+15️⃣ Exportação Científica
+
+Permitir exportar:
+
+CSV
+JSON
+
+Para análise em:
+
+Python
+R
+Matlab
+⭐ Resultado Final
+
+Após implementar o painel científico, seu sistema terá:
+
+Solver Científico de Timetabling
+
+Com:
+
+✔ monitoramento em tempo real
+✔ métricas evolutivas
+✔ análise de diversidade
+✔ detecção de estagnação
+✔ comparação de execuções
+
+Isso coloca o projeto no nível de plataformas acadêmicas.
+
+💡 Minha recomendação técnica importante
+
+Antes de implementar hyper-heuristics, existe um módulo que daria um salto enorme no solver:
+
+Search Landscape Analysis Engine
+
+Ele detecta automaticamente:
+
+diversity collapse
+fitness plateaus
+local minima
+
+e troca a estratégia de busca automaticamente.
+
+Isso é usado em solvers campeões do ITC.
+
+Se quiser, no próximo passo posso mostrar:
+
+a arquitetura completa do Search Landscape Analysis Engine, que provavelmente será a maior melhoria de desempenho do solver.

@@ -12,21 +12,13 @@ final class CacheProgressReporter implements ProgressReporterInterface {
     private string $cacheKey;
     private int $ttlMinutes;
 
-    public function __construct(
-        int $horarioId,
-        int $ttlMinutes = 30
-    ) {
+    public function __construct(int $horarioId, int $ttlMinutes = 30) {
         $this->cacheKey = "horario_geracao_{$horarioId}";
         $this->ttlMinutes = $ttlMinutes;
     }
 
     public function report(array $data): void {
-        $payload = array_merge(
-            [
-                'timestamp' => now()->toDateTimeString(),
-            ],
-            $data
-        );
+        $payload = array_merge(['timestamp' => now()->toDateTimeString()], $data);
 
         Cache::put(
             $this->cacheKey,

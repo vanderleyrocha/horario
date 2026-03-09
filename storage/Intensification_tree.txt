@@ -1,0 +1,25 @@
+Intensification
+├── Kempe
+│   ├── KempeChain.php
+│   ├── KempeChainBuilder.php
+│   ├── KempeChainMoveOperator.php
+│   └── KempeNeighborhoodSearch.php
+├── LNS
+│   ├── Conflict
+│   │   ├── Conflict.php
+│   │   ├── ConflictDetector.php
+│   │   └── ConflictSet.php
+│   ├── Destroy
+│   │   ├── ClusterDestroyOperator.php
+│   │   ├── ConflictDestroyOperator.php
+│   │   ├── DestroyOperatorInterface.php
+│   │   └── RandomDestroyOperator.php
+│   ├── DTO
+│   │   └── PartialSolution.php
+│   ├── Repair
+│   │   ├── GreedyRebuildOperator.php
+│   │   ├── LNSRepairAdapter.php
+│   │   ├── RegretInsertionOperator.php
+│   │   └── RepairOperatorInterface.php
+│   └── LargeNeighborhoodSearch.php
+└── LocalSearch

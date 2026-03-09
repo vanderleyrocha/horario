@@ -1,0 +1,301 @@
+O Candidate Move Graph (CMG) é uma das estruturas mais sofisticadas usadas em solvers de timetabling competitivos (ITC-2007 / ITC-2019).
+Ele aparece em implementações acadêmicas de alto nível porque resolve um problema crítico:
+
+Explorar neighborhoods gigantes sem avaliar milhões de movimentos inúteis.
+
+Em vez de gerar movimentos aleatórios, o solver mantém um grafo dinâmico de movimentos promissores.
+
+1. Ideia do Candidate Move Graph
+
+Um movimento é representado como um nó.
+
+Move:
+lesson_i → slot_j
+
+O grafo armazena:
+
+MoveNode
+ ├ lesson
+ ├ target_slot
+ ├ estimated_delta
+ └ dependencies
+
+Estrutura:
+
+CandidateMoveGraph
+│
+├ lesson 12 → [moves]
+│
+├ lesson 33 → [moves]
+│
+└ lesson 40 → [moves]
+
+Cada movimento possui uma estimativa de melhoria.
+
+2. O problema que ele resolve
+
+Em timetabling:
+
+N lessons = 2000
+slots = 30
+
+Número de movimentos:
+
+2000 × 30 = 60000
+
+Se avaliarmos tudo:
+
+60000 delta evaluations
+
+por iteração.
+
+Isso é inviável.
+
+3. Estratégia do CMG
+
+O solver mantém apenas movimentos promissores.
+
+Exemplo:
+
+lesson 21
+
+slot1   Δ = -4
+slot2   Δ = +1
+slot3   Δ = +3   ← candidate
+slot4   Δ = -2
+
+Somente os melhores entram no grafo.
+
+4. Estrutura do Candidate Move Graph
+CandidateMoveGraph
+│
+├ MoveNode
+│   ├ move
+│   ├ deltaEstimate
+│   ├ lastEvaluated
+│
+├ adjacency
+│   └ affected moves
+│
+└ priority queue
+5. MoveNode
+class MoveNode
+{
+    public function __construct(
+        public Move $move,
+        public float $deltaEstimate,
+        public int $timestamp
+    ) {}
+}
+6. Estrutura principal
+class CandidateMoveGraph
+{
+    private array $movesByLesson = [];
+
+    private SplPriorityQueue $queue;
+
+    public function __construct()
+    {
+        $this->queue = new SplPriorityQueue();
+    }
+}
+7. Inserção de movimentos
+
+Quando um movimento é descoberto:
+
+public function addMove(Move $move, float $estimate): void
+{
+    $node = new MoveNode(
+        $move,
+        $estimate,
+        time()
+    );
+
+    $lesson = $move->geneIndex;
+
+    $this->movesByLesson[$lesson][] = $node;
+
+    $this->queue->insert($node, $estimate);
+}
+8. Seleção do próximo movimento
+
+Sempre pegamos o melhor movimento estimado.
+
+public function next(): ?MoveNode
+{
+    if ($this->queue->isEmpty()) {
+        return null;
+    }
+
+    return $this->queue->extract();
+}
+
+Complexidade:
+
+O(log n)
+9. Atualização após execução
+
+Quando um movimento é aplicado:
+
+lesson A mudou
+
+Apenas movimentos relacionados precisam ser atualizados.
+
+affected lessons:
+   neighbors(A)
+Atualização incremental
+public function invalidateLesson(int $lesson): void
+{
+    unset($this->movesByLesson[$lesson]);
+}
+10. Regeração seletiva
+
+Em vez de reconstruir tudo:
+
+regenerate only local moves
+
+Exemplo:
+
+public function regenerateMoves(
+    Cromossomo $c,
+    int $lesson,
+    MoveGenerator $generator
+): void {
+
+    $moves = $generator->generateForLesson($c,$lesson);
+
+    foreach ($moves as $move)
+    {
+        $estimate = $this->estimate($move);
+
+        $this->addMove($move,$estimate);
+    }
+}
+11. Estimativa rápida de delta
+
+Antes de avaliação completa:
+
+cheap heuristic
+
+Exemplo:
+
+teacher conflict weight
+class conflict weight
+Heurística
+private function estimate(Move $move): float
+{
+    $score = 0;
+
+    if ($move->reducesTeacherConflict)
+        $score += 5;
+
+    if ($move->reducesClassConflict)
+        $score += 4;
+
+    return $score;
+}
+12. Pipeline do solver
+
+Com Candidate Move Graph:
+
+build initial candidate graph
+        ↓
+select best candidate
+        ↓
+delta evaluate
+        ↓
+apply move
+        ↓
+update local moves
+13. Integração com Local Search
+LocalSearch
+    ↓
+CandidateMoveGraph
+    ↓
+MoveEngine
+14. Uso em diferentes heurísticas
+
+CMG é usado em:
+
+Tabu Search
+Late Acceptance
+Simulated Annealing
+LNS
+Large Step Markov Chains
+15. Exemplo no seu solver
+
+Integrando ao MoveEngine:
+
+class MoveEngine
+{
+    public function step(Cromossomo $c): void
+    {
+        $node = $this->candidateGraph->next();
+
+        if (!$node) {
+            return;
+        }
+
+        $delta = $this->deltaEvaluator
+            ->evaluate($c,$node->move);
+
+        if ($delta > 0)
+        {
+            $this->executor->apply($c,$node->move);
+        }
+
+        $this->candidateGraph
+            ->invalidateLesson($node->move->geneIndex);
+    }
+}
+16. Otimização usada por solvers campeões
+
+Eles usam dois níveis de grafo.
+
+Candidate Move Graph
+        ↓
+Conflict Graph
+
+Assim:
+
+lesson → conflicts → moves
+
+Permite atualização ultra-local.
+
+17. Complexidade real
+
+Sem CMG:
+
+evaluate 60000 moves
+
+Com CMG:
+
+evaluate 30–100 moves
+18. Ganho prático
+
+Solvers ITC:
+
+1M–5M moves evaluated per second
+
+Isso só é possível com:
+
+ConflictGraph
++
+DeltaEvaluation
++
+CandidateMoveGraph
+19. O próximo nível (usado em solvers top-3)
+
+Eles adicionam:
+
+Move Learning
+
+O solver aprende:
+
+which moves tend to improve
+
+e passa a priorizar esses movimentos.
+
+Estrutura:
+
+MoveScoreTable

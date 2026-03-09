@@ -1,0 +1,389 @@
+A seguir está o núcleo técnico que diferencia um solver acadêmico de um solver competitivo no ITC: o Move Engine.
+
+Ele é responsável por:
+
+gerar movimentos
+avaliar movimentos
+selecionar movimentos
+executar movimentos
+
+Tudo em tempo quase constante.
+
+Esse motor normalmente é mais importante que o próprio GA.
+
+1. Arquitetura do Move Engine
+
+Arquitetura usada em solvers top-ITC:
+
+MoveEngine
+│
+├── ConflictGraph
+│
+├── MoveGenerators
+│   ├── SwapMoveGenerator
+│   ├── KempeMoveGenerator
+│   ├── BlockMoveGenerator
+│   └── EjectionChainGenerator
+│
+├── CandidateMoveCache
+│
+├── DeltaEvaluationEngine
+│
+└── NeighborhoodPruner
+
+Fluxo:
+
+generate candidates
+      ↓
+prune candidates
+      ↓
+delta evaluate
+      ↓
+select best move
+      ↓
+apply move
+2. Conflict Graph Incremental
+
+A maioria dos solvers ITC usa Conflict Graph.
+
+Ele representa:
+
+lesson conflicts
+
+Exemplo:
+
+Lesson A
+Lesson B
+
+Conflito se:
+
+mesmo professor
+mesma turma
+mesma sala
+Estrutura
+ConflictGraph
+{
+   lesson → neighbors[]
+}
+
+Exemplo:
+
+Math_Turma1  → [Physics_Turma1]
+Physics_Turma1 → [Math_Turma1]
+Implementação PHP
+class ConflictGraph
+{
+    private array $adj = [];
+
+    public function addConflict(int $a, int $b): void
+    {
+        $this->adj[$a][$b] = true;
+        $this->adj[$b][$a] = true;
+    }
+
+    public function neighbors(int $lessonId): array
+    {
+        return array_keys($this->adj[$lessonId] ?? []);
+    }
+}
+3. Conflict Graph Incremental Update
+
+Quando um gene move:
+
+lesson A : slot1 → slot2
+
+não recalculamos tudo.
+
+Atualizamos apenas:
+
+neighbors(A)
+
+Custo:
+
+O(degree(A))
+
+Que normalmente é pequeno.
+
+4. Move Generators O(1)
+
+Geradores de movimentos precisam ser extremamente rápidos.
+
+Movimentos comuns:
+
+swap
+move
+kempe chain
+block move
+Exemplo Move DTO
+class Move
+{
+    public function __construct(
+        public int $geneIndex,
+        public int $targetDay,
+        public int $targetPeriod
+    ) {}
+}
+Gerador O(1)
+
+Exemplo:
+
+class RandomMoveGenerator
+{
+    public function generate(Cromossomo $c): Move
+    {
+        $i = random_int(0, $c->count() - 1);
+
+        return new Move(
+            geneIndex: $i,
+            targetDay: random_int(1,5),
+            targetPeriod: random_int(1,6)
+        );
+    }
+}
+
+Complexidade:
+
+O(1)
+5. Candidate Move Cache
+
+Solvers competitivos não recalculam movimentos sempre.
+
+Eles usam cache.
+
+CandidateMoveCache
+{
+   lesson → candidate moves
+}
+Estrutura
+lesson_id
+    → move1
+    → move2
+    → move3
+Benefício
+
+Em vez de gerar milhares de movimentos:
+
+reuse moves
+Implementação
+class CandidateMoveCache
+{
+    private array $cache = [];
+
+    public function store(int $lesson, array $moves): void
+    {
+        $this->cache[$lesson] = $moves;
+    }
+
+    public function get(int $lesson): array
+    {
+        return $this->cache[$lesson] ?? [];
+    }
+
+    public function invalidate(int $lesson): void
+    {
+        unset($this->cache[$lesson]);
+    }
+}
+6. Delta Move Evaluation
+
+Nunca recalculamos fitness completo.
+
+Sempre usamos:
+
+delta evaluation
+Ideia
+
+Antes:
+
+fitness = evaluate(all rules)
+
+Depois:
+
+fitness + delta
+Fórmula
+Δfitness =
+Σ Δrule_i
+
+Somente regras afetadas.
+
+Exemplo
+
+Mover uma aula afeta:
+
+teacher conflict
+class conflict
+windows
+distribution
+
+Não afeta:
+
+outras turmas
+Implementação
+class DeltaMoveEvaluator
+{
+    public function evaluate(
+        Cromossomo $c,
+        Move $move
+    ): float {
+
+        $delta = 0.0;
+
+        $delta += $this->teacherConflictDelta($c,$move);
+        $delta += $this->classConflictDelta($c,$move);
+        $delta += $this->windowDelta($c,$move);
+
+        return $delta;
+    }
+}
+
+Complexidade:
+
+O(k)
+7. Aplicação do Movimento
+
+Após escolher o movimento:
+
+apply move
+Execução
+class MoveExecutor
+{
+    public function apply(
+        Cromossomo $c,
+        Move $move
+    ): void {
+
+        $gene = $c->genes()[$move->geneIndex];
+
+        $new = $gene->withDiaPeriodo(
+            $move->targetDay,
+            $move->targetPeriod
+        );
+
+        $c->replaceGene(
+            $move->geneIndex,
+            $new
+        );
+    }
+}
+8. Neighborhood Pruning
+
+Neighborhoods são enormes.
+
+Exemplo:
+
+2000 lessons
+×
+30 slots
+=
+60000 moves
+
+Não avaliamos tudo.
+
+Estratégia
+
+Filtrar movimentos ruins.
+
+Exemplos:
+
+teacher overload
+slot impossible
+hard violation > threshold
+Implementação
+class NeighborhoodPruner
+{
+    public function allow(Move $move): bool
+    {
+        if ($this->teacherUnavailable($move))
+            return false;
+
+        if ($this->classUnavailable($move))
+            return false;
+
+        return true;
+    }
+}
+9. Pipeline do Move Engine
+generate candidate moves
+        ↓
+prune
+        ↓
+delta evaluate
+        ↓
+select best
+        ↓
+apply move
+10. Implementação completa
+class MoveEngine
+{
+    public function __construct(
+        private MoveGenerator $generator,
+        private DeltaMoveEvaluator $evaluator,
+        private MoveExecutor $executor,
+        private NeighborhoodPruner $pruner
+    ){}
+
+    public function step(Cromossomo $c): void
+    {
+        $bestMove = null;
+        $bestDelta = -INF;
+
+        for ($i=0;$i<50;$i++)
+        {
+            $move = $this->generator->generate($c);
+
+            if (!$this->pruner->allow($move))
+                continue;
+
+            $delta = $this->evaluator->evaluate($c,$move);
+
+            if ($delta > $bestDelta)
+            {
+                $bestDelta = $delta;
+                $bestMove = $move;
+            }
+        }
+
+        if ($bestMove)
+        {
+            $this->executor->apply($c,$bestMove);
+        }
+    }
+}
+11. Integração com seu solver
+
+Ele entra em:
+
+LocalSearch
+KempeSearch
+TabuSearch
+ALNS
+
+Exemplo:
+
+ALNS
+   ↓
+repair
+   ↓
+MoveEngine intensification
+12. Complexidade
+
+Solver comum:
+
+evaluate move = O(n)
+
+Solver ITC:
+
+evaluate move = O(k)
+
+Onde:
+
+k = affected region
+13. Resultado prático
+
+Sem Move Engine:
+
+500 gerações
+
+Com Move Engine:
+
+5000–20000 movimentos/segundo

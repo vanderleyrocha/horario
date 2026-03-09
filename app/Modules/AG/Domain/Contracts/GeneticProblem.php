@@ -4,27 +4,38 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Contracts;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 use App\Modules\AG\Domain\Fitness\FitnessResult;
+use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 interface GeneticProblem {
     /**
-     * Cria um indivíduo inicial válido ou parcialmente válido.
+     * Cria indivíduo inicial.
      */
     public function createIndividual(): Cromossomo;
 
     /**
-     * Avalia completamente o indivíduo.
+     * Avaliação completa.
      */
     public function evaluate(Cromossomo $individual): FitnessResult;
 
     /**
-     * Repara indivíduo após crossover/mutation.
+     * Avaliação incremental (Delta Fitness).
+     */
+    public function evaluateDelta(Cromossomo $individual, AffectedRegion $region, FitnessResult $previous): FitnessResult;
+
+    /**
+     * Repara indivíduo após operadores genéticos.
      */
     public function repair(Cromossomo $individual): Cromossomo;
 
     /**
-     * Verifica se o indivíduo é estruturalmente viável.
+     * Verifica viabilidade estrutural.
      */
     public function isFeasible(Cromossomo $individual): bool;
+
+    /**
+     * Limpa caches internos.
+     */
+    public function clearFitnessCache(): void;
 }

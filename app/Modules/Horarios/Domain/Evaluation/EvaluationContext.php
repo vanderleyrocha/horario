@@ -2,12 +2,15 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Gene;
+use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
 final class EvaluationContext {
 
     public function __construct(
         private readonly Cromossomo $cromossomo,
+        private readonly ScheduleData $data,
         private readonly array $cargaEsperada = [],
         private readonly array $diasPreferidos = [],
         private readonly array $temposPreferidos = []
@@ -15,8 +18,20 @@ final class EvaluationContext {
     }
 
     /* ============================================================
+     | ACESSO AO DOMÍNIO
+     ============================================================ */
+
+    public function data(): ScheduleData {
+        return $this->data;
+    }
+
+    /* ============================================================
      | Estrutura base (delegação)
      ============================================================ */
+
+    public function gene(int $index): Gene {
+        return $this->genes()[$index];
+    }
 
     public function genes(): array {
         return $this->cromossomo->genes();
@@ -42,11 +57,7 @@ final class EvaluationContext {
      | Derivações estruturais adicionais
      ============================================================ */
 
-    /**
-     * Retorna mapa: turmaId => diaSemana => quantidade
-     */
     public function cargaTurmaPorDia(): array {
-
         $map = [];
 
         foreach ($this->genes() as $gene) {
@@ -59,11 +70,7 @@ final class EvaluationContext {
         return $map;
     }
 
-    /**
-     * Retorna mapa: aulaId => lista de períodos ordenados
-     */
     public function alocacoesPorAula(): array {
-
         $map = [];
 
         foreach ($this->genes() as $gene) {
@@ -79,26 +86,23 @@ final class EvaluationContext {
             }
         }
 
-        // ordenação estrutural
         foreach ($map as &$slots) {
-            usort($slots, function ($a, $b) {
-                return [$a['dia'], $a['periodo']]
-                    <=> [$b['dia'], $b['periodo']];
-            });
+            usort(
+                $slots,
+                fn($a, $b) =>
+                [$a['dia'], $a['periodo']] <=> [$b['dia'], $b['periodo']]
+            );
         }
 
         return $map;
     }
 
-    /**
-     * Total de genes
-     */
     public function totalGenes(): int {
         return count($this->genes());
     }
 
     /* ============================================================
-     | Dados de Configuração
+     | Dados de configuração
      ============================================================ */
 
     public function cargaEsperada(): array {
@@ -111,5 +115,9 @@ final class EvaluationContext {
 
     public function temposPreferidos(): array {
         return $this->temposPreferidos;
+    }
+
+    public function cromossomo(): Cromossomo {
+        return $this->cromossomo;
     }
 }

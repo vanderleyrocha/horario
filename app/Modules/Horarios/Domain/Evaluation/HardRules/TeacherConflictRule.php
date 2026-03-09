@@ -2,48 +2,74 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\HardRules;
 
+use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
+use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class TeacherConflictRule implements HardRuleInterface {
+final class TeacherConflictRule
+implements HardRuleInterface, IncrementalRule {
+    public function isHard(): bool {
+        return true;
+    }
+
+    /**
+     * Avaliação completa
+     */
     public function evaluate(EvaluationContext $context): RuleResult {
-        $penalty = 0.0;
+        $index = $context->cromossomo()->professorPeriodoIndex();
 
-        foreach ($context->professorIndex() as $profId => $dias) {
-            foreach ($dias as $dia => $tempos) {
+        $penalty = 0;
 
-                // Se houver mais de um gene no mesmo slot, já seria conflito
-                // Como o Cromossomo sobrescreve boolean, precisamos detectar via genes
+        foreach ($index as $prof => $dias) {
 
-                $ocupacao = [];
+            foreach ($dias as $dia => $periodos) {
 
-                foreach ($context->genes() as $gene) {
+                foreach ($periodos as $periodo => $genes) {
 
-                    if ($gene->professorId() !== $profId) {
-                        continue;
-                    }
-
-                    for ($i = 0; $i < $gene->duracaoTempos(); $i++) {
-
-                        $tempo = $gene->periodoDia() + $i;
-
-                        $slot = $dia . '_' . $tempo;
-
-                        if (isset($ocupacao[$slot])) {
-                            $penalty++;
-                        }
-
-                        $ocupacao[$slot] = true;
+                    if (count($genes) > 1) {
+                        $penalty += count($genes) - 1;
                     }
                 }
             }
         }
 
-        return new RuleResult($penalty, self::class);
+        return new RuleResult(
+            $penalty,
+            self::class
+        );
     }
 
-    public function isHard(): bool {
-        return true;
+    /**
+     * Avaliação incremental
+     */
+    public function evaluateIncremental(
+        EvaluationContext $context,
+        AffectedRegion $region
+    ): float {
+
+        $index = $context->cromossomo()->professorPeriodoIndex();
+
+        $penalty = 0;
+
+        foreach ($region->professores as $professor) {
+
+            if (!isset($index[$professor])) {
+                continue;
+            }
+
+            foreach ($index[$professor] as $dia => $periodos) {
+
+                foreach ($periodos as $periodo => $genes) {
+
+                    if (count($genes) > 1) {
+                        $penalty += count($genes) - 1;
+                    }
+                }
+            }
+        }
+
+        return $penalty;
     }
 }

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\AG\Infrastructure\Population;
 
 use App\Modules\AG\Domain\Analysis\DTO\FeasibilityReport;
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
 use App\Modules\AG\Domain\Analysis\ScheduleFeasibilityAnalyzer;
-use App\Modules\AG\Domain\Core\Entities\Gene;
+use App\Modules\AG\Domain\Representation\Entities\Gene;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Support\AGErrorFactory;
 use App\Modules\AG\Support\Exceptions\InviableScheduleException;
 
@@ -17,12 +17,17 @@ final class PopulationGenerator {
     private int $expectedGeneCount;
     private int $structuralRiskIndex = 0;
 
+    private array $profLoad = [];
+    private array $classLoad = [];
+
     public function __construct(
         private readonly array $aulas,
         private readonly GeneticAlgorithmConfigDTO $config,
         private readonly ?ProgressReporterInterface $progressReporter = null
     ) {
         $this->expectedGeneCount = $this->calculateExpectedGeneCount();
+
+        $this->precomputeLoads();
     }
 
     /**
@@ -30,16 +35,16 @@ final class PopulationGenerator {
      */
     public function generate(): array {
         $report = $this->validateStructuralFeasibility();
+
         $this->structuralRiskIndex = $report->riskIndex();
 
         $population = [];
-        $attempts = 0;
-        $maxAttempts = $this->config->tamanhoPopulacao * 3;
 
-        while (
-            count($population) < $this->config->tamanhoPopulacao
-            && $attempts < $maxAttempts
-        ) {
+        $attempts = 0;
+        $maxAttempts = $this->config->tamanhoPopulacao * 4;
+
+        while (count($population) < $this->config->tamanhoPopulacao && $attempts < $maxAttempts) {
+
             $attempts++;
 
             $this->progressReporter?->report([
@@ -50,13 +55,15 @@ final class PopulationGenerator {
             ]);
 
             try {
+
                 $population[] = $this->createChromosome();
             } catch (\Throwable) {
-                // apenas conta tentativa
+                // tentativa falhou
             }
         }
 
         if (count($population) !== $this->config->tamanhoPopulacao) {
+
             throw new InviableScheduleException(
                 AGErrorFactory::populationGargalo(
                     report: $report,
@@ -74,19 +81,21 @@ final class PopulationGenerator {
 
     private function createChromosome(): Cromossomo {
         $orderedAulas = $this->orderByDifficulty($this->aulas);
+
         $slots = $this->config->horariosDisponiveis;
 
         $risk = $this->structuralRiskIndex;
 
         $maxAttempts = match (true) {
-            $risk >= 80 => 20,
-            $risk >= 60 => 30,
-            default => 50,
+            $risk >= 80 => 15,
+            $risk >= 60 => 25,
+            default => 40,
         };
 
         for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
 
             $genes = [];
+
             $profIndex = [];
             $turmaIndex = [];
 
@@ -96,13 +105,7 @@ final class PopulationGenerator {
 
                 for ($i = 0; $i < $aula->aulas_semana; $i++) {
 
-                    $slot = $this->findGreedyBestSlot(
-                        $aula,
-                        $slots,
-                        $duracao,
-                        $profIndex,
-                        $turmaIndex
-                    );
+                    $slot = $this->findBestSlot($aula, $slots, $duracao, $profIndex, $turmaIndex);
 
                     if (!$slot) {
                         continue 2;
@@ -116,12 +119,7 @@ final class PopulationGenerator {
 
             if (count($genes) === $this->expectedGeneCount) {
 
-                $genes = $this->injectControlledNoise(
-                    $genes,
-                    $risk,
-                    $profIndex,
-                    $turmaIndex
-                );
+                $genes = $this->injectControlledNoise($genes, $risk, $profIndex, $turmaIndex);
 
                 return new Cromossomo($genes);
             }
@@ -130,19 +128,13 @@ final class PopulationGenerator {
         throw new InviableScheduleException(
             AGErrorFactory::populationFailure([
                 'codigo_diagnostico' => 'AG-011',
-                'mensagem_diagnostico' => 'Falha na geração híbrida adaptativa.',
+                'mensagem_diagnostico' => 'Falha na geração heurística.',
                 'expected_genes' => $this->expectedGeneCount,
             ])
         );
     }
 
-    private function findGreedyBestSlot(
-        $aula,
-        array $slots,
-        int $duracao,
-        array $profIndex,
-        array $turmaIndex
-    ): ?array {
+    private function findBestSlot($aula, array $slots, int $duracao, array $profIndex, array $turmaIndex): ?array {
 
         $bestScore = PHP_INT_MAX;
         $bestSlot = null;
@@ -156,25 +148,25 @@ final class PopulationGenerator {
                 continue;
             }
 
-            $conflicts = 0;
+            $score = 0;
 
             for ($i = 0; $i < $duracao; $i++) {
 
                 if (isset($profIndex[$aula->professor->id][$dia][$tempo + $i])) {
-                    $conflicts += 10;
+                    $score += 20;
                 }
 
                 if (isset($turmaIndex[$aula->turma->id][$dia][$tempo + $i])) {
-                    $conflicts += 10;
+                    $score += 20;
                 }
             }
 
-            if ($conflicts === 0) {
-                return $slot; // early exit otimizado
+            if ($score === 0) {
+                return $slot;
             }
 
-            if ($conflicts < $bestScore) {
-                $bestScore = $conflicts;
+            if ($score < $bestScore) {
+                $bestScore = $score;
                 $bestSlot = $slot;
             }
         }
@@ -182,17 +174,12 @@ final class PopulationGenerator {
         return $bestSlot;
     }
 
-    private function injectControlledNoise(
-        array $genes,
-        int $risk,
-        array $profIndex,
-        array $turmaIndex
-    ): array {
+    private function injectControlledNoise(array $genes, int $risk, array $profIndex, array $turmaIndex): array {
 
         $mutationRate = match (true) {
-            $risk >= 80 => 0.02,
-            $risk >= 60 => 0.05,
-            default => 0.1,
+            $risk >= 80 => 0.01,
+            $risk >= 60 => 0.03,
+            default => 0.08,
         };
 
         foreach ($genes as $index => $gene) {
@@ -202,9 +189,17 @@ final class PopulationGenerator {
                 $novoDia = random_int(1, $this->config->diasSemana);
                 $novoPeriodo = random_int(1, $this->config->aulasPorDia);
 
-                $tentativa = $gene->withDiaPeriodo($novoDia, $novoPeriodo);
+                $tentativa = $gene->withDiaPeriodo(
+                    $novoDia,
+                    $novoPeriodo
+                );
 
-                if (!$this->hasConflict($tentativa, $profIndex, $turmaIndex)) {
+                if (!$this->hasConflict(
+                    $tentativa,
+                    $profIndex,
+                    $turmaIndex
+                )) {
+
                     $genes[$index] = $tentativa;
                 }
             }
@@ -213,11 +208,77 @@ final class PopulationGenerator {
         return $genes;
     }
 
-    private function hasConflict(
-        Gene $gene,
-        array $profIndex,
-        array $turmaIndex
-    ): bool {
+    private function precomputeLoads(): void {
+        foreach ($this->aulas as $aula) {
+
+            $duracao = $this->durationFromTipo($aula->tipo);
+
+            $this->profLoad[$aula->professor->id] = ($this->profLoad[$aula->professor->id] ?? 0) + $aula->aulas_semana * $duracao;
+
+            $this->classLoad[$aula->turma->id] = ($this->classLoad[$aula->turma->id] ?? 0) + $aula->aulas_semana * $duracao;
+        }
+    }
+
+    private function orderByDifficulty(array $aulas): array {
+        usort($aulas, function ($a, $b) {
+
+            $scoreA =
+                ($a->aulas_semana * $this->durationFromTipo($a->tipo))
+                + ($this->profLoad[$a->professor->id] ?? 0)
+                + ($this->classLoad[$a->turma->id] ?? 0);
+
+            $scoreB =
+                ($b->aulas_semana * $this->durationFromTipo($b->tipo))
+                + ($this->profLoad[$b->professor->id] ?? 0)
+                + ($this->classLoad[$b->turma->id] ?? 0);
+
+            return $scoreB <=> $scoreA;
+        });
+
+        return $aulas;
+    }
+
+    private function validateStructuralFeasibility(): FeasibilityReport {
+        $analyzer = new ScheduleFeasibilityAnalyzer();
+
+        $report = $analyzer->analisar(
+            $this->aulas,
+            $this->config->diasSemana,
+            $this->config->aulasPorDia
+        );
+
+        if (!$report->isFeasible()) {
+
+            throw new InviableScheduleException(
+                AGErrorFactory::populationInfeasible($report)
+            );
+        }
+
+        return $report;
+    }
+
+    private function durationFromTipo(string $tipo): int {
+        return match ($tipo) {
+            'simples' => 1,
+            'dupla' => 2,
+            'tripla' => 3,
+            default => 1,
+        };
+    }
+
+    private function calculateExpectedGeneCount(): int {
+        $total = 0;
+
+        foreach ($this->aulas as $aula) {
+
+            $total += $aula->aulas_semana
+                * $this->durationFromTipo($aula->tipo);
+        }
+
+        return $total;
+    }
+
+    private function hasConflict(Gene $gene, array $profIndex, array $turmaIndex): bool {
 
         $prof = $gene->professorId();
         $turma = $gene->turmaId();
@@ -239,62 +300,7 @@ final class PopulationGenerator {
         return false;
     }
 
-    private function validateStructuralFeasibility(): FeasibilityReport {
-        $analyzer = new ScheduleFeasibilityAnalyzer();
-
-        $report = $analyzer->analisar(
-            $this->aulas,
-            $this->config->diasSemana,
-            $this->config->aulasPorDia
-        );
-
-        if (!$report->isFeasible()) {
-            throw new InviableScheduleException(
-                AGErrorFactory::populationInfeasible($report)
-            );
-        }
-
-        return $report;
-    }
-
-    private function orderByDifficulty(array $aulas): array {
-        usort(
-            $aulas,
-            fn($a, $b) => ($b->aulas_semana * $this->durationFromTipo($b->tipo))
-                <=>
-                ($a->aulas_semana * $this->durationFromTipo($a->tipo))
-        );
-
-        return $aulas;
-    }
-
-    private function durationFromTipo(string $tipo): int {
-        return match ($tipo) {
-            'simples' => 1,
-            'dupla' => 2,
-            'tripla' => 3,
-            default => 1,
-        };
-    }
-
-    private function calculateExpectedGeneCount(): int {
-        $total = 0;
-
-        foreach ($this->aulas as $aula) {
-            $total += $aula->aulas_semana
-                * $this->durationFromTipo($aula->tipo);
-        }
-
-        return $total;
-    }
-
-    private function indexSlot(
-        $aula,
-        array $slot,
-        int $duracao,
-        array &$profIndex,
-        array &$turmaIndex
-    ): void {
+    private function indexSlot($aula, array $slot, int $duracao, array &$profIndex, array &$turmaIndex): void {
 
         $dia = $slot['dia'];
         $tempoInicial = $slot['tempo'];
@@ -311,11 +317,7 @@ final class PopulationGenerator {
         }
     }
 
-    private function buildGene(
-        $aula,
-        array $slot,
-        int $duracao
-    ): Gene {
+    private function buildGene($aula, array $slot, int $duracao): Gene {
 
         return new Gene(
             aulaId: $aula->id,

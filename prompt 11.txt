@@ -1,0 +1,2 @@
+Self-Adaptive Parameter Control Engine,
+usado por alguns solvers campeões do ITC, que aprende automaticamente todos os parâmetros do algoritmo durante a execução (mutation rate, destroy size, tabu tenure, etc.).

@@ -4,24 +4,27 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Repair;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
-use App\Modules\AG\Domain\Core\Entities\Gene;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Gene;
+use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
 final class GreedyRepairOperator {
-    public function __construct(private readonly array $horariosDisponiveis, private readonly int $aulasPorDia) {
-    }
+    public function repair(Cromossomo $chromosome, ScheduleData $data): Cromossomo {
 
-    public function repair(Cromossomo $cromossomo): Cromossomo {
-        $child = $cromossomo->copy();
+        $child = $chromosome->copy();
 
         foreach ($child->genes() as $index => $gene) {
 
-            if (!$this->isGeneValido($child, $gene, $index)) {
+            if (!$this->isValid($child, $gene)) {
 
-                $novoGene = $this->realocarGene($child, $gene, $index);
+                $candidate = $this->relocateGene(
+                    $child,
+                    $gene,
+                    $data
+                );
 
-                if ($novoGene !== null) {
-                    $child->replaceGene($index, $novoGene);
+                if ($candidate !== null) {
+                    $child->replaceGene($index, $candidate);
                 }
             }
         }
@@ -29,82 +32,41 @@ final class GreedyRepairOperator {
         return $child;
     }
 
-    /* ============================================================
-     |  VALIDAÇÃO
-     ============================================================ */
+    private function relocateGene(Cromossomo $cromossomo, Gene $gene, ScheduleData $data): ?Gene {
 
-    private function isGeneValido(Cromossomo $cromossomo, Gene $gene, int $index): bool {
-        return $this->slotLivreSemEleMesmo($cromossomo, $gene, $index);
-    }
+        $profSlots = $data->availableSlotsByProfessor[$gene->professorId()] ?? [];
+        $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
 
-    private function realocarGene(Cromossomo $cromossomo, Gene $gene, int $index): ?Gene {
+        $possible = array_intersect_key(
+            $profSlots,
+            $classSlots
+        );
 
-        $slots = $this->horariosDisponiveis;
-        shuffle($slots);
+        foreach ($possible as $slot) {
 
-        foreach ($slots as $slot) {
+            $candidate = $gene->withDiaPeriodo(
+                $slot['day'],
+                $slot['period']
+            );
 
-            $dia = $slot['dia'];
-            $tempo = $slot['tempo'];
-            $duracao = $gene->duracaoTempos();
-
-            if ($tempo + $duracao - 1 > $this->aulasPorDia) {
-                continue;
-            }
-
-            $tentativa = $gene->withDiaPeriodo($dia, $tempo);
-
-            if ($this->slotLivreSemEleMesmo($cromossomo, $tentativa, $index)) {
-                return $tentativa;
+            if ($this->isValid($cromossomo, $candidate)) {
+                return $candidate;
             }
         }
 
         return null;
     }
 
-    /**
-     * Verifica se o slot está livre ignorando o próprio gene
-     */
-    private function slotLivreSemEleMesmo(Cromossomo $cromossomo, Gene $gene, int $index): bool {
+    private function isValid(Cromossomo $cromossomo, Gene $gene): bool {
 
         $profIndex = $cromossomo->professorIndex();
         $turmaIndex = $cromossomo->turmaIndex();
 
-        $genes = $cromossomo->genes();
-        $geneOriginal = $genes[$index];
-
         $prof = $gene->professorId();
         $turma = $gene->turmaId();
         $dia = $gene->diaSemana();
-        $periodoInicial = $gene->periodoDia();
-        $duracao = $gene->duracaoTempos();
+        $periodo = $gene->periodoDia();
 
-        for ($i = 0; $i < $duracao; $i++) {
-
-            $tempo = $periodoInicial + $i;
-
-            // ignora ocupação do próprio gene
-            if (
-                isset($profIndex[$prof][$dia][$tempo]) &&
-                !($geneOriginal->professorId() === $prof &&
-                    $geneOriginal->diaSemana() === $dia &&
-                    $tempo >= $geneOriginal->periodoDia() &&
-                    $tempo < $geneOriginal->periodoDia() + $geneOriginal->duracaoTempos())
-            ) {
-                return false;
-            }
-
-            if (
-                isset($turmaIndex[$turma][$dia][$tempo]) &&
-                !($geneOriginal->turmaId() === $turma &&
-                    $geneOriginal->diaSemana() === $dia &&
-                    $tempo >= $geneOriginal->periodoDia() &&
-                    $tempo < $geneOriginal->periodoDia() + $geneOriginal->duracaoTempos())
-            ) {
-                return false;
-            }
-        }
-
-        return true;
+        return !isset($profIndex[$prof][$dia][$periodo]) && !isset($turmaIndex[$turma][$dia][$periodo]);
     }
 }

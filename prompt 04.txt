@@ -1,0 +1,440 @@
+1. Arquitetura Geral do Solver ITC-Grade
+
+A arquitetura vencedora em competições quase nunca usa uma única metaheurística.
+Ela combina várias camadas complementares.
+
+Arquitetura proposta:
+
+GLOBAL SOLVER
+│
+├── Population Search
+│   └── Genetic Algorithm (Island Model)
+│
+├── Intensification Layer
+│   ├── Local Search
+│   │   ├── Kempe Chains
+│   │   ├── Swap Moves
+│   │   └── Ejection Chains
+│   │
+│   └── Large Neighborhood Search
+│       └── Adaptive Ruin & Recreate
+│
+├── Hyper-heuristic Controller
+│   └── Learning operator selection
+│
+├── Constraint Layer
+│   └── CP-like propagation
+│
+└── Multi-Objective Layer
+    └── Pareto Evolution
+
+Estratégia:
+
+Exploration → GA population
+Intensification → LNS + Local Search
+Conflict resolution → Ejection chains
+Adaptation → Hyper-heuristics
+Quality tradeoff → Pareto optimization
+2. Camada 1 — Genetic Algorithm Global
+
+O GA continua sendo o motor de exploração global.
+
+Representação
+
+Cromossomo:
+
+Schedule = set of lesson assignments
+
+Gene:
+(aula, professor, turma, sala, dia, período)
+População
+population_size = 100–300
+islands = 4–8
+migration_interval = 20–50
+Operadores
+
+Selection
+
+Fitness sharing tournament
+
+Crossover
+
+Conflict Graph Crossover
++
+Sector Based Crossover
+
+Mutation
+
+SwapMutation
+KempeMutation
+ConflictGuidedMutation
+BlockMutation
+Estrutura do GA
+for generation:
+    selection
+    crossover
+    mutation
+    repair
+    evaluate
+3. Camada 2 — Constraint Propagation (CP-like)
+
+Antes de avaliar fitness, usamos propagação de restrições.
+
+Isso reduz muito o espaço de busca.
+
+Exemplo:
+
+Teacher A busy Monday 2
+
+remove domain:
+(day=Mon,period=2)
+
+Domínio de cada aula:
+
+Domain(aula) =
+{ (day,period,room) }
+
+Propagação simples:
+
+forward checking
+constraint filtering
+
+Impacto:
+
+search space reduction
+faster convergence
+4. Camada 3 — Large Neighborhood Search (Adaptive Ruin-Recreate)
+
+Essa é uma das técnicas mais importantes em timetabling moderno.
+
+Ideia
+
+Destruir parte do horário e reconstruir melhor.
+
+solution
+   ↓
+destroy
+   ↓
+partial solution
+   ↓
+repair
+   ↓
+new solution
+Destroy Operators
+
+1️⃣ Random removal
+
+remove 10% random lessons
+
+2️⃣ Conflict removal
+
+remove lessons involved in conflicts
+
+3️⃣ Cluster removal
+
+remove all lessons of:
+    teacher
+    class
+    day
+
+4️⃣ Graph removal
+
+remove subgraph in conflict graph
+Repair Operators
+
+Greedy insertion
+
+choose slot with minimal penalty
+
+Regret-k insertion
+
+score = second best − best
+
+Constraint guided insertion
+
+prioritize hard constraint feasibility
+5. Adaptive Ruin-Recreate
+
+Em vez de escolher operadores aleatoriamente, usamos ALNS (Adaptive LNS).
+
+Cada operador tem um score.
+
+operator_score += reward
+
+Recompensas típicas:
+
+global improvement → +10
+local improvement → +5
+accepted move → +2
+rejected → 0
+
+Seleção via roulette wheel.
+
+6. Camada 4 — Local Search Avançado
+
+Local search resolve conflitos difíceis.
+
+6.1 Kempe Chains
+
+Operação clássica em timetabling.
+
+Troca cadeias de slots:
+
+slot A ↔ slot B
+
+Preservando consistência.
+
+6.2 Swap Moves
+
+Troca duas aulas.
+
+lesson1 ↔ lesson2
+7. Ejection Chains (técnica avançada)
+
+Pouquíssimos solvers implementam corretamente.
+
+Problema
+
+Aula A quer slot X.
+
+Mas slot X ocupado por B.
+
+B pode ir para Y.
+
+Y ocupado por C.
+
+Isso vira uma cadeia.
+
+Cadeia
+A → B → C → D → free slot
+
+Movimento:
+
+A → X
+B → Y
+C → Z
+D → W
+Construção da cadeia
+
+Modelo como grafo:
+
+node = lesson
+edge = possible move
+
+Busca:
+
+depth-limited DFS
+
+Custo da cadeia:
+
+sum penalty changes
+
+Selecionar cadeia com menor custo.
+
+8. Hyper-heuristics (Learning Heuristics)
+
+Camada que decide quais heurísticas usar.
+
+Em vez de:
+
+fixed operators
+
+usamos:
+
+learning controller
+Multi-Armed Bandit
+
+Cada operador é um braço.
+
+reward = fitness improvement
+
+Score:
+
+UCB1
+
+score =
+mean_reward
++
+C * sqrt( ln(total) / usage )
+
+Seleciona operador com maior score.
+
+Operadores controlados
+
+Hyper-heuristic escolhe:
+
+mutation
+destroy operator
+repair operator
+local search move
+9. Multi-Objective Optimization
+
+Tabelas de horário têm múltiplos objetivos.
+
+Exemplo:
+
+minimize conflicts
+minimize teacher gaps
+minimize student gaps
+maximize preference satisfaction
+NSGA-II
+
+Mantemos fronteira de Pareto.
+
+Fitness:
+
+F = (hard_penalty, soft_penalty)
+
+Ranking:
+
+Pareto rank
++
+Crowding distance
+Benefício
+
+Mantém diversidade estrutural.
+
+10. Diversity Control
+
+Diversidade é essencial.
+
+Métricas:
+
+Entropia
+H = −Σ p log p
+Hamming Distance
+difference between schedules
+Fitness Sharing
+shared_fitness = fitness / niche_count
+11. Migration (Island Model)
+
+Ilhas evoluem independentemente.
+
+Island 1
+Island 2
+Island 3
+Island 4
+
+A cada N gerações:
+
+best individuals migrate
+
+Políticas:
+
+ring topology
+fully connected
+12. Acceptance Strategies
+
+Movimentos LNS nem sempre precisam melhorar.
+
+Usamos estratégias tipo simulated annealing.
+
+accept if:
+
+Δ < 0
+OR
+
+exp(-Δ/T) > random
+
+Temperatura:
+
+T decreases over time
+
+Isso evita ficar preso em mínimos locais.
+
+13. Avaliação Incremental
+
+Fitness deve ser:
+
+O(k)
+
+Não:
+
+O(n)
+
+Onde:
+
+k = tamanho da região modificada
+
+Ferramentas:
+
+Conflict index
+Rule dependency graph
+Affected region
+14. Pipeline do Solver
+
+Fluxo completo:
+
+initialize population
+evaluate
+loop generations:
+
+    selection
+    crossover
+    mutation
+
+    local search
+
+    ALNS
+
+    evaluate
+
+    migration
+
+    update operator scores
+15. Arquitetura Final do Solver
+Hybrid Evolutionary Timetabling Solver
+│
+├── Population Layer
+│   └── Genetic Algorithm
+│
+├── Intensification Layer
+│   ├── Local Search
+│   │   ├── Kempe Chains
+│   │   ├── Swap Moves
+│   │   └── Ejection Chains
+│   │
+│   └── Adaptive LNS
+│       ├── Destroy operators
+│       └── Repair operators
+│
+├── Learning Layer
+│   └── Hyper-heuristic controller
+│
+├── Constraint Layer
+│   └── CP propagation
+│
+└── Multi-objective layer
+    └── NSGA-II
+16. Complexidade de Nível ITC
+
+Com essa arquitetura:
+
+Complexidade típica:
+
+population = 200
+generations = 500
+ALNS iterations = 2000
+
+Tempo típico:
+
+30s – 5min
+
+Escala bem para:
+
+1000 aulas
+100 professores
+50 turmas
+17. Comparação com Solvers Acadêmicos
+Técnica	Implementada
+GA	✔
+Island Model	✔
+Kempe Chains	✔
+ALNS	✔
+Adaptive operators	✔
+Ejection chains	✔
+Hyper-heuristics	✔
+Multi-objective	✔
+CP propagation	✔
+
+Essa arquitetura está no mesmo nível conceitual de solvers usados em papers de timetabling.

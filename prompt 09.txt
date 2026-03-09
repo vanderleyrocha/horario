@@ -1,0 +1,381 @@
+A Learning Hyper-Heuristic Engine (LHHE) é uma das técnicas mais avançadas usadas em alguns solvers campeões do ITC (International Timetabling Competition).
+Ela é um nível acima do Move Learning.
+
+Enquanto o Move Learning Engine aprende:
+
+qual movimento usar
+
+a Hyper-Heuristic aprende:
+
+qual heurística usar em cada fase da busca
+
+Isso cria um solver auto-configurável, capaz de adaptar a estratégia durante a execução.
+
+1. Hierarquia de decisões no solver
+
+Um solver ITC moderno possui vários níveis de decisão.
+
+Solver
+│
+├ Hyper-Heuristic Engine
+│
+├ Heuristic Selector
+│
+├ Move Engine
+│
+├ Neighborhood Search
+│
+└ Move Generators
+
+Ou seja:
+
+Hyper-Heuristic escolhe heurística
+heurística escolhe movimento
+movimento altera solução
+2. Tipos de heurísticas controladas
+
+A Hyper-Heuristic pode escolher entre dezenas de heurísticas.
+
+Exemplo típico em timetabling:
+
+LOCAL SEARCH
+    swap
+    move
+    kempe chain
+
+LNS
+    conflict destroy
+    cluster destroy
+    random destroy
+
+EJECTION CHAINS
+
+TABU SEARCH
+
+LATE ACCEPTANCE
+
+PATH RELINKING
+
+Cada uma funciona melhor em diferentes fases da busca.
+
+3. Problema resolvido
+
+Heurísticas têm comportamentos diferentes:
+
+early search → exploração
+mid search → intensificação
+late search → refinamento
+
+Uma estratégia fixa raramente é ótima.
+
+A Hyper-Heuristic aprende automaticamente:
+
+quando usar cada heurística
+4. Estrutura da Learning Hyper-Heuristic
+
+Arquitetura típica:
+
+Learning Hyper-Heuristic
+│
+├ SearchStateAnalyzer
+│
+├ FeatureExtractor
+│
+├ HeuristicPool
+│
+├ HeuristicScoreTable
+│
+├ HeuristicSelector
+│
+└ LearningStrategy
+5. Feature Extraction
+
+A decisão depende do estado da busca.
+
+Exemplo de features:
+
+conflicts
+soft penalty
+entropy
+diversity
+stagnation
+iteration
+
+Classe:
+
+class SearchStateFeatures
+{
+    public function __construct(
+        public int $hardConflicts,
+        public int $softConflicts,
+        public float $entropy,
+        public float $diversity,
+        public int $stagnation
+    ) {}
+}
+6. Pool de heurísticas
+
+Interface comum:
+
+interface HeuristicInterface
+{
+    public function apply(Cromossomo $solution): Cromossomo;
+
+    public function name(): string;
+}
+
+Exemplos:
+
+SwapHeuristic
+KempeHeuristic
+EjectionChainHeuristic
+ConflictDestroyLNS
+ClusterDestroyLNS
+LateAcceptanceSearch
+
+Pool:
+
+class HeuristicPool
+{
+    private array $heuristics = [];
+
+    public function add(HeuristicInterface $h): void
+    {
+        $this->heuristics[] = $h;
+    }
+
+    public function all(): array
+    {
+        return $this->heuristics;
+    }
+}
+7. Score table
+
+Cada heurística possui uma pontuação adaptativa.
+
+heuristic → score
+
+Classe:
+
+class HeuristicScoreTable
+{
+    private array $scores = [];
+
+    public function initialize(array $heuristics): void
+    {
+        foreach ($heuristics as $h)
+        {
+            $this->scores[$h->name()] = 1.0;
+        }
+    }
+
+    public function score(string $name): float
+    {
+        return $this->scores[$name];
+    }
+
+    public function update(string $name, float $reward): void
+    {
+        $alpha = 0.1;
+
+        $this->scores[$name] += $alpha * $reward;
+
+        $this->scores[$name] = max(0.01, $this->scores[$name]);
+    }
+
+    public function all(): array
+    {
+        return $this->scores;
+    }
+}
+8. Heuristic selector
+
+Seleção probabilística (roulette wheel).
+
+class HeuristicSelector
+{
+    public function select(array $heuristics, array $scores)
+    {
+        $sum = array_sum($scores);
+
+        $r = mt_rand() / mt_getrandmax() * $sum;
+
+        $acc = 0;
+
+        foreach ($heuristics as $h)
+        {
+            $acc += $scores[$h->name()];
+
+            if ($r <= $acc)
+            {
+                return $h;
+            }
+        }
+
+        return $heuristics[0];
+    }
+}
+9. Learning rule
+
+Após aplicar uma heurística:
+
+reward = fitness_new − fitness_old
+
+Atualizamos o score.
+
+$score = score + α * reward
+10. Exploration vs exploitation
+
+Sem exploração o sistema converge cedo.
+
+Estratégia comum:
+
+epsilon-greedy
+
+10% das vezes:
+
+heurística aleatória
+
+Classe:
+
+class ExplorationPolicy
+{
+    public function choose(array $heuristics)
+    {
+        if (mt_rand()/mt_getrandmax() < 0.1)
+        {
+            return $heuristics[array_rand($heuristics)];
+        }
+
+        return null;
+    }
+}
+11. Learning Hyper-Heuristic Engine
+
+Motor principal.
+
+class LearningHyperHeuristic
+{
+    public function __construct(
+        private HeuristicPool $pool,
+        private HeuristicScoreTable $scores,
+        private HeuristicSelector $selector
+    ){}
+}
+Escolher heurística
+public function choose(): HeuristicInterface
+{
+    return $this->selector->select(
+        $this->pool->all(),
+        $this->scores->all()
+    );
+}
+Atualizar aprendizado
+public function record(
+    HeuristicInterface $h,
+    float $reward
+): void {
+
+    $this->scores->update(
+        $h->name(),
+        $reward
+    );
+}
+12. Uso no solver
+
+Pipeline:
+
+current_solution
+        ↓
+HyperHeuristic.choose()
+        ↓
+heuristic.apply()
+        ↓
+fitness evaluation
+        ↓
+HyperHeuristic.record()
+
+Código:
+
+$heuristic = $hyper->choose();
+
+$before = $solution->fitness();
+
+$new = $heuristic->apply($solution);
+
+$after = $new->fitness();
+
+$reward = $after - $before;
+
+$hyper->record($heuristic,$reward);
+13. Versão avançada usada em competições
+
+Os melhores solvers usam contextual hyper-heuristics.
+
+A função aprendida é:
+
+score(heuristic | state_features)
+
+Exemplo:
+
+high conflicts → LNS
+medium conflicts → Kempe
+low conflicts → swap
+14. Multi-armed bandit
+
+Alguns solvers usam UCB1.
+
+Equação:
+
+UCB_i = μ_i + sqrt( (2 ln N) / n_i )
+
+onde
+
+μ_i = recompensa média
+n_i = número de execuções
+N = total de execuções
+
+Isso equilibra:
+
+exploração
+exploração
+15. Pipeline completo de um solver campeão
+GA Population
+      ↓
+Island Model
+      ↓
+Hyper-Heuristic Engine
+      ↓
+Move Learning Engine
+      ↓
+Candidate Move Graph
+      ↓
+Delta Evaluation
+      ↓
+Local Search / LNS
+16. Benefício real
+
+Sem hyper-heuristic:
+
+configuração fixa
+
+Com hyper-heuristic:
+
+solver se adapta automaticamente ao problema
+
+Resultados típicos:
+
++15% a +35% melhoria
+
+em competições.
+
+17. Combinação usada nos melhores solvers
+
+Os solvers mais fortes combinam:
+
+Hyper-Heuristic
+Move Learning
+ALNS
+Reactive Tabu
+Late Acceptance
+Large Step Markov Chains

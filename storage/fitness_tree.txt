@@ -1,5 +1,0 @@
-Fitness
-├── FitnessEvaluator.php
-├── FitnessResult.php
-├── FitnessRuleInterface.php
-└── FitnessWeights.php

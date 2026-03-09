@@ -1,0 +1,381 @@
+O Move Learning Engine (MLE) é uma camada de aprendizado online de heurísticas usada em alguns dos melhores solvers de timetabling (especialmente nos que combinam LNS + Local Search + Hyper-heuristics).
+A ideia é simples e poderosa:
+
+O solver aprende quais tipos de movimentos funcionam melhor em cada situação do estado da solução.
+
+Isso transforma o solver de heurístico estático → heurístico adaptativo.
+
+1. Problema que o Move Learning resolve
+
+Em timetabling existem milhares de possíveis movimentos:
+
+swap lessons
+move lesson
+kempe chain
+ejection chain
+block shift
+ruin-recreate
+
+Mas:
+
+nem todos funcionam bem em todos os momentos da busca
+
+Exemplo real:
+
+early search → large moves funcionam melhor
+late search → micro adjustments funcionam melhor
+
+Sem aprendizado:
+
+probabilidade fixa
+
+Com Move Learning:
+
+probabilidade adaptativa baseada em experiência
+2. Ideia central
+
+Cada movimento gera uma experiência:
+
+(state_features, move_type) → improvement
+
+O solver aprende uma função:
+
+score(move_type | state)
+3. Arquitetura geral
+Move Learning Engine
+│
+├ FeatureExtractor
+│
+├ MoveScoreTable
+│
+├ ExperienceMemory
+│
+├ MovePredictor
+│
+└ ExplorationStrategy
+4. FeatureExtractor
+
+Extrai características do estado da solução.
+
+Exemplo:
+
+conflict_count
+entropy
+diversity
+hard violations
+soft violations
+iteration phase
+
+Classe:
+
+class SearchStateFeatures
+{
+    public function __construct(
+        public int $hardConflicts,
+        public int $softConflicts,
+        public float $entropy,
+        public float $diversity,
+        public int $iteration
+    ) {}
+}
+5. MoveType
+
+Cada movimento possui um tipo.
+
+MOVE_LESSON
+SWAP
+KEMPE_CHAIN
+EJECTION_CHAIN
+LNS_REBUILD
+
+Classe:
+
+enum MoveType : string
+{
+    case MOVE = 'move';
+    case SWAP = 'swap';
+    case KEMPE = 'kempe';
+    case EJECTION = 'ejection';
+    case LNS = 'lns';
+}
+6. ExperienceMemory
+
+Armazena experiências recentes.
+
+(state, move_type, improvement)
+
+Classe:
+
+class MoveExperience
+{
+    public function __construct(
+        public MoveType $type,
+        public float $improvement,
+        public int $iteration
+    ) {}
+}
+
+Memória:
+
+class ExperienceMemory
+{
+    private array $experiences = [];
+
+    public function add(MoveExperience $exp): void
+    {
+        $this->experiences[] = $exp;
+    }
+
+    public function recent(int $limit = 500): array
+    {
+        return array_slice($this->experiences,-$limit);
+    }
+}
+7. MoveScoreTable
+
+Tabela de aprendizado simples.
+
+MoveType → score
+
+Inicialmente:
+
+MOVE = 1.0
+SWAP = 1.0
+KEMPE = 1.0
+EJECTION = 1.0
+
+Classe:
+
+class MoveScoreTable
+{
+    private array $scores = [];
+
+    public function __construct()
+    {
+        foreach (MoveType::cases() as $type)
+        {
+            $this->scores[$type->value] = 1.0;
+        }
+    }
+
+    public function score(MoveType $type): float
+    {
+        return $this->scores[$type->value];
+    }
+}
+8. Atualização baseada em recompensa
+
+Após executar um movimento:
+
+improvement = newFitness - oldFitness
+
+Atualizamos:
+
+score = score + α * improvement
+
+Classe:
+
+public function update(MoveType $type,float $reward): void
+{
+    $alpha = 0.1;
+
+    $this->scores[$type->value] += $alpha * $reward;
+
+    $this->scores[$type->value] = max(
+        0.01,
+        $this->scores[$type->value]
+    );
+}
+9. MovePredictor
+
+Escolhe o próximo tipo de movimento.
+
+Usa roulette wheel.
+
+class MovePredictor
+{
+    public function select(array $scores): MoveType
+    {
+        $sum = array_sum($scores);
+
+        $r = mt_rand()/mt_getrandmax() * $sum;
+
+        $acc = 0;
+
+        foreach ($scores as $type => $score)
+        {
+            $acc += $score;
+
+            if ($r <= $acc)
+                return MoveType::from($type);
+        }
+
+        return MoveType::MOVE;
+    }
+}
+10. Exploration Strategy
+
+Sem exploração o solver converge cedo.
+
+Usa epsilon-greedy.
+
+ε = 0.1
+
+10% das vezes:
+
+move aleatório
+
+Classe:
+
+class ExplorationStrategy
+{
+    public function choose(
+        array $scores
+    ): MoveType {
+
+        if (mt_rand()/mt_getrandmax() < 0.1)
+        {
+            return MoveType::cases()[array_rand(MoveType::cases())];
+        }
+
+        return (new MovePredictor())->select($scores);
+    }
+}
+11. MoveLearningEngine
+
+Motor completo.
+
+class MoveLearningEngine
+{
+    public function __construct(
+        private MoveScoreTable $scores,
+        private ExperienceMemory $memory,
+        private ExplorationStrategy $exploration
+    ) {}
+}
+Escolher movimento
+public function chooseMove(): MoveType
+{
+    return $this->exploration
+        ->choose($this->scores->all());
+}
+Registrar experiência
+public function record(
+    MoveType $type,
+    float $improvement
+): void {
+
+    $this->memory->add(
+        new MoveExperience($type,$improvement,time())
+    );
+
+    $this->scores->update($type,$improvement);
+}
+12. Integração com MoveEngine
+MoveEngine
+   ↓
+MoveLearningEngine
+
+Exemplo:
+
+$type = $learning->chooseMove();
+
+$move = $generator->generate($type);
+
+$delta = $deltaEvaluator->evaluate($move);
+
+if ($delta > 0)
+{
+    $executor->apply($move);
+}
+
+$learning->record($type,$delta);
+13. Evolução usada por solvers campeões
+
+Eles não usam apenas score simples.
+
+Usam contextual learning.
+
+(state_features, move_type) → expected reward
+
+Exemplo:
+
+late search → kempe moves
+early search → large destroy
+14. Implementação avançada
+
+Tabela:
+
+Feature Bucket × MoveType
+
+Exemplo:
+
+conflicts_high → KEMPE
+conflicts_low → SWAP
+15. Versão usada em competições
+
+Eles usam Multi-armed bandit.
+
+Algoritmo:
+
+UCB1
+
+Equação:
+
+score_i = mean_i + sqrt( (2 ln N) / n_i )
+
+onde:
+
+mean_i = recompensa média
+n_i = número de execuções
+N = total de movimentos
+16. Benefício real
+
+Sem learning:
+
+moves úteis ≈ 20–30%
+
+Com learning:
+
+moves úteis ≈ 70–85%
+17. Interação com ALNS
+
+Move learning também controla:
+
+destroy operators
+repair operators
+
+Exemplo:
+
+cluster destroy
+conflict destroy
+random destroy
+
+O learning aprende qual funciona melhor.
+
+18. Pipeline final do solver
+
+Um solver campeão fica assim:
+
+Population GA
+      ↓
+Island Model
+      ↓
+Local Search
+      ↓
+Move Engine
+      ↓
+Candidate Move Graph
+      ↓
+Move Learning Engine
+      ↓
+Delta Evaluation
+19. Resultado prático
+
+Esse conjunto permite:
+
+10^7 movimentos avaliados
+
+em minutos.
+
+Por isso solvers ITC conseguem explorar neighborhoods gigantes.

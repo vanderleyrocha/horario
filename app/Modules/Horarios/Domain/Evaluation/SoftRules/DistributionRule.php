@@ -10,15 +10,9 @@ final class DistributionRule implements SoftRuleInterface {
     public function evaluate(EvaluationContext $context): RuleResult {
         $penalty = 0.0;
 
-        $alocacoes = $context->alocacoesPorAula();
+        $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
 
-        foreach ($alocacoes as $aulaId => $slots) {
-
-            $dias = [];
-
-            foreach ($slots as $slot) {
-                $dias[$slot['dia']] = true;
-            }
+        foreach ($slotsPorAula as $aulaId => $dias) {
 
             if (count($dias) < 2) {
                 $penalty++;

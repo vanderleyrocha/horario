@@ -1,0 +1,328 @@
+A seguir estão técnicas extremamente avançadas usadas em solvers que ficaram no top-5 das competições ITC (International Timetabling Competition).
+Elas são pouco implementadas fora da academia porque exigem arquitetura sofisticada, avaliação incremental e controle adaptativo do search.
+
+Vou explicar o princípio matemático + como integrar na sua arquitetura atual (GA + ALNS + Island Model).
+
+1. Large Step Markov Chains (LSMC)
+
+Essa técnica apareceu em solvers vencedores do ITC-2007 e ITC-2019.
+
+Ela combina:
+
+Simulated Annealing
++
+Large Neighborhood Search
+
+A ideia é que cada passo da cadeia de Markov não é um pequeno movimento, mas sim um movimento grande (LNS).
+
+Estrutura do algoritmo
+
+Estado:
+
+S = solução atual
+
+Iteração:
+
+1 destroy(S)
+2 repair → S'
+3 Δ = fitness(S') − fitness(S)
+
+Aceitação probabilística:
+
+if Δ > 0
+    accept
+else
+    accept with probability exp(Δ / T)
+
+Temperatura:
+
+T(t) = T0 * α^t
+
+Onde:
+
+α ≈ 0.999
+Integração com sua arquitetura
+
+No seu solver:
+
+GA
+  ↓
+ALNS
+  ↓
+LSMC acceptance
+
+Ou seja:
+
+AdaptiveLargeNeighborhoodSearch
+      +
+SimulatedAnnealingAcceptance
+2. Strategic Oscillation
+
+Usado em Tabu Search avançado.
+
+A ideia é oscilar entre regiões viáveis e inviáveis.
+
+Motivação:
+
+algoritmos ficam presos perto da fronteira de viabilidade
+Estratégia
+
+Permitir violações controladas de hard constraints.
+
+Penalidade dinâmica:
+
+fitness =
+soft_penalty
++
+λ * hard_penalty
+
+Onde λ muda dinamicamente.
+
+Oscilação
+
+Quando:
+
+hard_penalty = 0
+
+diminuímos λ.
+
+Quando:
+
+hard_penalty alto
+
+aumentamos λ.
+
+Benefício
+
+Explora regiões que:
+
+solvers tradicionais não visitam
+3. Path Relinking
+
+Muito usado em GRASP e Scatter Search.
+
+A ideia é explorar o caminho entre duas soluções boas.
+
+Suponha:
+
+A = solução atual
+B = elite solution
+
+Construímos caminho:
+
+A → B
+
+Movendo genes gradualmente.
+
+Exemplo
+
+Diferenças:
+
+A:
+Aula1 = Mon2
+Aula2 = Tue3
+
+B:
+Aula1 = Wed2
+Aula2 = Tue3
+
+Path:
+
+step1: move Aula1
+
+Avaliar cada estado intermediário.
+
+Integração
+
+Elite pool:
+
+elite_set = best k solutions
+
+Quando GA estagna:
+
+select elite
+apply path relinking
+4. Late Acceptance Hill Climbing (LAHC)
+
+Muito usado em timetabling.
+
+É uma alternativa ao simulated annealing.
+
+Em vez de comparar com solução atual, compara com solução antiga.
+
+Estrutura
+
+Buffer circular:
+
+fitness_history[L]
+
+Regra de aceitação:
+
+accept if:
+
+fitness(new) ≥ fitness_history[t − L]
+Exemplo
+L = 100
+
+Isso permite aceitar soluções piores temporariamente.
+
+Benefícios
+escape local minima
+sem parâmetros difíceis
+Pseudocódigo
+for iteration t
+
+    candidate = move(solution)
+
+    if fitness(candidate) >= history[t mod L]
+        accept
+
+    history[t mod L] = fitness(solution)
+5. Reactive Tabu Search
+
+Tabu Search adaptativo.
+
+Tabu list:
+
+recent moves
+
+Proíbe reverter movimentos.
+
+Estrutura
+
+Tabu list:
+
+tabu(move) = tenure
+Reatividade
+
+Se detectar ciclos:
+
+increase tabu tenure
+
+Se busca estagnada:
+
+decrease tenure
+Integração com timetabling
+
+Movimentos tabu:
+
+lesson ↔ slot
+teacher ↔ slot
+class ↔ slot
+6. Very Large Neighborhood Search (VLNS)
+
+Extensão extrema do LNS.
+
+Em vez de remover 10-20% das aulas:
+
+remove 30-60%
+
+Mas a reconstrução usa modelos mais inteligentes.
+
+Exemplos:
+
+matching algorithms
+min cost flow
+constraint propagation
+Exemplo
+
+Problema transformado em fluxo mínimo:
+
+lessons → slots
+
+Custo:
+
+penalty
+
+Resolver:
+
+min-cost bipartite matching
+7. Combinando tudo (arquitetura real)
+
+Solver top-tier costuma usar:
+
+GA
+ ↓
+ALNS
+ ↓
+LSMC acceptance
+ ↓
+Local search
+ ↓
+Path relinking
+ ↓
+Tabu intensification
+8. Arquitetura final de solver nível ITC
+Hybrid Evolutionary Timetabling Solver
+│
+├── Population Layer
+│   └── Genetic Algorithm (Island Model)
+│
+├── Intensification Layer
+│   ├── ALNS
+│   │   ├── destroy
+│   │   └── repair
+│   │
+│   ├── Local Search
+│   │   ├── Kempe Chains
+│   │   ├── Swap
+│   │   └── Ejection Chains
+│   │
+│   └── VLNS
+│
+├── Acceptance Layer
+│   ├── Simulated Annealing
+│   └── Late Acceptance HC
+│
+├── Elite Exploration
+│   └── Path Relinking
+│
+├── Intensification Memory
+│   └── Reactive Tabu Search
+│
+└── Learning Layer
+    └── Hyper-heuristics
+9. Pipeline completo do solver
+initialize population
+
+while not terminated
+
+    evolve GA
+
+    for best individuals
+
+        apply ALNS
+        apply LSMC acceptance
+        apply local search
+        apply tabu intensification
+
+    update hyper-heuristics
+
+    occasionally apply path relinking
+10. Performance esperada
+
+Com essas técnicas:
+
+Problemas típicos:
+
+500–2000 aulas
+
+Tempo:
+
+30s – 10min
+
+Qualidade:
+
+near optimal
+11. O que separa solvers ITC campeões
+
+Três coisas:
+
+1️⃣ avaliação incremental ultra rápida
+O(k)
+2️⃣ operadores inteligentes
+kempe
+ejection chains
+LNS
+3️⃣ controle adaptativo
+hyper heuristics

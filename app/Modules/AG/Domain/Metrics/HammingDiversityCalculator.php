@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Metrics;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
-use App\Modules\AG\Domain\Core\Entities\Gene;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Gene;
 
 final class HammingDiversityCalculator implements DiversityCalculatorInterface {
 

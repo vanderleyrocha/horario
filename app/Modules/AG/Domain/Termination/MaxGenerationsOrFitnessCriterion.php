@@ -2,10 +2,10 @@
 
 namespace App\Modules\AG\Domain\Termination;
 
-use App\Modules\AG\Domain\Core\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class MaxGenerationsOrFitnessCriterion
-implements TerminationCriterionInterface {
+final class MaxGenerationsOrFitnessCriterion implements TerminationCriterionInterface {
+
     private int $generationsWithoutImprovement = 0;
     private float $bestFitnessSeen = -INF; // Maximização
 
@@ -19,10 +19,7 @@ implements TerminationCriterionInterface {
     /**
      * @param Cromossomo[] $population
      */
-    public function shouldTerminate(
-        int $generation,
-        array $population
-    ): bool {
+    public function shouldTerminate(int $generation, array $population): bool {
 
         /* ============================================================
          | 1️⃣ Limite absoluto de gerações
@@ -78,5 +75,9 @@ implements TerminationCriterionInterface {
 
     public function getGenerationsWithoutImprovement(): int {
         return $this->generationsWithoutImprovement;
+    }
+
+    public function getMaxGenerations(): ?int {
+        return $this->maxGenerations;
     }
 }

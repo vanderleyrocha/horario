@@ -10,18 +10,17 @@ final class ConsecutiveLessonRule implements SoftRuleInterface {
     public function evaluate(EvaluationContext $context): RuleResult {
         $penalty = 0.0;
 
-        $alocacoes = $context->alocacoesPorAula();
+        $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
 
-        foreach ($alocacoes as $aulaId => $slots) {
+        foreach ($slotsPorAula as $aulaId => $dias) {
 
-            for ($i = 1; $i < count($slots); $i++) {
+            foreach ($dias as $dia => $periodos) {
 
-                $anterior = $slots[$i - 1];
-                $atual = $slots[$i];
+                sort($periodos);
 
-                if ($anterior['dia'] === $atual['dia']) {
+                for ($i = 1; $i < count($periodos); $i++) {
 
-                    if ($atual['periodo'] - $anterior['periodo'] !== 1) {
+                    if ($periodos[$i] - $periodos[$i - 1] !== 1) {
                         $penalty++;
                     }
                 }
