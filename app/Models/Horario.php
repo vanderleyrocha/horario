@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/Horario.php - Adicionar este método para evitar conflito
 
 namespace App\Models;
@@ -7,11 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Horario extends Model {
-
+class Horario extends Model
+{
     use HasFactory;
 
     protected $table = 'horarios';
@@ -55,7 +55,8 @@ class Horario extends Model {
     ];
 
 
-    protected static function booted() {
+    protected static function booted()
+    {
         static::creating(function ($horario) {
             if (empty($horario->configuracao)) {
                 $horario->configuracao = [
@@ -69,50 +70,61 @@ class Horario extends Model {
     }
 
     // Relacionamentos
-    public function alocacoes(): HasMany {
+    public function alocacoes(): HasMany
+    {
         return $this->hasMany(Alocacao::class);
     }
 
     // Usar um nome diferente para o relacionamento para evitar conflito
-    public function configuracaoHorario(): HasOne {
+    public function configuracaoHorario(): HasOne
+    {
         return $this->hasOne(ConfiguracaoHorario::class);
     }
 
-    public function aulas(): HasMany {
+    public function aulas(): HasMany
+    {
         return $this->hasMany(Aula::class);
     }
 
-    public function restricoes(): HasMany {
+    public function restricoes(): HasMany
+    {
         return $this->hasMany(RestricaoTempo::class);
     }
 
-    public function criadoPor(): BelongsTo {
+    public function criadoPor(): BelongsTo
+    {
         return $this->belongsTo(User::class, 'criado_por');
     }
 
-    public function ativadoPor(): BelongsTo {
+    public function ativadoPor(): BelongsTo
+    {
         return $this->belongsTo(User::class, 'ativado_por');
     }
 
     // Scopes
-    public function scopeAtivo($query) {
+    public function scopeAtivo($query)
+    {
         return $query->where('status', 'ativo');
     }
 
-    public function scopePorAno($query, $ano) {
+    public function scopePorAno($query, $ano)
+    {
         return $query->where('ano', $ano);
     }
 
-    public function scopePorSemestre($query, $semestre) {
+    public function scopePorSemestre($query, $semestre)
+    {
         return $query->where('semestre', $semestre);
     }
 
-    public function execucoes() {
-        return $this->hasMany(ExecucaoAlgoritmo::class);
+    public function executions(): HasMany
+    {
+        return $this->hasMany(ScheduleExecution::class);
     }
 
-    public function execucaoAtiva() {
-        return $this->hasOne(ExecucaoAlgoritmo::class)
-            ->where('ativa', true);
+    public function lastExecution(): HasOne
+    {
+        return $this->hasOne(ScheduleExecution::class)
+            ->latestOfMany();
     }
 }

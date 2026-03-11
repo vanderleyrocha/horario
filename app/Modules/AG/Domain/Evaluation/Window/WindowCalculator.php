@@ -2,16 +2,19 @@
 
 namespace App\Modules\AG\Domain\Evaluation\Window;
 
-class WindowCalculator {
-    public static function compute(array $periods): int {
+final class WindowCalculator
+{
+    public static function compute(array $periods): int
+    {
         if (empty($periods)) {
             return 0;
         }
 
+        $periods = array_unique($periods);
+
         sort($periods);
 
         $windows = 0;
-
         $prev = null;
 
         foreach ($periods as $period) {

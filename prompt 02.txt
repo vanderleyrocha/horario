@@ -1,3 +1,10 @@
+Analise o prompt abaixo, a estrutura de pastas e arquivos existentes e verifique o que já foi implementado e o que ainda falta implementar, onde podemos evoluir, tanto em melhorias no motor do AG, como na telemetria da execução e a comunicação com o frontend e gere um novo prompt para darmos continuidade no desenvolvimento.
+
+No final, vou deixar o código atual de alguns arquivos que fiz algumas correções para serem também avaliados.
+
+vou também listar arquivos que voce propos, mas que ainda não foram escritos e nem incorporados ao projeto e pra finalizar, deixarei o log de processamento que interrompi depois de um tempo de espera.
+
+
 PROMPT PARA CONTINUAR O DESENVOLVIMENTO
 CONTEXTO DO PROJETO
 
@@ -422,3 +429,1254 @@ edição drag-and-drop de horários
 logs científicos de execução
 
 O objetivo é transformar o sistema em um solver científico completo de geração de horários.
+
+
+app\Jobs\GerarHorarioJob.php
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Horario;
+use App\Modules\AG\Infrastructure\Progress\CacheProgressReporter;
+use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
+use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\Horarios\Application\GenerateScheduleAction;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+
+class GerarHorarioJob implements ShouldQueue
+{
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
+
+    // Timeout expandido para garantir que execuções longas do GA não sejam cortadas pela fila
+    public $timeout = 3600;
+
+    public function __construct(public Horario $horario, public array $parametros // Recebe configurações do Livewire (ex: pop_size, geracoes)
+    ) {
+    }
+
+    public function handle(): void
+    {
+
+        ini_set('memory_limit', '-1');
+        set_time_limit(0);
+
+        Log::info("Job de geração de horário iniciado [ID: {$this->horario->id}]");
+
+        // 1. Instancia os gravadores individuais
+        $cacheReporter = new CacheProgressReporter($this->horario->id);
+        $dbRecorder = new ExecutionMetricsRecorder();
+
+        try {
+            // 2. Inicia a execução no banco de dados para gerar o execution_id
+            $dbRecorder->startExecution($this->horario->id, $this->parametros['configuracao']['populacao'] ?? 120, // Default 120 (Island Model)
+                $this->parametros['configuracao']['geracoes'] ?? 500, $this->parametros['configuracao'] ?? []);
+
+            // 3. Cria a ponte unificada
+            $progressBridge = new CacheAndDbProgressReporter($cacheReporter, $dbRecorder);
+
+            // 4. Executa a Action injetando a nossa ponte
+            $action = app(GenerateScheduleAction::class);
+            $result = $action->execute($this->horario, $progressBridge);
+
+            // 5. Finaliza as execuções com sucesso
+            $bestFitness = $result['best_fitness'] ?? 0.0;
+            $dbRecorder->finishExecution($bestFitness);
+            $cacheReporter->reportCompleted($bestFitness);
+            Log::info("Job de geração de horário finalizado com sucesso [ID: {$this->horario->id}]");
+
+        } catch (\Throwable $e) {
+            // Em caso de quebra (TimeOut, OutOfMemory, etc), forçamos o flush do que já evoluiu
+            if (isset($dbRecorder)) {
+                $dbRecorder->flush();
+            }
+
+            Log::error("Erro na geração de horário [ID: {$this->horario->id}]: " . $e->getMessage());
+            throw $e;
+        }
+    }
+}
+
+
+app\Modules\AG\Infrastructure\Progress\CacheProgressReporter.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\AG\Infrastructure\Progress;
+
+use Illuminate\Support\Facades\Cache;
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use App\Modules\AG\Support\AGError;
+
+final class CacheProgressReporter implements ProgressReporterInterface {
+    private string $cacheKey;
+    private int $ttlMinutes;
+
+    public function __construct(int $horarioId, int $ttlMinutes = 30) {
+        $this->cacheKey = "horario_geracao_{$horarioId}";
+        $this->ttlMinutes = $ttlMinutes;
+    }
+
+    public function report(array $data): void {
+        $payload = array_merge(['timestamp' => now()->toDateTimeString()], $data);
+
+        Cache::put(
+            $this->cacheKey,
+            $payload,
+            now()->addMinutes($this->ttlMinutes)
+        );
+    }
+
+    public function reportError(AGError $error): void {
+        Cache::put(
+            $this->cacheKey,
+            [
+                'status' => 'erro',
+                'erro' => $error->toArray(),
+                'timestamp' => now()->toDateTimeString(),
+            ],
+            now()->addMinutes($this->ttlMinutes)
+        );
+    }
+
+    public function reportCompleted(float $bestFitness): void {
+        Cache::put(
+            $this->cacheKey,
+            [
+                'status' => 'concluido',
+                'percentual' => 100,
+                'melhor_fitness' => round($bestFitness, 4),
+                'timestamp' => now()->toDateTimeString(),
+            ],
+            now()->addMinutes($this->ttlMinutes)
+        );
+    }
+
+    public function clear(): void {
+        Cache::forget($this->cacheKey);
+    }
+}
+
+
+app\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder.php
+<?php
+
+namespace App\Modules\AG\Infrastructure\Metrics;
+
+use Illuminate\Support\Facades\DB;
+use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
+
+class ExecutionMetricsRecorder
+{
+    private int $executionId;
+
+    private array $buffer = [];
+
+    private int $batchSize = 25;
+
+    public function startExecution(int $scheduleId, int $populationSize, int $generations, array $parameters): int
+    {
+
+        $this->executionId = DB::table('schedule_executions')
+            ->insertGetId([
+                'schedule_id' => $scheduleId,
+                'start_time' => now(),
+                'population_size' => $populationSize,
+                'generations' => $generations,
+                'parameters_json' => json_encode($parameters),
+                'created_at' => now()
+            ]);
+
+        return $this->executionId;
+    }
+
+    public function recordGeneration(GenerationMetrics $metrics): void
+    {
+
+        $this->buffer[] = [
+            'execution_id' => $this->executionId,
+            'generation' => $metrics->generation,
+            'best_fitness' => $metrics->bestFitness,
+            'avg_fitness' => $metrics->avgFitness,
+            'variance' => $metrics->variance,
+            'diversity' => $metrics->diversity,
+            'entropy' => $metrics->entropy,
+            'mutation_rate' => $metrics->mutationRate,
+            'stagnation' => $metrics->stagnation,
+            'created_at' => now()
+        ];
+
+        if (count($this->buffer) >= $this->batchSize) {
+            $this->flush();
+        }
+    }
+
+    public function flush(): void
+    {
+        if (empty($this->buffer)) {
+            return;
+        }
+
+        DB::table('schedule_generation_metrics')
+            ->insert($this->buffer);
+
+        $this->buffer = [];
+    }
+
+    public function finishExecution(float $bestFitness): void
+    {
+        $this->flush();
+
+        DB::table('schedule_executions')
+            ->where('id', $this->executionId)
+            ->update([
+                'best_fitness' => $bestFitness,
+                'end_time' => now(),
+                'updated_at' => now()
+            ]);
+    }
+}
+
+
+app\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\AG\Infrastructure\Progress;
+
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
+use App\Modules\AG\Support\AGError;
+
+final class CacheAndDbProgressReporter implements ProgressReporterInterface
+{
+    public function __construct(private CacheProgressReporter $cacheReporter, private ExecutionMetricsRecorder $dbRecorder)
+    {
+    }
+
+    public function report(array $data): void
+    {
+        // 1. Atualiza o Cache em tempo real para o Livewire
+        $this->cacheReporter->report($data);
+
+        // 2. Filtra apenas os eventos de evolução para persistência científica
+        $isEvolvingPhase = isset($data['phase']) && in_array($data['phase'], ['evolving', 'alns_intensification']);
+
+        if ($isEvolvingPhase && isset($data['generation'])) {
+            $metrics = new GenerationMetrics(generation: (int) $data['generation'], bestFitness: (float) $data['best_fitness'], avgFitness: (float) $data['avg_fitness'], variance: (float) ($data['variance'] ?? 0.0), // Se não existir no DTO ainda, usamos fallback
+                diversity: (float) $data['diversity'], entropy: (float) $data['entropy'], mutationRate: (float) $data['mutation_rate'], stagnation: (int) $data['stagnation'], landscapeState: $data['landscape_state'] ?? null);
+
+            // O dbRecorder gerencia o buffer internamente (salvando a cada 25 gerações)
+            $this->dbRecorder->recordGeneration($metrics);
+        }
+    }
+
+    // Como a interface pode prever erros, garantimos que o buffer do DB seja salvo em caso de falha
+    public function reportError(AGError $error): void
+    {
+        $this->cacheReporter->reportError($error);
+        $this->dbRecorder->flush();
+    }
+}
+
+
+app\Modules\Horarios\Application\GenerateScheduleAction.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Horarios\Application;
+
+use App\Models\Horario;
+use App\Modules\AG\Application\RunGeneticAlgorithm;
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use Illuminate\Support\Facades\Log;
+
+final class GenerateScheduleAction
+{
+    public function __construct(private RunGeneticAlgorithm $runner, private PersistBestSolutionService $persist, private ScheduleExecutionRecorder $recorder)
+    {
+    }
+
+    public function execute(Horario $horario, ?ProgressReporterInterface $progress = null): array
+    {
+        Log::info("GenerateScheduleAction::execute() iniciado");
+        $result = $this->runner->execute($horario, $progress);
+
+        $this->persist->persist($horario, $result['best']);
+
+        $this->recorder->record($horario, $result);
+
+        return $result;
+    }
+}
+
+
+app\Modules\AG\Application\RunGeneticAlgorithm.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\AG\Application;
+
+use App\Models\Horario;
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use App\Modules\AG\Domain\Evolution\IslandModel\BestIndividualsMigration;
+use App\Modules\AG\Domain\Evolution\IslandModel\Island;
+use App\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine;
+use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
+use App\Modules\AG\Domain\Fitness\FitnessWeights;
+use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
+use App\Modules\AG\Domain\HyperHeuristic\OperatorPerformanceTracker;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
+use App\Modules\AG\Domain\Intensification\LNS\Conflict\ConflictDetector;
+use App\Modules\AG\Domain\Intensification\LNS\Destroy\ClusterDestroyOperator;
+use App\Modules\AG\Domain\Intensification\LNS\Destroy\ConflictDestroyOperator;
+use App\Modules\AG\Domain\Intensification\LNS\Destroy\RandomDestroyOperator;
+use App\Modules\AG\Domain\Intensification\LNS\Repair\LNSRepairAdapter;
+use App\Modules\AG\Domain\Intensification\LNS\Repair\RegretInsertionOperator;
+use App\Modules\AG\Domain\Metrics\HammingDiversityCalculator;
+use App\Modules\AG\Domain\Metrics\MetricsRecorder;
+use App\Modules\AG\Domain\Metrics\PopulationEntropyCalculator;
+use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
+use App\Modules\AG\Domain\Operators\Crossover\ConflictGraphCrossoverOperator;
+use App\Modules\AG\Domain\Operators\Elitism\TopEliteStrategy;
+use App\Modules\AG\Domain\Operators\Mutation\AdaptiveDiversityMutation;
+use App\Modules\AG\Domain\Operators\Mutation\ConflictGuidedMutation;
+use App\Modules\AG\Domain\Operators\Mutation\GeneSwapMutation;
+use App\Modules\AG\Domain\Operators\Mutation\StructuredSwapMutation;
+use App\Modules\AG\Domain\Operators\Replacement\WorstIndividualReplacement;
+use App\Modules\AG\Domain\Operators\Selection\TournamentSelection;
+use App\Modules\AG\Domain\Termination\MaxGenerationsOrFitnessCriterion;
+use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
+use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
+use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
+use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
+use Illuminate\Support\Facades\Log;
+
+final class RunGeneticAlgorithm
+{
+    public function execute(Horario $horario, ?ProgressReporterInterface $progress = null): array
+    {
+
+        Log::info("RunGeneticAlgorithm::execute() iniciado");
+
+        /* ============================================================
+         | 1️⃣ Construção dos dados do problema
+         ============================================================ */
+
+        $dataBuilder = new ScheduleDataBuilder();
+
+        $scheduleData = $dataBuilder->build($horario);
+
+        /* ============================================================
+         | 2️⃣ Fitness
+         ============================================================ */
+
+        $fitnessEvaluator = new FitnessEvaluator(weights: FitnessWeights::default(), rules: []);
+
+        $repairOperator = new GreedyRepairOperator();
+        /* ============================================================
+         | 3️⃣ Problema específico
+         ============================================================ */
+
+        $problem = new ScheduleProblem(data: $scheduleData, contextBuilder: new EvaluationContextBuilder(), fitnessEvaluator: $fitnessEvaluator, repairOperator: $repairOperator);
+
+        /* ============================================================
+         | 4️⃣ Operadores base
+         ============================================================ */
+
+        $selection = new TournamentSelection(3);
+
+        $crossover = new ConflictGraphCrossoverOperator();
+
+        $elitism = new TopEliteStrategy(3);
+
+        $termination = new MaxGenerationsOrFitnessCriterion(maxGenerations: 500, targetFitness: 100.0, maxGenerationsWithoutImprovement: 120);
+
+        /* ============================================================
+         | 5️⃣ Configuração Island Model
+         ============================================================ */
+
+        $islandCount = 4;
+        $populationSize = 120;
+        $migrationInterval = 25;
+
+        $islandEngine = new IslandModelEngine(migrationPolicy: new BestIndividualsMigration(2), migrationInterval: $migrationInterval);
+
+        $metricsGlobal = [];
+
+        /* ============================================================
+         | 6️⃣ Criação das ilhas
+         ============================================================ */
+
+        for ($i = 0; $i < $islandCount; $i++) {
+            Log::info("Ilha {$i} iniciada");
+            $metrics = new MetricsRecorder();
+
+            $metrics->setDiversityCalculator(new HammingDiversityCalculator());
+
+            $metrics->setEntropyCalculator(new PopulationEntropyCalculator());
+
+            $mutation = new AdaptiveDiversityMutation(structured: new StructuredSwapMutation(), swap: new GeneSwapMutation(), conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6));
+
+            $tracker = new OperatorPerformanceTracker();
+
+            $hyperHeuristic = new LearningHyperHeuristicController($tracker);
+
+            $adaptiveMutation = new AdaptiveMutationController(baseRate: 0.02, amplification: 0.25, maxRate: 0.35);
+
+            $populationEvaluator = new PopulationFitnessEvaluator(problem: $problem, concurrency: config('ag.max_workers', 8));
+
+            $replacement = new WorstIndividualReplacement(2);
+
+            $conflictDetector = new ConflictDetector();
+
+            $destroyOperators = [
+                new RandomDestroyOperator(),
+                new ConflictDestroyOperator($conflictDetector),
+                new ClusterDestroyOperator()
+            ];
+
+            $repairOperators = [
+                new LNSRepairAdapter($repairOperator, $scheduleData),
+                new RegretInsertionOperator($scheduleData)
+            ];
+
+            $lns = new AdaptiveLargeNeighborhoodSearch($destroyOperators, $repairOperators);
+
+
+            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: 50);
+
+
+            $islandEngine->addIsland(new Island($i + 1, engine: $engine, populationSize: $populationSize, replacement: $replacement));
+
+            $metricsGlobal[] = $metrics;
+        }
+
+        Log::info("RunGeneticAlgorithm::execute() finalizado: Ilhas criadas com sucesso!");
+
+        /* ============================================================
+         | 7️⃣ Conexão de Telemetria e Execução Global
+         ============================================================ */
+
+        // Injeta o ProgressReporter e o primeiro MetricsRecorder para monitorar o cenário global
+        $islandEngine->setTelemetry($metricsGlobal[0], $progress);
+
+        // Roda as gerações (Agora o painel vai atualizar a cada ciclo!)
+        $best = $islandEngine->run(500);
+
+        /* ============================================================
+         | 8️⃣ Consolidação de métricas
+         ============================================================ */
+
+
+        $generationMetrics = [];
+
+        foreach ($metricsGlobal as $metrics) {
+            $generationMetrics[] = $metrics->generationData();
+        }
+
+        /* ============================================================
+         | 9️⃣ Resultado estruturado
+         ============================================================ */
+
+        return [
+            'best' => $best,
+            'best_fitness' => $best->fitness(),
+            'generation_metrics' => $generationMetrics,
+        ];
+    }
+}
+
+
+app\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\AG\Domain\Evolution\IslandModel;
+
+use App\Helpers\DateTimeHelper;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Metrics\MetricsRecorder;
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use Illuminate\Support\Facades\Log;
+
+final class IslandModelEngine
+{
+    /** @var Island[] */
+    private array $islands = [];
+
+    private ?MetricsRecorder $globalMetrics = null;
+    private ?ProgressReporterInterface $progress = null;
+
+    public function __construct(private readonly MigrationPolicyInterface $migrationPolicy, private readonly int $migrationInterval = 20)
+    {
+    }
+
+    public function addIsland(Island $island): void
+    {
+        $this->islands[] = $island;
+    }
+
+    // Método injetor para ligar o Motor ao Frontend
+    public function setTelemetry(MetricsRecorder $metrics, ProgressReporterInterface $progress): void
+    {
+        $this->globalMetrics = $metrics;
+        $this->progress = $progress;
+    }
+
+    public function run(int $generations): Cromossomo
+    {
+        foreach ($this->islands as $island) {
+            $island->initialize();
+        }
+
+        $globalBest = null;
+        Log::info("Iniciando o motor de orquestração síncrona das Ilhas!");
+
+        for ($generation = 1; $generation <= $generations; $generation++) {
+
+            $globalPopulation = [];
+
+            // 1. Evolução Sequencial (Garante a mutação real do estado)
+            foreach ($this->islands as $index => $island) {
+                $island->evolveGeneration();
+                $bestInIsland = $island->best();
+
+                if ($globalBest === null || $bestInIsland->fitness() > $globalBest->fitness()) {
+                    $globalBest = $bestInIsland;
+                }
+
+                // Agrupa as populações para cálculo estatístico científico
+                $globalPopulation = array_merge($globalPopulation, $island->population());
+            }
+
+            // 2. Migração
+            if ($generation % $this->migrationInterval === 0) {
+                $this->migrationPolicy->migrate($this->islands);
+            }
+
+            // 3. TELEMETRIA: Atualização em Tempo Real do Frontend
+            if ($this->globalMetrics && $this->progress) {
+                // Registra métricas globais (Entropia e Diversidade da meta-população)
+                $metricsDto = $this->globalMetrics->recordExtended($generation, $globalPopulation, 0.05, 0, 'Exploração Intensiva');
+
+                $this->progress->report([
+                    'phase' => 'evolving',
+                    'generation' => $metricsDto->generation,
+                    'best_fitness' => $metricsDto->bestFitness,
+                    'avg_fitness' => $metricsDto->avgFitness,
+                    'variance' => $metricsDto->variance,
+                    'diversity' => $metricsDto->diversity,
+                    'entropy' => $metricsDto->entropy,
+                    'mutation_rate' => $metricsDto->mutationRate,
+                    'stagnation' => $metricsDto->stagnation,
+                    'landscape_state' => $metricsDto->landscapeState
+                ]);
+            }
+        }
+
+        return $globalBest;
+    }
+}
+
+
+app\Modules\AG\Domain\Evolution\IslandModel\Island.php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\AG\Domain\Evolution\IslandModel;
+
+use App\Helpers\DateTimeHelper;
+use App\Modules\AG\Application\GeneticAlgorithmEngine;
+use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use Illuminate\Support\Facades\Log;
+
+final class Island
+{
+    private array $population = [];
+
+    public function __construct(private int $islandNum, private readonly GeneticAlgorithmEngine $engine, private readonly int $populationSize, private readonly ReplacementStrategyInterface $replacement)
+    {
+    }
+
+    public function initialize(): void
+    {
+        $this->population = [];
+
+        $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
+
+        Log::info("Iniciando população da ilha {$this->islandNum} com {$this->populationSize} indivíduos... Tempo decorrido = {$elapsed}");
+        for ($i = 0; $i < $this->populationSize; $i++) {
+
+            $individual = $this->engine->createIndividual();
+
+
+            $this->population[] = $individual;
+        }
+
+        $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
+
+        Log::info("População da ilha {$this->islandNum} criada com sucesso! Tempo decorrido =  = {$elapsed}");
+    }
+
+    public function evolveGeneration(): Cromossomo
+    {
+        $this->population = $this->engine->evolveGeneration($this->population, $this->populationSize);
+
+        return $this->best();
+    }
+
+    public function best(): Cromossomo
+    {
+        usort($this->population, fn ($a, $b) => $b->fitness() <=> $a->fitness());
+
+        return $this->population[0];
+    }
+
+    public function population(): array
+    {
+        return $this->population;
+    }
+
+    public function injectIndividual(Cromossomo $individual): void
+    {
+        $this->replacement->replace($this->population, $individual);
+    }
+
+    public function getislandNum(): int
+    {
+        return $this->islandNum;
+    }
+}
+
+app\Modules\AG\Domain\ConflictGraph\ConflictGraphBuilder.php tem um erro:
+<?php
+
+namespace App\Modules\AG\Domain\ConflictGraph;
+
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+
+class ConflictGraphBuilder {
+    public function build(Cromossomo $c): ConflictGraph {
+        $graph = new ConflictGraph();
+
+        foreach ($c->genes() as $gene) {
+            $graph->addNode($gene->id);
+        }
+
+        foreach ($c->genes() as $geneA) {
+
+            foreach ($c->genes() as $geneB) {
+
+                if ($geneA->id === $geneB->id) {
+                    continue;
+                }
+
+                if (
+                    $geneA->professor === $geneB->professor ||
+                    $geneA->turma === $geneB->turma
+                ) {
+
+                    $graph->addEdge($geneA->id, $geneB->id);
+                }
+            }
+        }
+
+        return $graph;
+    }
+}
+
+em  $graph->addNode($gene->id); há um acesso ao método addNode da classe ConflictGraph que não existe
+
+app\Modules\AG\Domain\ConflictGraph\ConflictGraph.php
+<?php
+
+namespace App\Modules\AG\Domain\ConflictGraph;
+
+class ConflictGraph {
+    /** @var ConflictNode[] */
+    private array $nodes = [];
+
+    public function ensureNode(int $geneId): ConflictNode {
+        if (!isset($this->nodes[$geneId])) {
+            $this->nodes[$geneId] = new ConflictNode($geneId);
+        }
+
+        return $this->nodes[$geneId];
+    }
+
+    public function addEdge(int $a, int $b): void {
+        $this->ensureNode($a)->addNeighbor($b);
+        $this->ensureNode($b)->addNeighbor($a);
+    }
+
+    public function removeEdge(int $a, int $b): void {
+        $this->nodes[$a]?->removeNeighbor($b);
+        $this->nodes[$b]?->removeNeighbor($a);
+    }
+
+    public function neighbors(int $geneId): array {
+        return $this->nodes[$geneId]?->neighbors() ?? [];
+    }
+}
+
+app\Modules\AG\Domain\Intensification\Kempe\KempeChainBuilder.php tem um erro na linha 40: há uma tentativa de acessar o método getNeighbors da classe ConflictGraph que não existe
+<?php
+
+namespace App\Modules\AG\Domain\Intensification\Kempe;
+
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\ConflictGraph\ConflictGraph;
+
+class KempeChainBuilder {
+    public function build(Cromossomo $c, ConflictGraph $graph, int $seedGeneId, int $targetSlot): KempeChain {
+
+        $seed = $c->genes()[$seedGeneId];
+
+        $slotA = $seed->slot;
+        $slotB = $targetSlot;
+
+        $chain = new KempeChain($slotA, $slotB);
+
+        $queue = [$seedGeneId];
+
+        $visited = [];
+
+        while (!empty($queue)) {
+
+            $geneId = array_pop($queue);
+
+            if (isset($visited[$geneId])) {
+                continue;
+            }
+
+            $visited[$geneId] = true;
+
+            $gene = $c->genes()[$geneId];
+
+            if ($gene->slot !== $slotA && $gene->slot !== $slotB) {
+                continue;
+            }
+
+            $chain->addGene($geneId);
+
+            foreach ($graph->getNeighbors($geneId) as $neighborId) {
+
+                $neighbor = $c->genes()[$neighborId];
+
+                if ($neighbor->slot === $slotA || $neighbor->slot === $slotB) {
+                    $queue[] = $neighborId;
+                }
+            }
+        }
+
+        return $chain;
+    }
+}
+
+app\Modules\AG\Domain\Intensification\LNS\Repair\GreedyRebuildOperator.php tem erros na linha 10 e 12 tenta acesssar as propriedades assignedGenes e unassignedGenes da classe PartialSolution que não existem
+
+<?php
+
+namespace App\Modules\AG\Domain\Intensification\LNS\Repair;
+
+use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+
+class GreedyRebuildOperator implements RepairOperatorInterface {
+    public function repair(PartialSolution $partial): Cromossomo {
+        $genes = $partial->assignedGenes;
+
+        foreach ($partial->unassignedGenes as $gene) {
+
+            // placeholder simples
+            // posteriormente implementar busca de melhor slot
+
+            $genes[] = $gene;
+        }
+
+        return new Cromossomo($genes);
+    }
+}
+
+
+app\Modules\AG\Domain\Intensification\LNS\Repair\LNSRepairAdapter.php tem os mesmos erros do arquivo anterior
+<?php
+
+namespace App\Modules\AG\Domain\Intensification\LNS\Repair;
+
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
+use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
+use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
+
+final class LNSRepairAdapter implements RepairOperatorInterface {
+    public function __construct(
+        private readonly GreedyRepairOperator $repairOperator,
+        private readonly ScheduleData $data
+    ) {
+    }
+
+    public function repair(PartialSolution $partial): Cromossomo {
+        $genes = array_merge(
+            $partial->assignedGenes,
+            $partial->unassignedGenes
+        );
+
+        $cromossomo = new Cromossomo($genes);
+
+        return $this->repairOperator->repair(
+            $cromossomo,
+            $this->data
+        );
+    }
+}
+
+
+Estrutura de pastas e arquivos existentes:
+app
+├── Actions
+│   └── Fortify
+│       ├── CreateNewUser.php
+│       └── ResetUserPassword.php
+├── Concerns
+│   ├── PasswordValidationRules.php
+│   └── ProfileValidationRules.php
+├── Console
+│   └── Commands
+│       ├── CreateStructureFromTxt.php
+│       ├── GenerateTree.php
+│       └── InsertAulas.php
+├── Helpers
+│   └── DateTimeHelper.php
+├── Http
+│   └── Controllers
+│       ├── Controller.php
+│       └── TesteController.php
+├── Jobs
+│   └── GerarHorarioJob.php
+├── Livewire
+│   ├── Actions
+│   │   └── Logout.php
+│   ├── Ag
+│   │   └── DiagnosticoInviabilidade.php
+│   ├── Algoritmo
+│   │   ├── HistoricoExecucoes.php
+│   │   └── Index.php
+│   ├── Aulas
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Auth
+│   │   ├── Login.php
+│   │   └── UserManager.php
+│   ├── Disciplinas
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Layout
+│   │   ├── Navbar.php
+│   │   └── Sidebar.php
+│   ├── Professores
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   ├── Turmas
+│   │   ├── Aulas.php
+│   │   ├── Create.php
+│   │   ├── Edit.php
+│   │   └── Index.php
+│   └── Dashboard.php
+├── Models
+│   ├── Alocacao.php
+│   ├── Aula.php
+│   ├── ConfiguracaoHorario.php
+│   ├── Disciplina.php
+│   ├── ExecucaoAlgoritmo.php
+│   ├── Horario.php
+│   ├── Professor.php
+│   ├── RestricaoTempo.php
+│   ├── Turma.php
+│   └── User.php
+├── Modules
+│   ├── AG
+│   │   ├── Application
+│   │   │   ├── Progress
+│   │   │   │   └── EvolutionProgress.php
+│   │   │   ├── GeneticAlgorithmEngine.php
+│   │   │   ├── IslandModelCoordinator.php
+│   │   │   ├── PopulationFitnessEvaluator.php
+│   │   │   └── RunGeneticAlgorithm.php
+│   │   ├── Domain
+│   │   │   ├── ConflictGraph
+│   │   │   │   ├── ConflictEdge.php
+│   │   │   │   ├── ConflictGraph.php
+│   │   │   │   ├── ConflictGraphBuilder.php
+│   │   │   │   ├── ConflictGraphUpdater.php
+│   │   │   │   └── ConflictNode.php
+│   │   │   ├── Contracts
+│   │   │   │   ├── FitnessEvaluatorInterface.php
+│   │   │   │   ├── GeneticProblem.php
+│   │   │   │   └── ProgressReporterInterface.php
+│   │   │   ├── Diversity
+│   │   │   ├── Evaluation
+│   │   │   │   └── Window
+│   │   │   │       └── WindowCalculator.php
+│   │   │   ├── Evolution
+│   │   │   │   └── IslandModel
+│   │   │   │       ├── BestIndividualsMigration.php
+│   │   │   │       ├── Island.php
+│   │   │   │       ├── IslandModelEngine.php
+│   │   │   │       └── MigrationPolicyInterface.php
+│   │   │   ├── Fitness
+│   │   │   │   ├── Delta
+│   │   │   │   │   ├── Dependency
+│   │   │   │   │   │   ├── Dependency.php
+│   │   │   │   │   │   ├── RuleDependencyBuilder.php
+│   │   │   │   │   │   └── RuleDependencyGraph.php
+│   │   │   │   │   ├── AffectedRegion.php
+│   │   │   │   │   ├── AffectedRegionFactory.php
+│   │   │   │   │   ├── DeltaEvaluableRule.php
+│   │   │   │   │   ├── DeltaFitnessEvaluator.php
+│   │   │   │   │   └── FitnessDelta.php
+│   │   │   │   ├── Incremental
+│   │   │   │   │   └── IncrementalRule.php
+│   │   │   │   ├── FitnessEvaluator.php
+│   │   │   │   ├── FitnessResult.php
+│   │   │   │   └── FitnessWeights.php
+│   │   │   ├── HyperHeuristic
+│   │   │   │   ├── LearningHyperHeuristicController.php
+│   │   │   │   ├── OperatorPerformanceTracker.php
+│   │   │   │   ├── OperatorRewardCalculator.php
+│   │   │   │   ├── OperatorScore.php
+│   │   │   │   └── OperatorSelectionStrategy.php
+│   │   │   ├── Intensification
+│   │   │   │   ├── Kempe
+│   │   │   │   │   ├── KempeChain.php
+│   │   │   │   │   ├── KempeChainBuilder.php
+│   │   │   │   │   ├── KempeChainMoveOperator.php
+│   │   │   │   │   └── KempeNeighborhoodSearch.php
+│   │   │   │   ├── LNS
+│   │   │   │   │   ├── ALNS
+│   │   │   │   │   │   ├── AdaptiveLargeNeighborhoodSearch.php
+│   │   │   │   │   │   ├── OperatorPerformance.php
+│   │   │   │   │   │   ├── OperatorScoreManager.php
+│   │   │   │   │   │   ├── OperatorSelector.php
+│   │   │   │   │   │   └── RouletteWheelSelector.php
+│   │   │   │   │   ├── Conflict
+│   │   │   │   │   │   ├── Conflict.php
+│   │   │   │   │   │   ├── ConflictDetector.php
+│   │   │   │   │   │   └── ConflictSet.php
+│   │   │   │   │   ├── Destroy
+│   │   │   │   │   │   ├── ClusterDestroyOperator.php
+│   │   │   │   │   │   ├── ConflictDestroyOperator.php
+│   │   │   │   │   │   ├── DestroyOperatorInterface.php
+│   │   │   │   │   │   └── RandomDestroyOperator.php
+│   │   │   │   │   ├── DTO
+│   │   │   │   │   │   └── PartialSolution.php
+│   │   │   │   │   ├── Repair
+│   │   │   │   │   │   ├── GreedyRebuildOperator.php
+│   │   │   │   │   │   ├── LNSRepairAdapter.php
+│   │   │   │   │   │   ├── RegretInsertionOperator.php
+│   │   │   │   │   │   └── RepairOperatorInterface.php
+│   │   │   │   │   └── LargeNeighborhoodSearch.php
+│   │   │   │   └── LocalSearch
+│   │   │   ├── Landscape
+│   │   │   │   ├── LandscapeAnalyzer.php
+│   │   │   │   ├── LandscapeDetector.php
+│   │   │   │   ├── LandscapeEngine.php
+│   │   │   │   ├── LandscapeMetrics.php
+│   │   │   │   ├── LandscapeResponse.php
+│   │   │   │   ├── LandscapeResponseStrategy.php
+│   │   │   │   └── LandscapeState.php
+│   │   │   ├── Metrics
+│   │   │   │   ├── DTO
+│   │   │   │   │   └── GenerationMetrics.php
+│   │   │   │   ├── DiversityCalculatorInterface.php
+│   │   │   │   ├── GeneticDistance.php
+│   │   │   │   ├── HammingDiversityCalculator.php
+│   │   │   │   ├── MetricsRecorder.php
+│   │   │   │   ├── PopulationEntropyCalculator.php
+│   │   │   │   └── PopulationStatistics.php
+│   │   │   ├── Operators
+│   │   │   │   ├── Adaptive
+│   │   │   │   │   ├── AdaptiveMutationController.php
+│   │   │   │   │   ├── AdaptiveMutationOperator.php
+│   │   │   │   │   ├── AdaptiveOperatorSelector.php
+│   │   │   │   │   └── OperatorPerformanceTracker.php
+│   │   │   │   ├── Crossover
+│   │   │   │   │   ├── BlockPreservingCrossover.php
+│   │   │   │   │   ├── ConflictGraphCrossoverOperator.php
+│   │   │   │   │   ├── CrossoverOperatorInterface.php
+│   │   │   │   │   └── SinglePointCrossover.php
+│   │   │   │   ├── Elitism
+│   │   │   │   │   ├── ElitismStrategyInterface.php
+│   │   │   │   │   └── TopEliteStrategy.php
+│   │   │   │   ├── Mutation
+│   │   │   │   │   ├── Interfaces
+│   │   │   │   │   │   ├── AdaptiveOperatorInterface.php
+│   │   │   │   │   │   └── DiversityAwareMutationInterface.php
+│   │   │   │   │   ├── AdaptiveDiversityMutation.php
+│   │   │   │   │   ├── ConflictGuidedMutation.php
+│   │   │   │   │   ├── GeneSwapMutation.php
+│   │   │   │   │   ├── MutationOperatorInterface.php
+│   │   │   │   │   └── StructuredSwapMutation.php
+│   │   │   │   ├── Replacement
+│   │   │   │   │   ├── CrowdingReplacement.php
+│   │   │   │   │   ├── ReplacementStrategyInterface.php
+│   │   │   │   │   ├── SimilarityReplacement.php
+│   │   │   │   │   └── WorstIndividualReplacement.php
+│   │   │   │   └── Selection
+│   │   │   │       ├── FitnessSharing
+│   │   │   │       │   ├── FitnessSharingCalculator.php
+│   │   │   │       │   ├── GeneticDistance.php
+│   │   │   │       │   └── SharingFunction.php
+│   │   │   │       ├── SelectionOperatorInterface.php
+│   │   │   │       └── TournamentSelection.php
+│   │   │   ├── Repair
+│   │   │   │   ├── GreedyRepairOperator.php
+│   │   │   │   └── RepairOperatorInterface.php
+│   │   │   ├── Representation
+│   │   │   │   └── Entities
+│   │   │   │       ├── Cromossomo.php
+│   │   │   │       └── Gene.php
+│   │   │   └── Termination
+│   │   │       ├── FitnessThresholdCriterion.php
+│   │   │       ├── HybridTerminationCriterion.php
+│   │   │       ├── MaxGenerationsCriterion.php
+│   │   │       ├── MaxGenerationsOrFitnessCriterion.php
+│   │   │       ├── TerminationCriterionInterface.php
+│   │   │       └── VarianceBasedTerminationCriterion.php
+│   │   ├── Infrastructure
+│   │   │   ├── Metrics
+│   │   │   │   └── ExecutionMetricsRecorder.php
+│   │   │   ├── Parallel
+│   │   │   │   └── AsyncFitnessEvaluator.php
+│   │   │   ├── Population
+│   │   │   │   └── PopulationGenerator.php
+│   │   │   └── Progress
+│   │   │       ├── CacheAndDbProgressReporter.php
+│   │   │       └── CacheProgressReporter.php
+│   │   └── Support
+│   │       ├── DTO
+│   │       │   └── GeneticAlgorithmConfigDTO.php
+│   │       ├── Exceptions
+│   │       │   └── InviableScheduleException.php
+│   │       ├── AGError.php
+│   │       └── AGErrorFactory.php
+│   └── Horarios
+│       ├── Application
+│       │   ├── GenerateScheduleAction.php
+│       │   ├── PersistBestSolutionService.php
+│       │   └── ScheduleExecutionRecorder.php
+│       ├── Domain
+│       │   ├── Analysis
+│       │   │   ├── DTO
+│       │   │   │   └── FeasibilityReport.php
+│       │   │   └── ScheduleFeasibilityAnalyzer.php
+│       │   ├── Builders
+│       │   │   ├── EvaluationContextBuilder.php
+│       │   │   ├── GeneMapper.php
+│       │   │   └── ScheduleDataBuilder.php
+│       │   ├── Evaluation
+│       │   │   ├── Contracts
+│       │   │   │   ├── HardRuleInterface.php
+│       │   │   │   ├── RuleInterface.php
+│       │   │   │   └── SoftRuleInterface.php
+│       │   │   ├── HardRules
+│       │   │   │   ├── ClassConflictRule.php
+│       │   │   │   ├── MandatoryBlockViolationRule.php
+│       │   │   │   ├── TeacherConflictRule.php
+│       │   │   │   └── WorkloadExceededRule.php
+│       │   │   ├── SoftRules
+│       │   │   │   ├── ConsecutiveLessonRule.php
+│       │   │   │   ├── DistributionRule.php
+│       │   │   │   ├── MaxLessonsPerDayRule.php
+│       │   │   │   ├── PreferredTimeRule.php
+│       │   │   │   └── WindowPenaltyRule.php
+│       │   │   ├── EvaluationContext.php
+│       │   │   └── RuleResult.php
+│       │   ├── Problem
+│       │   │   └── ScheduleProblem.php
+│       │   ├── Risk
+│       │   │   ├── RiskClassification.php
+│       │   │   ├── RiskIndexCalculator.php
+│       │   │   ├── SaturationCalculator.php
+│       │   │   └── StructuralEntropyCalculator.php
+│       │   ├── Services
+│       │   │   ├── ScheduleRandomGenerator.php
+│       │   │   └── ScheduleRepairService.php
+│       │   └── ValueObjects
+│       │       ├── BlockRequirement.php
+│       │       ├── ClassData.php
+│       │       ├── LessonData.php
+│       │       ├── ProfessorData.php
+│       │       ├── ProfessorLoad.php
+│       │       ├── ScheduleData.php
+│       │       ├── TimeSlot.php
+│       │       └── TurmaLoad.php
+│       └── UI
+│           └── Livewire
+│               ├── Configurar.php
+│               ├── Create.php
+│               ├── GerenciarAulas.php
+│               ├── GerenciarRestricoes.php
+│               ├── Index.php
+│               ├── Manage.php
+│               ├── ResumoConfiguracao.php
+│               └── Show.php
+├── Providers
+│   ├── AppServiceProvider.php
+│   ├── FortifyServiceProvider.php
+│   └── TimerServiceProvider.php
+├── Traits
+│   └── ComDadosComuns.php
+├── View
+│   └── Components
+│       ├── AppLayout.php
+│       ├── Button.php
+│       └── GuestLayout.php
+└── sequencia gemini.txt
+
+
+resources
+├── css
+│   └── app.css
+├── js
+│   ├── app.js
+│   └── bootstrap.js
+└── views
+    ├── components
+    │   ├── action-message.blade.php
+    │   ├── app-layout.blade.php
+    │   ├── app-logo-icon.blade.php
+    │   ├── app-logo.blade.php
+    │   ├── auth-header.blade.php
+    │   ├── auth-session-status.blade.php
+    │   ├── button.blade.php
+    │   ├── desktop-user-menu.blade.php
+    │   ├── guest-layout.blade.php
+    │   └── placeholder-pattern.blade.php
+    ├── flux
+    │   ├── icon
+    │   │   ├── book-open-text.blade.php
+    │   │   ├── chevrons-up-down.blade.php
+    │   │   ├── folder-git-2.blade.php
+    │   │   └── layout-grid.blade.php
+    │   └── navlist
+    │       └── group.blade.php
+    ├── layouts
+    │   ├── app
+    │   │   ├── header.blade.php
+    │   │   └── sidebar.blade.php
+    │   ├── auth
+    │   │   ├── card.blade.php
+    │   │   ├── simple.blade.php
+    │   │   └── split.blade.php
+    │   ├── app.blade.php
+    │   └── auth.blade.php
+    ├── livewire
+    │   ├── ag
+    │   │   └── diagnostico-inviabilidade.blade.php
+    │   ├── algoritmo
+    │   │   ├── historico-execucoes.blade.php
+    │   │   └── index.blade.php
+    │   ├── aulas
+    │   │   ├── edit.blade.php
+    │   │   └── index.blade.php
+    │   ├── auth
+    │   │   ├── login.blade.php
+    │   │   └── user-manager.blade.php
+    │   ├── disciplinas
+    │   │   ├── create.blade.php
+    │   │   ├── edit.blade.php
+    │   │   └── index.blade.php
+    │   ├── horarios
+    │   │   ├── partials
+    │   │   │   ├── etapa-configuracao-algoritmo-genetico.blade.php
+    │   │   │   ├── etapa-configuracao-basica.blade.php
+    │   │   │   └── modal-aula.blade.php
+    │   │   ├── configurar.blade.php
+    │   │   ├── create.blade.php
+    │   │   ├── gerenciar-aulas.blade.php
+    │   │   ├── gerenciar-restricoes.blade.php
+    │   │   ├── index.blade.php
+    │   │   ├── manage.blade.php
+    │   │   ├── resumo-configuracao.blade.php
+    │   │   └── show.blade.php
+    │   ├── layout
+    │   │   ├── navbar.blade.php
+    │   │   └── sidebar.blade.php
+    │   ├── professores
+    │   │   ├── create.blade.php
+    │   │   ├── edit.blade.php
+    │   │   └── index.blade.php
+    │   ├── turmas
+    │   │   ├── aulas.blade.php
+    │   │   ├── create.blade.php
+    │   │   ├── edit.blade.php
+    │   │   └── index.blade.php
+    │   └── dashboard.blade.php
+    ├── pages
+    │   ├── auth
+    │   │   ├── confirm-password.blade.php
+    │   │   ├── forgot-password.blade.php
+    │   │   ├── login.blade.php
+    │   │   ├── register.blade.php
+    │   │   ├── reset-password.blade.php
+    │   │   ├── two-factor-challenge.blade.php
+    │   │   └── verify-email.blade.php
+    │   └── settings
+    │       ├── two-factor
+    │       │   └── ⚡recovery-codes.blade.php
+    │       ├── layout.blade.php
+    │       ├── ⚡appearance.blade.php
+    │       ├── ⚡delete-user-form.blade.php
+    │       ├── ⚡password.blade.php
+    │       ├── ⚡profile.blade.php
+    │       └── ⚡two-factor.blade.php
+    ├── partials
+    │   ├── head.blade.php
+    │   └── settings-heading.blade.php
+    ├── dashboard.blade.php
+    └── welcome.blade.php
+
+
+
+
+Arquivos que ainda não foram escritos / desenvolvidos:
+app\Modules\AG\Application\IslandModelCoordinator.php
+app\Modules\AG\Domain\ConflictGraph\ConflictEdge.php
+app\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface.php
+app\Modules\AG\Domain\HyperHeuristic\OperatorSelectionStrategy.php
+app\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelector.php
+app\Modules\AG\Domain\Metrics\PopulationStatistics.php
+app\Modules\AG\Domain\Operators\Replacement\CrowdingReplacement.php
+app\Modules\AG\Domain\Termination\FitnessThresholdCriterion.php
+app\Modules\AG\Domain\Termination\MaxGenerationsCriterion.php
+app\Modules\AG\Domain\Termination\VarianceBasedTerminationCriterion.php
+app\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator.php
+app\Modules\Horarios\Domain\Risk\RiskClassification.php
+app\Modules\Horarios\Domain\Risk\SaturationCalculator.php
+app\Modules\Horarios\Domain\Risk\StructuralEntropyCalculator.php
+app\Modules\Horarios\Domain\Services\ScheduleRandomGenerator.php
+app\Modules\Horarios\Domain\Services\ScheduleRepairService.php
+
+
+
+pasta app\Modules\AG\Domain\Diversity
+pasta app\Modules\AG\Domain\Intensification\LocalSearch

@@ -1,9 +1,11 @@
 <?php
 
-namespace App\Modules\AG\Domain\Fitness\Dependency;
+namespace App\Modules\AG\Domain\Fitness\Delta\Dependency;
 
-class RuleDependencyBuilder {
-    public static function build(array $rules): RuleDependencyGraph {
+class RuleDependencyBuilder
+{
+    public static function build(array $rules): RuleDependencyGraph
+    {
         $graph = new RuleDependencyGraph();
 
         foreach ($rules as $rule) {
@@ -14,10 +16,7 @@ class RuleDependencyBuilder {
 
             $deps = $rule->dependencies();
 
-            $graph->register(
-                $rule::class,
-                $deps
-            );
+            $graph->register($rule::class, $deps);
         }
 
         return $graph;

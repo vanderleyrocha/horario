@@ -2,16 +2,17 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\SoftRules;
 
-use App\Modules\AG\Domain\Fitness\Dependency\RuleDependency;
 use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule {
-
-    public function evaluate(EvaluationContext $context): RuleResult {
+final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
+{
+    public function evaluate(EvaluationContext $context): RuleResult
+    {
         $windows = $context->cromossomo()->turmaJanelas();
 
         $penalty = array_sum($windows);
@@ -19,7 +20,8 @@ final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule {
         return new RuleResult($penalty, self::class);
     }
 
-    public function evaluateIncremental(EvaluationContext $context, AffectedRegion $region): float {
+    public function evaluateIncremental(EvaluationContext $context, AffectedRegion $region): float
+    {
 
         $windows = $context->cromossomo()->turmaJanelas();
 
@@ -32,14 +34,16 @@ final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule {
         return $penalty;
     }
 
-    public function dependencies(): array {
+    public function dependencies(): array
+    {
         return [
             RuleDependency::TURMA,
             RuleDependency::DIA
         ];
     }
 
-    public function isHard(): bool {
+    public function isHard(): bool
+    {
         return false;
     }
 }

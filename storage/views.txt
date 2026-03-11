@@ -88,8 +88,6 @@ views
 │       ├── ⚡password.blade.php
 │       ├── ⚡profile.blade.php
 │       └── ⚡two-factor.blade.php
-├── partials
-│   ├── head.blade.php
-│   └── settings-heading.blade.php
-├── dashboard.blade.php
-└── welcome.blade.php
+└── partials
+    ├── head.blade.php
+    └── settings-heading.blade.php

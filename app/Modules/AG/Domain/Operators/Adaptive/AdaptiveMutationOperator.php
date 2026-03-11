@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Operators\Adaptive;
 
-use App\Modules\AG\Domain\Operators\Mutation\AdaptiveOperatorInterface;
+use App\Modules\AG\Domain\Operators\Mutation\Interfaces\AdaptiveOperatorInterface;
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class AdaptiveMutationOperator implements MutationOperatorInterface, AdaptiveOperatorInterface {
+final class AdaptiveMutationOperator implements MutationOperatorInterface, AdaptiveOperatorInterface
+{
     private array $operators;
 
     private array $scores = [];
 
     private ?MutationOperatorInterface $lastOperator = null;
 
-    public function __construct(
-        MutationOperatorInterface ...$operators
-    ) {
+    public function __construct(MutationOperatorInterface ...$operators)
+    {
         $this->operators = $operators;
 
         foreach ($operators as $op) {
@@ -25,7 +25,8 @@ final class AdaptiveMutationOperator implements MutationOperatorInterface, Adapt
         }
     }
 
-    public function mutate(Cromossomo $individual): Cromossomo {
+    public function mutate(Cromossomo $individual): Cromossomo
+    {
         $operator = $this->selectOperator();
 
         $this->lastOperator = $operator;
@@ -33,7 +34,8 @@ final class AdaptiveMutationOperator implements MutationOperatorInterface, Adapt
         return $operator->mutate($individual);
     }
 
-    private function selectOperator(): MutationOperatorInterface {
+    private function selectOperator(): MutationOperatorInterface
+    {
         $sum = array_sum($this->scores);
 
         $r = mt_rand() / mt_getrandmax() * $sum;
@@ -52,7 +54,8 @@ final class AdaptiveMutationOperator implements MutationOperatorInterface, Adapt
         return $this->operators[array_rand($this->operators)];
     }
 
-    public function recordImprovement(float $improvement): void {
+    public function recordImprovement(float $improvement): void
+    {
         if (!$this->lastOperator) {
             return;
         }

@@ -2,16 +2,17 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\HardRules;
 
-use App\Modules\AG\Domain\Fitness\Dependency\RuleDependency;
 use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class MandatoryBlockViolationRule implements HardRuleInterface, IncrementalRule {
-
-    public function evaluate(EvaluationContext $context): RuleResult {
+final class MandatoryBlockViolationRule implements HardRuleInterface, IncrementalRule
+{
+    public function evaluate(EvaluationContext $context): RuleResult
+    {
         $penalty = 0.0;
 
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
@@ -37,7 +38,8 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
     /**
      * Incremental evaluation
      */
-    public function evaluateIncremental(EvaluationContext $context, AffectedRegion $region): float {
+    public function evaluateIncremental(EvaluationContext $context, AffectedRegion $region): float
+    {
 
 
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
@@ -75,13 +77,15 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
         return $penalty;
     }
 
-    public function dependencies(): array {
+    public function dependencies(): array
+    {
         return [
             RuleDependency::SLOT
         ];
     }
 
-    public function isHard(): bool {
+    public function isHard(): bool
+    {
         return true;
     }
 }

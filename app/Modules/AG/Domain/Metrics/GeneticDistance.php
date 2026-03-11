@@ -4,8 +4,15 @@ namespace App\Modules\AG\Domain\Metrics;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class GeneticDistance {
-    public function hamming(Cromossomo $a, Cromossomo $b): float {
+final class GeneticDistance
+{
+    public function distance(Cromossomo $a, Cromossomo $b): float
+    {
+        return $this->hamming($a, $b);
+    }
+
+    public function hamming(Cromossomo $a, Cromossomo $b): float
+    {
         $genesA = $a->genes();
         $genesB = $b->genes();
 

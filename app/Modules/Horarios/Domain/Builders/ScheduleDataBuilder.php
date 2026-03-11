@@ -11,8 +11,10 @@ use App\Modules\Horarios\Domain\ValueObjects\ProfessorData;
 use App\Modules\Horarios\Domain\ValueObjects\ClassData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 
-final class ScheduleDataBuilder {
-    public function build(Horario $horario): ScheduleData {
+final class ScheduleDataBuilder
+{
+    public function build(Horario $horario): ScheduleData
+    {
         $config = $horario->configuracaoHorario;
 
         $aulas = $horario->aulas()
@@ -29,14 +31,8 @@ final class ScheduleDataBuilder {
 
         foreach ($aulas as $aula) {
 
-            $lesson = new LessonData(
-                id: $aula->id,
-                professorId: $aula->professor_id,
-                classId: $aula->turma_id,
-                disciplinaId: $aula->disciplina_id,
-                requiredSlots: $aula->carga_horaria,
-                requiresConsecutive: (bool) $aula->bloco_continuo,
-            );
+
+            $lesson = new LessonData(id: $aula->id, professorId: $aula->professor_id, classId: $aula->turma_id, disciplinaId: $aula->disciplina_id, requiredSlots: (int) $aula->aulas_semana, requiresConsecutive: (bool) $aula->aulas_consecutivas, preferredDays: is_array($aula->dias_preferidos) ? $aula->dias_preferidos : [], preferredPeriods: is_array($aula->tempos_preferidos) ? $aula->tempos_preferidos : [], maxPerDay: $aula->max_aulas_dia ? (int) $aula->max_aulas_dia : null);
 
             $lessons[$aula->id] = $lesson;
 
@@ -60,10 +56,7 @@ final class ScheduleDataBuilder {
 
             if (!isset($professors[$aula->professor_id])) {
 
-                $professors[$aula->professor_id] = new ProfessorData(
-                    id: $aula->professor_id,
-                    maxWeeklyLoad: $aula->professor->carga_maxima ?? 40,
-                );
+                $professors[$aula->professor_id] = new ProfessorData(id: $aula->professor_id, maxWeeklyLoad: $aula->professor->carga_maxima ?? 40, );
             }
 
             /* ============================================================
@@ -72,10 +65,7 @@ final class ScheduleDataBuilder {
 
             if (!isset($classes[$aula->turma_id])) {
 
-                $classes[$aula->turma_id] = new ClassData(
-                    id: $aula->turma_id,
-                    maxDailyLessons: $aula->turma->max_aulas_dia ?? 6,
-                );
+                $classes[$aula->turma_id] = new ClassData(id: $aula->turma_id, maxDailyLessons: $aula->turma->max_aulas_dia ?? 6, );
             }
         }
 
@@ -83,10 +73,7 @@ final class ScheduleDataBuilder {
          | Time slots
          ============================================================ */
 
-        $timeSlots = $this->buildTimeSlots(
-            $config->dias_semana,
-            $config->aulas_por_dia
-        );
+        $timeSlots = $this->buildTimeSlots($config->dias_semana, $config->aulas_por_dia);
 
         /* ============================================================
          | Restrições estruturadas
@@ -102,54 +89,21 @@ final class ScheduleDataBuilder {
          | Disponibilidade pré-calculada
          ============================================================ */
 
-        $availableSlotsByProfessor = $this->buildAvailability(
-            $professors,
-            $timeSlots,
-            $restrictionsByProfessor
-        );
+        $availableSlotsByProfessor = $this->buildAvailability($professors, $timeSlots, $restrictionsByProfessor);
 
-        $availableSlotsByClass = $this->buildAvailability(
-            $classes,
-            $timeSlots,
-            $restrictionsByClass
-        );
+        $availableSlotsByClass = $this->buildAvailability($classes, $timeSlots, $restrictionsByClass);
 
-        return new ScheduleData(
+        return new ScheduleData(/* ENTIDADES */lessons: $lessons, professors: $professors, classes: $classes, timeSlots: $timeSlots,            /* RESTRIÇÕES */
 
-            /* ENTIDADES */
+            restrictions: $restrictions,            /* ÍNDICES */
 
-            lessons: $lessons,
-            professors: $professors,
-            classes: $classes,
-            timeSlots: $timeSlots,
+            lessonsByProfessor: $lessonsByProfessor, lessonsByClass: $lessonsByClass, restrictionsByProfessor: $restrictionsByProfessor, restrictionsByClass: $restrictionsByClass, expectedLoadByLesson: $expectedLoadByLesson, availableSlotsByProfessor: $availableSlotsByProfessor, availableSlotsByClass: $availableSlotsByClass,            /* MÉTRICAS */
 
-            /* RESTRIÇÕES */
-
-            restrictions: $restrictions,
-
-            /* ÍNDICES */
-
-            lessonsByProfessor: $lessonsByProfessor,
-            lessonsByClass: $lessonsByClass,
-
-            restrictionsByProfessor: $restrictionsByProfessor,
-            restrictionsByClass: $restrictionsByClass,
-
-            expectedLoadByLesson: $expectedLoadByLesson,
-
-            availableSlotsByProfessor: $availableSlotsByProfessor,
-            availableSlotsByClass: $availableSlotsByClass,
-
-            /* MÉTRICAS */
-
-            totalTimeSlots: count($timeSlots),
-            totalLessons: count($lessons),
-            totalProfessors: count($professors),
-            totalClasses: count($classes)
-        );
+            totalTimeSlots: count($timeSlots), totalLessons: count($lessons), totalProfessors: count($professors), totalClasses: count($classes));
     }
 
-    private function buildTimeSlots(int $diasSemana, int $aulasPorDia): array {
+    private function buildTimeSlots(int $diasSemana, int $aulasPorDia): array
+    {
         $slots = [];
 
         $id = 0;
@@ -158,11 +112,7 @@ final class ScheduleDataBuilder {
 
             for ($periodo = 1; $periodo <= $aulasPorDia; $periodo++) {
 
-                $slots[$id] = new TimeSlot(
-                    id: $id,
-                    day: $dia,
-                    lessonNumber: $periodo
-                );
+                $slots[$id] = new TimeSlot(id: $id, day: $dia, lessonNumber: $periodo);
 
                 $id++;
             }
@@ -171,13 +121,16 @@ final class ScheduleDataBuilder {
         return $slots;
     }
 
-    private function buildRestrictions(Horario $horario): array {
+    private function buildRestrictions(Horario $horario): array
+    {
         $restrictions = [];
 
         $byProfessor = [];
         $byClass = [];
 
-        foreach ($horario->restricoesTempo as $r) {
+        $restricoes = $horario->restricoes_tempo ?? $horario->restricoesTempo ?? [];
+
+        foreach ($restricoes as $r) {
 
             $restrictions[] = [
                 'entity_type' => $r->tipo,
@@ -203,7 +156,8 @@ final class ScheduleDataBuilder {
         return [$restrictions, $byProfessor, $byClass];
     }
 
-    private function buildAvailability(array $entities, array $timeSlots, array $restrictions): array {
+    private function buildAvailability(array $entities, array $timeSlots, array $restrictions): array
+    {
         $availability = [];
 
         foreach ($entities as $entityId => $entity) {

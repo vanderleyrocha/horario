@@ -8,7 +8,8 @@ use App\Modules\AG\Domain\ConflictGraph\ConflictGraph;
 use App\Modules\AG\Domain\ConflictGraph\ConflictGraphUpdater;
 use App\Modules\AG\Domain\Evaluation\Window\WindowCalculator;
 
-final class Cromossomo {
+final class Cromossomo
+{
     private ConflictGraph $conflictGraph;
 
     /** @var Gene[] */
@@ -43,7 +44,8 @@ final class Cromossomo {
 
     private string $signature = '';
 
-    public function __construct(array $genes) {
+    public function __construct(array $genes)
+    {
         $this->genes = array_values($genes);
 
         $this->conflictGraph = new ConflictGraph();
@@ -56,7 +58,8 @@ final class Cromossomo {
      | INDEXAÇÃO
      ============================================================ */
 
-    private function rebuildIndexes(): void {
+    private function rebuildIndexes(): void
+    {
         $this->professorIndex = [];
         $this->turmaIndex = [];
         $this->professorPeriodoIndex = [];
@@ -79,20 +82,17 @@ final class Cromossomo {
         $this->rebuildSignature();
     }
 
-    private function rebuildConflictGraph(): void {
+    private function rebuildConflictGraph(): void
+    {
         $builder = new ConflictGraphUpdater();
 
         foreach ($this->genes as $index => $gene) {
-            $builder->indexGene(
-                $this->conflictGraph,
-                $index,
-                $gene,
-                $this->genes
-            );
+            $builder->indexGene($this->conflictGraph, $index, $gene, $this->genes);
         }
     }
 
-    private function indexGene(int $geneIndex, Gene $gene): void {
+    private function indexGene(int $geneIndex, Gene $gene): void
+    {
         $prof = $gene->professorId();
         $turma = $gene->turmaId();
         $aula = $gene->aulaId();
@@ -123,7 +123,8 @@ final class Cromossomo {
         $this->updateProfessorWindows($prof, $dia);
     }
 
-    private function deindexGene(int $geneIndex, Gene $gene): void {
+    private function deindexGene(int $geneIndex, Gene $gene): void
+    {
         $prof = $gene->professorId();
         $turma = $gene->turmaId();
         $aula = $gene->aulaId();
@@ -142,19 +143,13 @@ final class Cromossomo {
             if (isset($this->professorPeriodoIndex[$prof][$dia][$periodo])) {
 
                 $this->professorPeriodoIndex[$prof][$dia][$periodo] =
-                    array_diff(
-                        $this->professorPeriodoIndex[$prof][$dia][$periodo],
-                        [$geneIndex]
-                    );
+                    array_diff($this->professorPeriodoIndex[$prof][$dia][$periodo], [$geneIndex]);
             }
 
             if (isset($this->turmaPeriodoIndex[$turma][$dia][$periodo])) {
 
                 $this->turmaPeriodoIndex[$turma][$dia][$periodo] =
-                    array_diff(
-                        $this->turmaPeriodoIndex[$turma][$dia][$periodo],
-                        [$geneIndex]
-                    );
+                    array_diff($this->turmaPeriodoIndex[$turma][$dia][$periodo], [$geneIndex]);
             }
 
             $this->ocupacaoGlobal[$dia][$periodo]--;
@@ -171,7 +166,8 @@ final class Cromossomo {
      | JANELAS
      ============================================================ */
 
-    private function computeWindows(): void {
+    private function computeWindows(): void
+    {
         foreach ($this->turmaPeriodoIndex as $turma => $dias) {
 
             foreach ($dias as $dia => $periodos) {
@@ -215,7 +211,8 @@ final class Cromossomo {
         }
     }
 
-    private function updateTurmaWindows(int $turma, int $dia): void {
+    private function updateTurmaWindows(int $turma, int $dia): void
+    {
         $periods = [];
 
         if (!isset($this->turmaPeriodoIndex[$turma][$dia])) {
@@ -227,12 +224,13 @@ final class Cromossomo {
             $periods[] = $periodo;
         }
 
-        $windows = \App\Modules\AG\Domain\Evaluation\Window\WindowCalculator::compute($periods);
+        $windows = WindowCalculator::compute($periods);
 
         $this->turmaJanelas[$turma] = $windows;
     }
 
-    private function updateProfessorWindows(int $professor, int $dia): void {
+    private function updateProfessorWindows(int $professor, int $dia): void
+    {
         $periods = [];
 
         if (!isset($this->professorPeriodoIndex[$professor][$dia])) {
@@ -253,7 +251,8 @@ final class Cromossomo {
      | ASSINATURA
      ============================================================ */
 
-    private function rebuildSignature(): void {
+    private function rebuildSignature(): void
+    {
         $buffer = [];
 
         foreach ($this->genes as $gene) {
@@ -265,7 +264,8 @@ final class Cromossomo {
         $this->signature = md5(implode('|', $buffer));
     }
 
-    public function signature(): string {
+    public function signature(): string
+    {
         return $this->signature;
     }
 
@@ -273,7 +273,8 @@ final class Cromossomo {
      | OPERAÇÕES GENÉTICAS
      ============================================================ */
 
-    public function replaceGene(int $index, Gene $newGene): void {
+    public function replaceGene(int $index, Gene $newGene): void
+    {
         $oldGene = $this->genes[$index];
 
         $updater = new ConflictGraphUpdater();
@@ -292,7 +293,8 @@ final class Cromossomo {
         $this->rebuildSignature();
     }
 
-    public function swapGenes(int $i, int $j): void {
+    public function swapGenes(int $i, int $j): void
+    {
         if ($i === $j) {
             return;
         }
@@ -317,79 +319,98 @@ final class Cromossomo {
     | GETTERS
     ============================================================ */
 
-    public function genes(): array {
+    public function genes(): array
+    {
         return $this->genes;
     }
 
-    public function professorIndex(): array {
+    public function professorIndex(): array
+    {
         return $this->professorIndex;
     }
 
-    public function turmaIndex(): array {
+    public function turmaIndex(): array
+    {
         return $this->turmaIndex;
     }
 
-    public function professorPeriodoIndex(): array {
+    public function professorPeriodoIndex(): array
+    {
         return $this->professorPeriodoIndex;
     }
 
-    public function turmaPeriodoIndex(): array {
+    public function turmaPeriodoIndex(): array
+    {
         return $this->turmaPeriodoIndex;
     }
 
-    public function cargaProfessor(): array {
+    public function cargaProfessor(): array
+    {
         return $this->cargaProfessor;
     }
 
-    public function cargaTurma(): array {
+    public function cargaTurma(): array
+    {
         return $this->cargaTurma;
     }
 
-    public function turmaDiaCarga(): array {
+    public function turmaDiaCarga(): array
+    {
         return $this->turmaDiaCarga;
     }
 
-    public function professorDiaCarga(): array {
+    public function professorDiaCarga(): array
+    {
         return $this->professorDiaCarga;
     }
 
-    public function aulaSlotsIndex(): array {
+    public function aulaSlotsIndex(): array
+    {
         return $this->aulaSlotsIndex;
     }
 
-    public function ocupacaoGlobal(): array {
+    public function ocupacaoGlobal(): array
+    {
         return $this->ocupacaoGlobal;
     }
 
-    public function turmaJanelas(): array {
+    public function turmaJanelas(): array
+    {
         return $this->turmaJanelas;
     }
 
-    public function professorJanelas(): array {
+    public function professorJanelas(): array
+    {
         return $this->professorJanelas;
     }
 
-    public function aulaBlocos(): array {
+    public function aulaBlocos(): array
+    {
         return $this->aulaBlocos;
     }
 
-    public function fitness(): float {
+    public function fitness(): float
+    {
         return $this->fitness;
     }
 
-    public function setFitness(float $fitness): void {
+    public function setFitness(float $fitness): void
+    {
         $this->fitness = $fitness;
     }
 
-    public function conflictGraph(): ConflictGraph {
+    public function conflictGraph(): ConflictGraph
+    {
         return $this->conflictGraph;
     }
 
-    public function count(): int {
+    public function count(): int
+    {
         return count($this->genes);
     }
 
-    public function copy(): self {
+    public function copy(): self
+    {
         $clone = new self($this->genes);
         $clone->setFitness($this->fitness);
         return $clone;

@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class () extends Migration {
     public function up(): void
     {
         Schema::create('horarios', function (Blueprint $table) {
@@ -15,6 +14,10 @@ return new class extends Migration
             $table->integer('semestre');
             $table->json('configuracao')->nullable(); // Configurações do algoritmo genético
             $table->float('fitness_score')->nullable();
+
+            $table->json('diagnostico_json')->nullable();
+            $table->unsignedTinyInteger('indice_risco')->nullable();
+
 
             $table->integer('geracoes_executadas')->nullable();
             $table->integer('geracoes_sem_melhoria')->nullable();

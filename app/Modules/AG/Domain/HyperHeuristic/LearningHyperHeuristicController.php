@@ -6,30 +6,44 @@ use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 
 class LearningHyperHeuristicController
 {
-    public function __construct(private OperatorPerformanceTracker $tracker)
+    private array $operatorMap = [];
+
+    public function __construct(private OperatorPerformanceTracker $tracker, private OperatorSelectionStrategy $selectionStrategy, private OperatorRewardCalculator $rewardCalculator)
     {
     }
 
     public function selectOperator(array $operators): MutationOperatorInterface
     {
-        if (mt_rand(0, 100) < 20) {
-            return $operators[array_rand($operators)];
+        $this->operatorMap = [];
+
+        foreach ($operators as $operator) {
+            $this->operatorMap[$operator::class] = $operator;
         }
 
-        $best = $this->tracker->bestOperator();
+        $stats = $this->tracker->getOperatorStatistics();
 
-        foreach ($operators as $op) {
-            if ($op::class === $best) {
-                return $op;
-            }
+        $selected = $this->selectionStrategy->select($stats);
+
+        if (isset($this->operatorMap[$selected])) {
+
+            $this->tracker->registerUse($selected);
+
+            return $this->operatorMap[$selected];
         }
 
         return $operators[array_rand($operators)];
     }
 
-    public function record(MutationOperatorInterface $operator, float $improvement): void
+    public function record(MutationOperatorInterface $operator, float $beforeFitness, float $afterFitness): void
     {
 
-        $this->tracker->record($operator::class, $improvement);
+        $reward = $this->rewardCalculator->calculate($beforeFitness, $afterFitness);
+
+        $this->tracker->record($operator::class, $reward);
+    }
+
+    public function getOperatorStatistics(): array
+    {
+        return $this->tracker->getOperatorStatistics();
     }
 }

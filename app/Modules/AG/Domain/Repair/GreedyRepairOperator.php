@@ -8,8 +8,10 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
-final class GreedyRepairOperator {
-    public function repair(Cromossomo $chromosome, ScheduleData $data): Cromossomo {
+final class GreedyRepairOperator
+{
+    public function repair(Cromossomo $chromosome, ScheduleData $data): Cromossomo
+    {
 
         $child = $chromosome->copy();
 
@@ -17,11 +19,7 @@ final class GreedyRepairOperator {
 
             if (!$this->isValid($child, $gene)) {
 
-                $candidate = $this->relocateGene(
-                    $child,
-                    $gene,
-                    $data
-                );
+                $candidate = $this->relocateGene($child, $gene, $data);
 
                 if ($candidate !== null) {
                     $child->replaceGene($index, $candidate);
@@ -32,22 +30,28 @@ final class GreedyRepairOperator {
         return $child;
     }
 
-    private function relocateGene(Cromossomo $cromossomo, Gene $gene, ScheduleData $data): ?Gene {
+    private function relocateGene(Cromossomo $cromossomo, Gene $gene, ScheduleData $data): ?Gene
+    {
 
         $profSlots = $data->availableSlotsByProfessor[$gene->professorId()] ?? [];
+
         $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
 
-        $possible = array_intersect_key(
-            $profSlots,
-            $classSlots
-        );
+        /*
+        | interseção correta de slotIds
+        */
 
-        foreach ($possible as $slot) {
+        $possible = array_intersect($profSlots, $classSlots);
 
-            $candidate = $gene->withDiaPeriodo(
-                $slot['day'],
-                $slot['period']
-            );
+        foreach ($possible as $slotId) {
+
+            if (!isset($data->timeSlots[$slotId])) {
+                continue;
+            }
+
+            $slot = $data->timeSlots[$slotId];
+
+            $candidate = $gene->withDiaPeriodo($slot->day, $slot->lessonNumber);
 
             if ($this->isValid($cromossomo, $candidate)) {
                 return $candidate;
@@ -57,7 +61,8 @@ final class GreedyRepairOperator {
         return null;
     }
 
-    private function isValid(Cromossomo $cromossomo, Gene $gene): bool {
+    private function isValid(Cromossomo $cromossomo, Gene $gene): bool
+    {
 
         $profIndex = $cromossomo->professorIndex();
         $turmaIndex = $cromossomo->turmaIndex();

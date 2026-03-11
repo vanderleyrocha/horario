@@ -4,12 +4,13 @@ namespace App\Modules\AG\Domain\Fitness;
 
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\Delta\DeltaFitnessEvaluator;
-use App\Modules\AG\Domain\Fitness\Dependency\RuleDependencyBuilder;
-use App\Modules\AG\Domain\Fitness\Dependency\RuleDependencyGraph;
+use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependencyBuilder;
+use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependencyGraph;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 
-final class FitnessEvaluator {
+final class FitnessEvaluator
+{
     /**
      * Cache por assinatura estrutural
      */
@@ -22,14 +23,16 @@ final class FitnessEvaluator {
      */
     private RuleDependencyGraph $dependencyGraph;
 
-    public function __construct(private readonly FitnessWeights $weights, private readonly array $rules) {
+    public function __construct(private readonly FitnessWeights $weights, private readonly array $rules)
+    {
 
         $this->deltaEvaluator = new DeltaFitnessEvaluator($weights);
 
         $this->dependencyGraph = RuleDependencyBuilder::build($rules);
     }
 
-    public function evaluate(Cromossomo $cromossomo, EvaluationContext $context): FitnessResult {
+    public function evaluate(Cromossomo $cromossomo, EvaluationContext $context): FitnessResult
+    {
 
         $signature = $cromossomo->signature();
 
@@ -75,12 +78,7 @@ final class FitnessEvaluator {
 
         $cromossomo->setFitness($score);
 
-        $result = new FitnessResult(
-            score: $score,
-            totalPenalty: $totalPenalty,
-            hardPenalty: $hardPenalty,
-            softPenalty: $softPenalty
-        );
+        $result = new FitnessResult(score: $score, totalPenalty: $totalPenalty, hardPenalty: $hardPenalty, softPenalty: $softPenalty);
 
         $this->cache[$signature] = $result;
 
@@ -90,12 +88,8 @@ final class FitnessEvaluator {
     /**
      * Avaliação incremental usando Delta + Rule Dependency Graph
      */
-    public function evaluateDelta(
-        Cromossomo $cromossomo,
-        EvaluationContext $context,
-        AffectedRegion $region,
-        FitnessResult $previous
-    ): FitnessResult {
+    public function evaluateDelta(Cromossomo $cromossomo, EvaluationContext $context, AffectedRegion $region, FitnessResult $previous): FitnessResult
+    {
 
         /**
          * Determina quais regras são afetadas
@@ -127,19 +121,15 @@ final class FitnessEvaluator {
          * Executa Delta Fitness apenas nas regras afetadas
          */
         $result =
-            $this->deltaEvaluator->evaluateDelta(
-                $previous,
-                $context,
-                $region,
-                $affectedRules
-            );
+            $this->deltaEvaluator->evaluateDelta($previous, $context, $region, $affectedRules);
 
         $cromossomo->setFitness($result->score());
 
         return $result;
     }
 
-    public function clearCache(): void {
+    public function clearCache(): void
+    {
         $this->cache = [];
     }
 }

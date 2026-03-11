@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 #[Layout('components.app-layout', ['title' => 'Gerar Horário'])]
-class Index extends Component {
+class Index extends Component
+{
     public Horario $horario;
 
     // Estados principais
@@ -30,6 +31,12 @@ class Index extends Component {
     public array $configuracao = [];
     public array $mapaSaturacao = [];
 
+    public int $geracaoAtual = 0;
+    public float $melhorFitnessAtual = 0.0;
+    public float $entropiaAtual = 0.0;
+    public float $diversidadeAtual = 0.0;
+    public string $estadoLandscape = 'Explorando';
+
     protected array $rules = [
         'configuracao.populacao' => 'required|integer|min:10',
         'configuracao.geracoes' => 'required|integer|min:1',
@@ -41,7 +48,8 @@ class Index extends Component {
      |  LIFECYCLE
      ============================================================ */
 
-    public function mount(Horario $horario): void {
+    public function mount(Horario $horario): void
+    {
         // dd($horario->id);
         $this->horario = $horario->loadMissing([
             'aulas.professor',
@@ -63,55 +71,84 @@ class Index extends Component {
      |  GERAÇÃO
      ============================================================ */
 
-    public function iniciarGeracao(): void {
+    public function iniciarGeracao(): void
+    {
+        // 1. Valida as rules de configuração do formulário
         $this->validate();
 
+        // 2. Limpa qualquer estado de erro ou sucesso de execuções anteriores
         $this->resetEstado();
 
+        // 3. Prepara a UI para a tela de carregamento/gráficos
         $this->emGeracao = true;
-        $this->statusGeracao = 'executando';
-        $this->mensagemStatus = 'Iniciando geração...';
-        Log::info("Iniciando geração de horário disparando Job", [
-            'horario_id' => $this->horario->id,
-            'horario_nome' => $this->horario->nome,
+        $this->mensagemStatus = 'Inicializando o Algoritmo Genético...';
+
+        // 4. Dispara o Job em background (com timeout longo) passando a configuração
+        GerarHorarioJob::dispatch($this->horario, [
+            'configuracao' => $this->configuracao
         ]);
 
-        GerarHorarioJob::dispatch($this->horario);
-
+        // 5. Aciona o Frontend via JS (inicia o polling e preparará os gráficos)
         $this->dispatch('startPolling');
     }
 
-    public function atualizarStatus(): void {
-        $cache = Cache::get($this->cacheKey());
-
-        if (!$cache) {
+    public function atualizarStatus(): void
+    {
+        if (!$this->emGeracao) {
             return;
         }
 
-        if (($cache['status'] ?? null) === 'erro') {
-            $this->aplicarErro($cache['erro'] ?? []);
+        // Lê o payload que nossa ponte jogou no Cache
+        $dados = Cache::get("horario_geracao_{$this->horario->id}");
+
+        if (!$dados) {
             return;
         }
 
-        if (($cache['status'] ?? null) === 'concluido') {
+        // 1. Tratamento de Erro
+        if (isset($dados['status']) && $dados['status'] === 'erro') {
+            $this->temErro = true;
+            $this->emGeracao = false;
+            $this->mensagemErro = $dados['erro']['message'] ?? 'Erro crítico no motor de resolução.';
+            $this->erroDetalhes = $dados['erro'];
+            return;
+        }
+
+        // 2. Tratamento de Conclusão
+        if (isset($dados['status']) && $dados['status'] === 'concluido') {
             $this->emGeracao = false;
             $this->concluido = true;
-            $this->statusGeracao = 'concluido';
-            $this->mensagemStatus = 'Horário gerado com sucesso.';
-            $this->dispatch('stopPolling');
+            $this->progressoPercentual = 100;
+            return;
         }
 
-        if (($cache['status'] ?? null) === 'executando') {
+        // 3. Leitura das Métricas de Evolução (DTO EvolutionProgress transformado em array)
+        if (isset($dados['generation'])) {
+            $geracoesTotais = $this->configuracao['geracoes'] ?? 500;
 
-            $this->progressoPercentual = $cache['percentual'] ?? 0;
-            $this->faseProgresso = $cache['fase'] ?? '';
-            $this->mensagemStatus = $cache['mensagem'] ?? '';
+            $this->geracaoAtual = (int) $dados['generation'];
+            $this->melhorFitnessAtual = (float) $dados['best_fitness'];
+            $this->entropiaAtual = (float) $dados['entropy'];
+            $this->diversidadeAtual = (float) $dados['diversity'];
+            $this->estadoLandscape = $dados['landscape_state'] ?? 'Evoluindo';
 
-            return;
+            // Atualiza a barra de progresso
+            $this->progressoPercentual = (int) (($this->geracaoAtual / $geracoesTotais) * 100);
+            $this->mensagemStatus = "Fase: " . ucfirst($dados['phase'] ?? 'evolução');
+
+            // Dispara as métricas para o Chart.js no Frontend
+            $this->dispatch('metrics-updated', [
+                'generation' => $this->geracaoAtual,
+                'bestFitness' => $this->melhorFitnessAtual,
+                'avgFitness' => $dados['avg_fitness'] ?? 0,
+                'entropy' => $this->entropiaAtual,
+                'diversity' => $this->diversidadeAtual,
+            ]);
         }
     }
 
-    public function cancelarGeracao(): void {
+    public function cancelarGeracao(): void
+    {
         Cache::forget($this->cacheKey());
 
         $this->resetEstado();
@@ -119,7 +156,8 @@ class Index extends Component {
         $this->mensagemStatus = 'Geração cancelada.';
     }
 
-    public function gerarNovamente(): void {
+    public function gerarNovamente(): void
+    {
         $this->resetEstado();
         $this->iniciarGeracao();
     }
@@ -128,7 +166,8 @@ class Index extends Component {
      |  ESTADO
      ============================================================ */
 
-    private function aplicarErro(array $erro): void {
+    private function aplicarErro(array $erro): void
+    {
         $this->resetEstado();
 
         $this->temErro = true;
@@ -158,7 +197,8 @@ class Index extends Component {
         $this->dispatch('stopPolling');
     }
 
-    private function resetEstado(): void {
+    private function resetEstado(): void
+    {
         $this->emGeracao = false;
         $this->temErro = false;
         $this->concluido = false;
@@ -166,7 +206,8 @@ class Index extends Component {
         $this->erroDetalhes = [];
     }
 
-    private function sincronizarComCache(): void {
+    private function sincronizarComCache(): void
+    {
         $cache = Cache::get($this->cacheKey());
 
         if (!$cache) {
@@ -180,7 +221,8 @@ class Index extends Component {
         }
     }
 
-    private function cacheKey(): string {
+    private function cacheKey(): string
+    {
         return "horario_geracao_{$this->horario->id}";
     }
 
@@ -188,7 +230,8 @@ class Index extends Component {
      |  MAPA SATURAÇÃO
      ============================================================ */
 
-    private function gerarMapaSaturacao(): void {
+    private function gerarMapaSaturacao(): void
+    {
         if (!$this->horario->configuracaoHorario) {
             $this->mapaSaturacao = [];
             return;
@@ -230,19 +273,20 @@ class Index extends Component {
         }
 
         $this->mapaSaturacao = [
-            'professores' => collect($professores)->map(fn($c, $n) => [
+            'professores' => collect($professores)->map(fn ($c, $n) => [
                 'nome' => $n,
                 'percentual' => round(($c / $capacidade) * 100, 1)
             ])->values()->toArray(),
 
-            'turmas' => collect($turmas)->map(fn($c, $n) => [
+            'turmas' => collect($turmas)->map(fn ($c, $n) => [
                 'nome' => $n,
                 'percentual' => round(($c / $capacidade) * 100, 1)
             ])->values()->toArray(),
         ];
     }
 
-    private function calcularRiscoFallback(array $dados): int {
+    private function calcularRiscoFallback(array $dados): int
+    {
         $saturacao = isset($dados['global_saturation']) ? (float) str_replace('%', '', $dados['global_saturation']) : 0;
 
         $turmas = count($dados['turmas'] ?? []);
@@ -258,7 +302,8 @@ class Index extends Component {
         return (int) min(100, round($risco));
     }
 
-    public function render() {
+    public function render()
+    {
         return view('livewire.algoritmo.index');
     }
 }

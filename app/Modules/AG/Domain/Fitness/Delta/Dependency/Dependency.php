@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Modules\AG\Domain\Fitness\Dependency;
+namespace App\Modules\AG\Domain\Fitness\Delta\Dependency;
 
-enum RuleDependency: string {
+enum RuleDependency: string
+{
     case PROFESSOR = 'professor';
     case TURMA = 'turma';
     case DIA = 'dia';

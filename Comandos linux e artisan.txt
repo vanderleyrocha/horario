@@ -20,4 +20,4 @@ LARAVEL_ENV=.env.testing php artisan horario:gerar 19
 
 php artisan queue:monitor default
 
-php artisan queue:work --tries=1 --timeout=600
+php artisan queue:work --tries=1 --timeout=3600

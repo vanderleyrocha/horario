@@ -27,17 +27,11 @@ final class MetricsRecorder
         $this->entropyCalculator = $calculator;
     }
 
-    /**
-     * Registro padrão (compatibilidade)
-     */
     public function record(int $generation, array $population): void
     {
         $this->recordExtended($generation, $population, 0.0, 0);
     }
 
-    /**
-     * Novo método completo usado pelo solver científico
-     */
     public function recordExtended(int $generation, array $population, float $mutationRate, int $stagnation, ?string $landscapeState = null): GenerationMetrics
     {
 
@@ -80,7 +74,6 @@ final class MetricsRecorder
         $this->generationMetrics[] = $generationData;
 
         return new GenerationMetrics($generation, $best, $avg, $variance, $diversity, $entropy, $mutationRate, $stagnation, $landscapeState);
-
     }
 
     private function variance(array $values, float $mean): float

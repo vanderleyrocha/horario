@@ -68,28 +68,166 @@
         @endif
 
         {{-- ========================================================= --}}
-        {{-- EXECUÇÃO --}}
+        {{-- PAINEL CIENTÍFICO (EM GERAÇÃO) --}}
         {{-- ========================================================= --}}
         @if ($emGeracao)
-            <div wire:poll.2000ms="atualizarStatus" class="p-6 border rounded-lg">
+            <div wire:poll.2000ms="atualizarStatus" class="p-6 border rounded-lg bg-gray-50">
 
-                <h2 class="text-xl font-bold mb-4">
-                    Gerando Horário...
-                </h2>
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Evolução do Algoritmo</h2>
+                        <p class="text-gray-500">{{ $mensagemStatus }}</p>
+                    </div>
+                    <button wire:click="cancelarGeracao" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition">
+                        Interromper Execução
+                    </button>
+                </div>
 
-                <p class="mb-4">{{ $mensagemStatus }}</p>
-
-                <div class="w-full bg-gray-200 rounded-full h-6">
-                    <div class="bg-blue-600 h-6 rounded-full text-white text-sm flex items-center justify-center transition-all duration-300" style="width: {{ $progressoPercentual }}%">
-                        {{ $progressoPercentual }}%
+                {{-- Cards de KPIs em Tempo Real --}}
+                <div class="grid grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Geração</p>
+                        <p class="text-2xl font-bold text-blue-600">{{ $geracaoAtual }} <span class="text-sm text-gray-400">/ {{ $configuracao['geracoes'] ?? 500 }}</span></p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Melhor Fitness</p>
+                        <p class="text-2xl font-bold text-green-600">{{ number_format($melhorFitnessAtual, 4) }}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Entropia Estrutural</p>
+                        <p class="text-2xl font-bold text-purple-600">{{ number_format($entropiaAtual, 4) }}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Estado do ALNS</p>
+                        <p class="text-xl font-bold text-orange-500 mt-1">{{ ucfirst($estadoLandscape) }}</p>
                     </div>
                 </div>
 
-                <button wire:click="cancelarGeracao" class="mt-6 px-4 py-2 bg-red-600 text-white rounded-lg">
-                    Cancelar
-                </button>
+                {{-- Barra de Progresso --}}
+                <div class="w-full bg-gray-200 rounded-full h-4 mb-8">
+                    <div class="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-out" style="width: {{ $progressoPercentual }}%"></div>
+                </div>
+
+                {{-- Gráficos Chart.js --}}
+                <div class="grid grid-cols-2 gap-6" wire:ignore>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <h3 class="text-sm font-semibold text-gray-600 mb-2">Curva de Convergência (Fitness)</h3>
+                        <canvas id="fitnessChart" height="200"></canvas>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <h3 class="text-sm font-semibold text-gray-600 mb-2">Diversidade Genética vs Entropia</h3>
+                        <canvas id="diversityChart" height="200"></canvas>
+                    </div>
+                </div>
 
             </div>
+
+            {{-- Script para inicializar e atualizar os gráficos --}}
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                document.addEventListener('livewire:initialized', () => {
+                    // Inicializa Gráfico de Fitness
+                    const ctxFit = document.getElementById('fitnessChart');
+                    const fitnessChart = new Chart(ctxFit, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                    label: 'Best Fitness',
+                                    data: [],
+                                    borderColor: '#16a34a',
+                                    tension: 0.1,
+                                    borderWidth: 2,
+                                    pointRadius: 0
+                                },
+                                {
+                                    label: 'Avg Fitness',
+                                    data: [],
+                                    borderColor: '#9ca3af',
+                                    borderDash: [5, 5],
+                                    tension: 0.1,
+                                    borderWidth: 1,
+                                    pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            animation: false,
+                            scales: {
+                                x: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+
+                    // Inicializa Gráfico de Diversidade/Entropia
+                    const ctxDiv = document.getElementById('diversityChart');
+                    const diversityChart = new Chart(ctxDiv, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                    label: 'Entropia',
+                                    data: [],
+                                    borderColor: '#9333ea',
+                                    tension: 0.3,
+                                    borderWidth: 2,
+                                    pointRadius: 0
+                                },
+                                {
+                                    label: 'Diversidade (Hamming)',
+                                    data: [],
+                                    borderColor: '#f97316',
+                                    tension: 0.3,
+                                    borderWidth: 2,
+                                    pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            animation: false,
+                            scales: {
+                                x: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+
+                    // Escuta o evento disparado pelo PHP e injeta os dados nas linhas
+                    Livewire.on('metrics-updated', (event) => {
+                        // O Livewire 3 pode empacotar os dados de formas diferentes.
+                        // Esta linha garante que pegamos o payload real, não importa a estrutura.
+                        let payload = event[0] || event;
+                        if (payload.data) payload = payload.data;
+
+                        // Atualiza gráfico de Fitness
+                        fitnessChart.data.labels.push(payload.generation);
+                        fitnessChart.data.datasets[0].data.push(payload.bestFitness);
+                        fitnessChart.data.datasets[1].data.push(payload.avgFitness);
+                        fitnessChart.update();
+
+                        // Atualiza gráfico de Diversidade
+                        diversityChart.data.labels.push(payload.generation);
+                        diversityChart.data.datasets[0].data.push(payload.entropy);
+                        diversityChart.data.datasets[1].data.push(payload.diversity);
+                        diversityChart.update();
+                    });
+                    // Limpa os gráficos quando uma nova geração começar (se o usuário clicar em "Gerar" de novo)
+                    Livewire.on('startPolling', () => {
+                        fitnessChart.data.labels = [];
+                        fitnessChart.data.datasets[0].data = [];
+                        fitnessChart.data.datasets[1].data = [];
+                        fitnessChart.update();
+
+                        diversityChart.data.labels = [];
+                        diversityChart.data.datasets[0].data = [];
+                        diversityChart.data.datasets[1].data = [];
+                        diversityChart.update();
+                    });
+                });
+            </script>
         @endif
 
         {{-- ========================================================= --}}
