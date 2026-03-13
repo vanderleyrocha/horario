@@ -8,6 +8,7 @@ use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
+use Illuminate\Support\Facades\Log;
 
 final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
 {
@@ -16,6 +17,7 @@ final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
         $windows = $context->cromossomo()->turmaJanelas();
 
         $penalty = array_sum($windows);
+        Log::info("WindowPenaltyRule: penalty = {$penalty}");
 
         return new RuleResult($penalty, self::class);
     }

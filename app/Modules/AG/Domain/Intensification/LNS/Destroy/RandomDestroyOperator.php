@@ -5,8 +5,10 @@ namespace App\Modules\AG\Domain\Intensification\LNS\Destroy;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class RandomDestroyOperator implements DestroyOperatorInterface {
-    public function destroy(Cromossomo $solution): PartialSolution {
+class RandomDestroyOperator implements DestroyOperatorInterface
+{
+    public function destroy(Cromossomo $solution): PartialSolution
+    {
         $genes = $solution->genes();
 
         $removeCount = (int) floor(count($genes) * 0.2);
@@ -27,4 +29,10 @@ class RandomDestroyOperator implements DestroyOperatorInterface {
 
         return new PartialSolution($assigned, $unassigned);
     }
+
+    public function getName(): string
+    {
+        return 'RandomDestroyOperator';
+    }
+
 }

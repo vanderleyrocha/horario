@@ -7,8 +7,10 @@ namespace App\Modules\AG\Domain\Operators\Crossover;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 
-final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface {
-    public function crossover(Cromossomo $parentA, Cromossomo $parentB): array {
+final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface
+{
+    public function crossover(Cromossomo $parentA, Cromossomo $parentB): array
+    {
         $size = $parentA->count();
 
         if ($size !== $parentB->count()) {
@@ -36,19 +38,9 @@ final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface
             $geneA = $genesA[$i];
             $geneB = $genesB[$i];
 
-            $bestForChildA = $this->chooseBestGene(
-                $geneA,
-                $geneB,
-                $profIndexA,
-                $turmaIndexA
-            );
+            $bestForChildA = $this->chooseBestGene($geneA, $geneB, $profIndexA, $turmaIndexA);
 
-            $bestForChildB = $this->chooseBestGene(
-                $geneB,
-                $geneA,
-                $profIndexB,
-                $turmaIndexB
-            );
+            $bestForChildB = $this->chooseBestGene($geneB, $geneA, $profIndexB, $turmaIndexB);
 
             $childGenesA[] = $bestForChildA;
             $childGenesB[] = $bestForChildB;
@@ -63,24 +55,17 @@ final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface
         ];
     }
 
-    private function chooseBestGene(
-        Gene $candidateA,
-        Gene $candidateB,
-        array $profIndex,
-        array $turmaIndex
-    ): Gene {
+    public function getName(): string
+    {
+        return 'ConflictGraphCrossover';
+    }
 
-        $conflictsA = $this->countConflicts(
-            $candidateA,
-            $profIndex,
-            $turmaIndex
-        );
+    private function chooseBestGene(Gene $candidateA, Gene $candidateB, array $profIndex, array $turmaIndex): Gene
+    {
 
-        $conflictsB = $this->countConflicts(
-            $candidateB,
-            $profIndex,
-            $turmaIndex
-        );
+        $conflictsA = $this->countConflicts($candidateA, $profIndex, $turmaIndex);
+
+        $conflictsB = $this->countConflicts($candidateB, $profIndex, $turmaIndex);
 
         if ($conflictsA < $conflictsB) {
             return $candidateA;
@@ -93,11 +78,8 @@ final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface
         return mt_rand(0, 1) === 0 ? $candidateA : $candidateB;
     }
 
-    private function countConflicts(
-        Gene $gene,
-        array $profIndex,
-        array $turmaIndex
-    ): int {
+    private function countConflicts(Gene $gene, array $profIndex, array $turmaIndex): int
+    {
 
         $conflicts = 0;
 
@@ -121,11 +103,8 @@ final class ConflictGraphCrossoverOperator implements CrossoverOperatorInterface
         return $conflicts;
     }
 
-    private function indexGene(
-        Gene $gene,
-        array &$profIndex,
-        array &$turmaIndex
-    ): void {
+    private function indexGene(Gene $gene, array &$profIndex, array &$turmaIndex): void
+    {
 
         $prof = $gene->professorId();
         $turma = $gene->turmaId();

@@ -5,8 +5,10 @@ namespace App\Modules\AG\Domain\Operators\Mutation;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 
-final class StructuredSwapMutation implements MutationOperatorInterface {
-    public function mutate(Cromossomo $individual): Cromossomo {
+final class StructuredSwapMutation implements MutationOperatorInterface
+{
+    public function mutate(Cromossomo $individual): Cromossomo
+    {
         $size = $individual->count();
 
         if ($size < 2) {
@@ -39,11 +41,13 @@ final class StructuredSwapMutation implements MutationOperatorInterface {
         return $cromossomo;
     }
 
-    private function findCompatibleIndices(
-        array $genes,
-        Gene $baseGene,
-        int $excludeIndex
-    ): array {
+    public function getName(): string
+    {
+        return 'StructuredSwapMutation';
+    }
+
+    private function findCompatibleIndices(array $genes, Gene $baseGene, int $excludeIndex): array
+    {
 
         $indices = [];
 

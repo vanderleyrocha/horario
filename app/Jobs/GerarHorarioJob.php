@@ -3,9 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\Horario;
-use App\Modules\AG\Infrastructure\Progress\CacheProgressReporter;
-use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
+use App\Modules\AG\Infrastructure\Logging\GATelemetryLogger;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
+use App\Modules\AG\Infrastructure\Progress\CacheProgressReporter;
 use App\Modules\Horarios\Application\GenerateScheduleAction;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -21,50 +22,76 @@ class GerarHorarioJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    // Timeout expandido para garantir que execuções longas do GA não sejam cortadas pela fila
     public $timeout = 3600;
 
-    public function __construct(public Horario $horario, public array $parametros // Recebe configurações do Livewire (ex: pop_size, geracoes)
-    ) {
+    public function __construct(public Horario $horario)
+    {
     }
 
     public function handle(): void
     {
-
         ini_set('memory_limit', '-1');
         set_time_limit(0);
 
-        Log::info("Job de geração de horário iniciado [ID: {$this->horario->id}]");
+        Log::info("Job de geracao de horario iniciado [ID: {$this->horario->id}]");
 
-        // 1. Instancia os gravadores individuais
+        $configuracao = $this->horario->configuracao ?? [];
+        $telemetryLogger = app(GATelemetryLogger::class);
+
         $cacheReporter = new CacheProgressReporter($this->horario->id);
         $dbRecorder = new ExecutionMetricsRecorder();
 
         try {
-            // 2. Inicia a execução no banco de dados para gerar o execution_id
-            $dbRecorder->startExecution($this->horario->id, $this->parametros['configuracao']['populacao'] ?? 120, // Default 120 (Island Model)
-                $this->parametros['configuracao']['geracoes'] ?? 500, $this->parametros['configuracao'] ?? []);
+            $dbRecorder->startExecution(
+                $this->horario->id,
+                (int) ($configuracao['populacao'] ?? 100),
+                (int) ($configuracao['geracoes'] ?? 500),
+                $configuracao
+            );
 
-            // 3. Cria a ponte unificada
-            $progressBridge = new CacheAndDbProgressReporter($cacheReporter, $dbRecorder);
+            $telemetryLogger->executionStarted(
+                $this->horario->id,
+                $configuracao,
+                $dbRecorder->getExecutionId()
+            );
 
-            // 4. Executa a Action injetando a nossa ponte
+            $progressBridge = new CacheAndDbProgressReporter(
+                $cacheReporter,
+                $dbRecorder,
+                $telemetryLogger,
+                $this->horario->id
+            );
+
             $action = app(GenerateScheduleAction::class);
             $result = $action->execute($this->horario, $progressBridge);
 
-            // 5. Finaliza as execuções com sucesso
-            $bestFitness = $result['best_fitness'] ?? 0.0;
+            $bestFitness = (float) ($result['best_fitness'] ?? 0.0);
+
             $dbRecorder->finishExecution($bestFitness);
             $cacheReporter->reportCompleted($bestFitness);
-            Log::info("Job de geração de horário finalizado com sucesso [ID: {$this->horario->id}]");
 
+            $telemetryLogger->executionCompleted(
+                $this->horario->id,
+                $bestFitness,
+                [
+                    'generations_configured' => (int) ($configuracao['geracoes'] ?? 500),
+                    'population_configured' => (int) ($configuracao['populacao'] ?? 100),
+                ],
+                $dbRecorder->getExecutionId()
+            );
+
+            Log::info("Job de geracao de horario finalizado com sucesso [ID: {$this->horario->id}]");
         } catch (\Throwable $e) {
-            // Em caso de quebra (TimeOut, OutOfMemory, etc), forçamos o flush do que já evoluiu
-            if (isset($dbRecorder)) {
-                $dbRecorder->flush();
-            }
+            $dbRecorder->flush();
 
-            Log::error("Erro na geração de horário [ID: {$this->horario->id}]: " . $e->getMessage());
+            $telemetryLogger->executionFailed(
+                $this->horario->id,
+                $e,
+                ['configuracao' => $configuracao],
+                $dbRecorder->getExecutionId()
+            );
+
+            Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: " . $e->getMessage());
             throw $e;
         }
     }

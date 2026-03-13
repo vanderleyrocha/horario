@@ -73,6 +73,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'ga' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ga.log'),
+            'level' => env('LOG_GA_LEVEL', 'debug'),
+            'days' => env('LOG_GA_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

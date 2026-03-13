@@ -2,6 +2,7 @@
 
 namespace App\Modules\AG\Domain\HyperHeuristic;
 
+use App\Modules\AG\Domain\Operators\EvolutionaryOperatorInterface;
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 
 class LearningHyperHeuristicController
@@ -12,7 +13,7 @@ class LearningHyperHeuristicController
     {
     }
 
-    public function selectOperator(array $operators): MutationOperatorInterface
+    public function selectOperator(array $operators): EvolutionaryOperatorInterface
     {
         $this->operatorMap = [];
 
@@ -20,9 +21,15 @@ class LearningHyperHeuristicController
             $this->operatorMap[$operator::class] = $operator;
         }
 
+
         $stats = $this->tracker->getOperatorStatistics();
 
+        if (empty($stats)) {
+            return $operators[array_rand($operators)];
+        }
+
         $selected = $this->selectionStrategy->select($stats);
+
 
         if (isset($this->operatorMap[$selected])) {
 
@@ -46,4 +53,6 @@ class LearningHyperHeuristicController
     {
         return $this->tracker->getOperatorStatistics();
     }
+
+
 }

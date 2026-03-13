@@ -15,7 +15,6 @@ use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\CrossoverOperatorInterface;
 use App\Modules\AG\Domain\Operators\Elitism\ElitismStrategyInterface;
-use App\Modules\AG\Domain\Operators\Mutation\Interfaces\AdaptiveOperatorInterface;
 use App\Modules\AG\Domain\Operators\Mutation\Interfaces\DiversityAwareMutationInterface;
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
@@ -29,12 +28,11 @@ use Illuminate\Support\Facades\Log;
 final class GeneticAlgorithmEngine
 {
     private array $mutationPool;
+    private array $lastEvolutionTelemetry = [];
 
     public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly PopulationFitnessEvaluator $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
     {
-        $this->mutationPool = [
-            $this->mutation
-        ];
+        $this->mutationPool = [$this->mutation];
     }
 
     public function run(int $populationSize): Cromossomo
@@ -43,8 +41,11 @@ final class GeneticAlgorithmEngine
 
         $generation = 0;
 
-        Log::info("Iniciando criação da população inicial");
         while (!$this->termination->shouldTerminate($generation, $population)) {
+
+            $operatorRewards = [];
+            $operatorUsed = null;
+            $operatorReward = 0.0;
 
             $landscapeState = null;
             $activateDynamicLNS = false;
@@ -61,18 +62,10 @@ final class GeneticAlgorithmEngine
 
             $newPopulation = [];
 
-            /* -------------------------------------------------
-               ELITISMO
-            ------------------------------------------------- */
-
             foreach ($this->elitism->selectElites($population) as $elite) {
                 $newPopulation[] = $elite;
             }
 
-            /* -------------------------------------------------
-               EVOLUÇÃO
-            ------------------------------------------------- */
-            Log::info("Iniciando a evolução da população");
             while (count($newPopulation) < $populationSize) {
 
                 $parentA = $this->selection->select($population);
@@ -80,14 +73,20 @@ final class GeneticAlgorithmEngine
 
                 [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
 
-                /* ---------------- CHILD A ---------------- */
+                /* CHILD A */
 
                 $beforeA = $childA->fitness();
 
                 if ($this->shouldMutate($mutationRate)) {
 
                     if ($this->hyperHeuristic) {
+
                         $operator = $this->hyperHeuristic->selectOperator($this->mutationPool);
+
+                        if (!$operator instanceof MutationOperatorInterface) {
+                            throw new \RuntimeException("Selected operator is not a mutation operator");
+                        }
+
                     } else {
                         $operator = $this->mutation;
                     }
@@ -101,17 +100,30 @@ final class GeneticAlgorithmEngine
 
                 $afterA = $resultA->score();
 
+                $reward = $afterA - $beforeA;
 
-                $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeA, $afterA);
+                $name = method_exists($operator, 'getName')
+                    ? $operator->getName()
+                    : class_basename($operator);
 
+                $operatorRewards[$name][] = $reward;
+                $operatorUsed = $name;
 
-                /* ---------------- CHILD B ---------------- */
+                if ($this->hyperHeuristic) {
+                    $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeA, $afterA);
+                }
+
+                /* CHILD B */
 
                 $beforeB = $childB->fitness();
 
                 if ($this->shouldMutate($mutationRate)) {
 
-                    $operator = $this->hyperHeuristic->selectOperator($this->mutationPool);
+                    $operator = $this->hyperHeuristic ? $this->hyperHeuristic->selectOperator($this->mutationPool) : $this->mutation;
+
+                    if (!$operator instanceof MutationOperatorInterface) {
+                        throw new \RuntimeException("Selected operator is not a mutation operator");
+                    }
 
                     $childB = $operator->mutate($childB);
                 }
@@ -122,7 +134,18 @@ final class GeneticAlgorithmEngine
 
                 $afterB = $resultB->score();
 
-                $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeB, $afterB);
+                $reward = $afterB - $beforeB;
+
+                $name = method_exists($operator, 'getName')
+                    ? $operator->getName()
+                    : class_basename($operator);
+
+                $operatorRewards[$name][] = $reward;
+                $operatorUsed = $name;
+
+                if ($this->hyperHeuristic) {
+                    $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeB, $afterB);
+                }
 
                 $newPopulation[] = $childA;
 
@@ -131,24 +154,37 @@ final class GeneticAlgorithmEngine
                 }
             }
 
-            /* -------------------------------------------------
-               AVALIAÇÃO
-            ------------------------------------------------- */
-
             $this->populationEvaluator->evaluate($newPopulation);
+
             $population = $newPopulation;
 
             $stagnation = $this->termination->getGenerationsWithoutImprovement();
 
-            /* -------------------------------------------------
-               MÉTRICAS
-            ------------------------------------------------- */
-
             $metrics = $this->metrics->recordExtended($generation, $population, $mutationRate, $stagnation);
 
-            /* -------------------------------------------------
-               LANDSCAPE ANALYSIS
-            ------------------------------------------------- */
+
+            Log::info("Generation {$generation} | best={$metrics->bestFitness} | avg={$metrics->avgFitness} | div={$metrics->diversity}");
+
+            /* calcular reward médio */
+
+            if (!empty($operatorRewards)) {
+
+                $total = 0;
+                $count = 0;
+
+                foreach ($operatorRewards as $rewards) {
+                    foreach ($rewards as $r) {
+                        $total += $r;
+                        $count++;
+                    }
+                }
+
+                if ($count > 0) {
+                    $operatorReward = $total / $count;
+                }
+            }
+
+            /* LANDSCAPE */
 
             if ($this->landscapeEngine !== null) {
 
@@ -159,29 +195,11 @@ final class GeneticAlgorithmEngine
                 $landscapeState = $response->state->value;
 
                 $mutationRate *= $response->mutationMultiplier;
+
                 $mutationRate = max(0.001, min($mutationRate, 0.9));
 
                 $activateDynamicLNS = $response->activateALNS;
                 $diversificationBoost = $response->diversificationBoost;
-            }
-
-            /* -------------------------------------------------
-               DIVERSIFICATION
-            ------------------------------------------------- */
-
-            if ($diversificationBoost > 0) {
-
-                $numNew = (int) round(count($population) * $diversificationBoost);
-
-                for ($i = 0; $i < $numNew; $i++) {
-
-                    $ind = $this->problem->createIndividual();
-                    $ind = $this->problem->repair($ind);
-
-                    $this->problem->evaluate($ind);
-
-                    $this->replacement->replace($population, $ind);
-                }
             }
 
             $metrics->landscapeState = $landscapeState;
@@ -190,17 +208,33 @@ final class GeneticAlgorithmEngine
                 $this->executionMetrics->recordGeneration($metrics);
             }
 
-            /* -------------------------------------------------
-               LNS
-            ------------------------------------------------- */
+            /* STREAMING DE MÉTRICAS */
 
-            $shouldRunLNS =
+
+            $this->metrics->publishGenerationMetrics([
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'generation' => $generation,
+                'best_fitness' => $metrics->bestFitness,
+                'avg_fitness' => $metrics->avgFitness,
+                'variance' => $metrics->variance,
+                'diversity' => $metrics->diversity,
+                'entropy' => $metrics->entropy,
+                'mutation_rate' => $mutationRate,
+                'stagnation' => $stagnation,
+                'landscape_state' => $landscapeState ?? 'unknown',
+                'operator_used' => $operatorUsed,
+                'operator_reward' => $operatorReward,
+                'timestamp' => microtime(true)
+            ], $this->executionMetrics?->getExecutionId() ?? 0);
+
+
+            /* LNS */
+
+            if (
                 $this->lns !== null &&
                 $generation > 0 &&
-                ($generation % $this->lnsFrequency === 0 ||
-                    $activateDynamicLNS);
-
-            if ($shouldRunLNS) {
+                ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
+            ) {
 
                 $best = $this->getBest($population);
 
@@ -215,9 +249,7 @@ final class GeneticAlgorithmEngine
                 $this->problem->clearFitnessCache();
             }
 
-            /* -------------------------------------------------
-               PROGRESS
-            ------------------------------------------------- */
+            /* PROGRESS */
 
             if ($this->progress) {
 
@@ -252,28 +284,17 @@ final class GeneticAlgorithmEngine
     {
         $population = [];
 
-        Log::info("Iniciando geração da população de tamanho {$size}");
-
         for ($i = 0; $i < $size; $i++) {
 
 
-            Log::info("A tentar gerar o indivíduo {$i}...");
+            Log::info("Criando indivíduo {$i}");
 
             $individual = $this->problem->createIndividual();
+
             $individual = $this->problem->repair($individual);
 
             $population[] = $individual;
-
-            if ($this->progress) {
-                $this->progress->report([
-                    'phase' => 'initial_population',
-                    'current' => $i + 1,
-                    'total' => $size
-                ]);
-            }
         }
-
-        Log::info("População criada com sucesso! A avaliar fitness inicial...");
 
         $this->populationEvaluator->evaluate($population);
 
@@ -286,7 +307,23 @@ final class GeneticAlgorithmEngine
         return $population[0];
     }
 
-    public function evolveGeneration_old(array $population, int $populationSize): array
+    public function createIndividual(): Cromossomo
+    {
+        $individual = $this->problem->createIndividual();
+
+        $individual = $this->problem->repair($individual);
+
+        $this->problem->evaluate($individual);
+
+        return $individual;
+    }
+
+    public function lastEvolutionTelemetry(): array
+    {
+        return $this->lastEvolutionTelemetry;
+    }
+
+    public function evolveGeneration(array $population, int $populationSize): array
     {
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
@@ -298,26 +335,16 @@ final class GeneticAlgorithmEngine
         }
 
         $newPopulation = [];
+        $operatorRewards = [];
+        $operatorUsed = null;
 
-        /*
-        |------------------------------------------
-        | ELITISMO
-        |------------------------------------------
-        */
+        /* ELITISMO */
 
         foreach ($this->elitism->selectElites($population) as $elite) {
             $newPopulation[] = $elite;
         }
 
-        /*
-        |------------------------------------------
-        | EVOLUÇÃO
-        |------------------------------------------
-        */
-
-        $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
-
-        Log::info("Iniciando evolução da população com {$populationSize} indivíduos! Tempo decorrido = {$elapsed}");
+        /* EVOLUÇÃO */
 
         while (count($newPopulation) < $populationSize) {
 
@@ -326,60 +353,51 @@ final class GeneticAlgorithmEngine
 
             [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
 
-            /*
-            | CHILD A
-            */
-
+            /* CHILD A */
             $beforeA = $childA->fitness();
 
             if ($this->shouldMutate($mutationRate)) {
 
-                if ($this->hyperHeuristic) {
-                    $operator = $this->hyperHeuristic->selectOperator($this->mutationPool);
-                } else {
-                    $operator = $this->mutation;
+                $operator = $this->hyperHeuristic
+                    ? $this->hyperHeuristic->selectOperator($this->mutationPool)
+                    : $this->mutation;
+
+                if (!$operator instanceof MutationOperatorInterface) {
+                    throw new \RuntimeException("Selected operator is not a mutation operator");
                 }
 
                 $childA = $operator->mutate($childA);
+                $operatorUsed = method_exists($operator, 'getName')
+                    ? $operator->getName()
+                    : class_basename($operator);
             }
 
             $childA = $this->problem->repair($childA);
+            $afterA = $this->problem->evaluate($childA)->score();
+            $operatorRewards[] = $afterA - $beforeA;
 
-            $resultA = $this->problem->evaluate($childA);
-
-            $afterA = $resultA->score();
-
-            if ($this->hyperHeuristic) {
-                $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeA, $afterA);
-            }
-
-            /*
-            | CHILD B
-            */
-
+            /* CHILD B */
             $beforeB = $childB->fitness();
 
             if ($this->shouldMutate($mutationRate)) {
 
-                if ($this->hyperHeuristic) {
-                    $operator =
-                        $this->hyperHeuristic->selectOperator($this->mutationPool);
-                } else {
-                    $operator = $this->mutation;
+                $operator = $this->hyperHeuristic
+                    ? $this->hyperHeuristic->selectOperator($this->mutationPool)
+                    : $this->mutation;
+
+                if (!$operator instanceof MutationOperatorInterface) {
+                    throw new \RuntimeException("Selected operator is not a mutation operator");
                 }
 
                 $childB = $operator->mutate($childB);
+                $operatorUsed = method_exists($operator, 'getName')
+                    ? $operator->getName()
+                    : class_basename($operator);
             }
 
             $childB = $this->problem->repair($childB);
-
-            $resultB = $this->problem->evaluate($childB);
-
-            $afterB = $resultB->score();
-
-            if ($this->hyperHeuristic) {
-                $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeB, $afterB);
-            }
+            $afterB = $this->problem->evaluate($childB)->score();
+            $operatorRewards[] = $afterB - $beforeB;
 
             $newPopulation[] = $childA;
 
@@ -389,69 +407,12 @@ final class GeneticAlgorithmEngine
         }
 
         $this->populationEvaluator->evaluate($newPopulation);
-
-        $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
-
-        Log::info("Evolução concluída com sucesso! Tempo decorrido = {$elapsed}");
-        return $newPopulation;
-    }
-
-    public function evolveGeneration(array $population, int $populationSize): array
-    {
-        $newPopulation = [];
-        $mutationRate = $this->adaptiveMutation->computeRate(0.5); // Simplificado para o escopo
-
-        // Taxa de intensificação (ALNS): Apenas 5% dos filhos passarão pela busca local pesada
-        $alnsIntensificationRate = 0.05;
-
-        while (count($newPopulation) < $populationSize) {
-
-            $parentA = $this->selection->select($population);
-            $parentB = $this->selection->select($population);
-
-            [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
-
-            /* ================= CHILD A ================= */
-            if ($this->shouldMutate($mutationRate)) {
-                $childA = $this->mutation->mutate($childA);
-            }
-
-            // Reparo ALNS apenas se sortear dentro da taxa (ex: 5% de chance)
-            if ($this->shouldMutate($alnsIntensificationRate)) {
-                $childA = $this->problem->repair($childA);
-            }
-
-            $newPopulation[] = $childA;
-
-            if (count($newPopulation) >= $populationSize) {
-                break;
-            }
-
-            /* ================= CHILD B ================= */
-            if ($this->shouldMutate($mutationRate)) {
-                $childB = $this->mutation->mutate($childB);
-            }
-
-            if ($this->shouldMutate($alnsIntensificationRate)) {
-                $childB = $this->problem->repair($childB);
-            }
-
-            $newPopulation[] = $childB;
-        }
-
-        $this->populationEvaluator->evaluate($newPopulation);
+        $this->lastEvolutionTelemetry = [
+            'mutation_rate' => $mutationRate,
+            'operator_used' => $operatorUsed ?? 'none',
+            'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
+        ];
 
         return $newPopulation;
-    }
-
-    public function createIndividual(): Cromossomo
-    {
-        $individual = $this->problem->createIndividual();
-
-        $individual = $this->problem->repair($individual);
-
-        $this->problem->evaluate($individual);
-
-        return $individual;
     }
 }

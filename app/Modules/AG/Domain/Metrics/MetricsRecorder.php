@@ -6,12 +6,17 @@ namespace App\Modules\AG\Domain\Metrics;
 
 use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use Illuminate\Support\Facades\Cache;
 
 final class MetricsRecorder
 {
     private array $generationMetrics = [];
 
     private float $bestFitnessOverall = 0.0;
+    private ?int $executionId = null;
+
+    private int $diversitySamplingInterval = 5;
+    private float $lastDiversity = 1.0;
 
     private ?DiversityCalculatorInterface $diversityCalculator = null;
 
@@ -25,6 +30,11 @@ final class MetricsRecorder
     public function setEntropyCalculator(PopulationEntropyCalculator $calculator): void
     {
         $this->entropyCalculator = $calculator;
+    }
+
+    public function setExecutionId(int $executionId): void
+    {
+        $this->executionId = $executionId;
     }
 
     public function record(int $generation, array $population): void
@@ -51,13 +61,38 @@ final class MetricsRecorder
 
         $variance = $this->variance($fitnessValues, $avg);
 
-        $diversity = $this->diversityCalculator
-            ? $this->diversityCalculator->calculate($population)
-            : 0.0;
 
-        $entropy = $this->entropyCalculator
-            ? $this->entropyCalculator->normalized($population)
-            : 0.0;
+
+        if ($this->diversityCalculator) {
+
+            /*
+             |------------------------------------------------------
+             | Early-stop diversity calculation
+             |------------------------------------------------------
+             */
+
+            if ($this->lastDiversity < 0.05) {
+
+                $diversity = $this->lastDiversity;
+
+            } else {
+
+                if ($generation % $this->diversitySamplingInterval === 0) {
+
+                    $this->lastDiversity =
+                        $this->diversityCalculator->calculate($population);
+                }
+
+                $diversity = $this->lastDiversity;
+            }
+
+        } else {
+
+            $diversity = 0.0;
+        }
+
+
+        $entropy = $this->entropyCalculator ? $this->entropyCalculator->normalized($population) : 0.0;
 
         $generationData = [
             'generation' => $generation,
@@ -118,5 +153,22 @@ final class MetricsRecorder
     public function generationData(): array
     {
         return $this->generationMetrics;
+    }
+
+    public function publishGenerationMetrics(array $metrics): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        $metrics['execution_id'] = $this->executionId;
+        $metrics['timestamp'] = microtime(true);
+
+        Cache::put("ga_execution_metrics_{$this->executionId}", $metrics, now()->addMinutes(10));
+    }
+
+    public function getExecutionId(): ?int
+    {
+        return $this->executionId;
     }
 }

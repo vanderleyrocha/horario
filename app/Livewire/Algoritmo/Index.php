@@ -32,6 +32,7 @@ class Index extends Component
     public array $mapaSaturacao = [];
 
     public int $geracaoAtual = 0;
+    public int $geracoesTotais = 500;
     public float $melhorFitnessAtual = 0.0;
     public float $entropiaAtual = 0.0;
     public float $diversidadeAtual = 0.0;
@@ -63,6 +64,7 @@ class Index extends Component
             'taxa_mutacao' => 0.3,
             'taxa_crossover' => 0.7,
         ];
+        $this->geracoesTotais = (int) ($this->configuracao['geracoes'] ?? 500);
         $this->sincronizarComCache();
         $this->gerarMapaSaturacao();
     }
@@ -78,18 +80,22 @@ class Index extends Component
 
         // 2. Limpa qualquer estado de erro ou sucesso de execuções anteriores
         $this->resetEstado();
+        $this->configuracao = $this->normalizarConfiguracao($this->configuracao);
+        $this->horario->configuracao = $this->configuracao;
+        $this->horario->save();
+        $this->horario->refresh();
+        $this->configuracao = $this->horario->configuracao ?? $this->configuracao;
+        $this->geracoesTotais = (int) ($this->configuracao['geracoes'] ?? 500);
 
         // 3. Prepara a UI para a tela de carregamento/gráficos
         $this->emGeracao = true;
         $this->mensagemStatus = 'Inicializando o Algoritmo Genético...';
 
         // 4. Dispara o Job em background (com timeout longo) passando a configuração
-        GerarHorarioJob::dispatch($this->horario, [
-            'configuracao' => $this->configuracao
-        ]);
+        GerarHorarioJob::dispatch($this->horario);
 
         // 5. Aciona o Frontend via JS (inicia o polling e preparará os gráficos)
-        $this->dispatch('startPolling');
+        $this->dispatch('ga-started');
     }
 
     public function atualizarStatus(): void
@@ -119,12 +125,13 @@ class Index extends Component
             $this->emGeracao = false;
             $this->concluido = true;
             $this->progressoPercentual = 100;
+            $this->dispatch('ga-finished');
             return;
         }
 
         // 3. Leitura das Métricas de Evolução (DTO EvolutionProgress transformado em array)
         if (isset($dados['generation'])) {
-            $geracoesTotais = $this->configuracao['geracoes'] ?? 500;
+            $this->geracoesTotais = (int) ($dados['max_generations'] ?? $this->horario->configuracao['geracoes'] ?? $this->configuracao['geracoes'] ?? 500);
 
             $this->geracaoAtual = (int) $dados['generation'];
             $this->melhorFitnessAtual = (float) $dados['best_fitness'];
@@ -133,17 +140,18 @@ class Index extends Component
             $this->estadoLandscape = $dados['landscape_state'] ?? 'Evoluindo';
 
             // Atualiza a barra de progresso
-            $this->progressoPercentual = (int) (($this->geracaoAtual / $geracoesTotais) * 100);
+            $this->progressoPercentual = (int) (($this->geracaoAtual / max(1, $this->geracoesTotais)) * 100);
             $this->mensagemStatus = "Fase: " . ucfirst($dados['phase'] ?? 'evolução');
 
             // Dispara as métricas para o Chart.js no Frontend
-            $this->dispatch('metrics-updated', [
-                'generation' => $this->geracaoAtual,
-                'bestFitness' => $this->melhorFitnessAtual,
-                'avgFitness' => $dados['avg_fitness'] ?? 0,
-                'entropy' => $this->entropiaAtual,
-                'diversity' => $this->diversidadeAtual,
-            ]);
+            $this->dispatch(
+                'ga-metrics-updated',
+                generation: $this->geracaoAtual,
+                bestFitness: $this->melhorFitnessAtual,
+                avgFitness: (float) ($dados['avg_fitness'] ?? 0),
+                entropy: $this->entropiaAtual,
+                diversity: $this->diversidadeAtual
+            );
         }
     }
 
@@ -153,6 +161,7 @@ class Index extends Component
 
         $this->resetEstado();
         $this->statusGeracao = 'cancelado';
+        $this->dispatch('ga-finished');
         $this->mensagemStatus = 'Geração cancelada.';
     }
 
@@ -194,7 +203,7 @@ class Index extends Component
             $this->horario->save();
         }
 
-        $this->dispatch('stopPolling');
+        $this->dispatch('ga-finished');
     }
 
     private function resetEstado(): void
@@ -204,6 +213,16 @@ class Index extends Component
         $this->concluido = false;
         $this->mensagemErro = null;
         $this->erroDetalhes = [];
+    }
+
+    private function normalizarConfiguracao(array $configuracao): array
+    {
+        return [
+            'populacao' => (int) ($configuracao['populacao'] ?? 100),
+            'geracoes' => (int) ($configuracao['geracoes'] ?? 500),
+            'taxa_mutacao' => (float) ($configuracao['taxa_mutacao'] ?? 0.3),
+            'taxa_crossover' => (float) ($configuracao['taxa_crossover'] ?? 0.7),
+        ];
     }
 
     private function sincronizarComCache(): void

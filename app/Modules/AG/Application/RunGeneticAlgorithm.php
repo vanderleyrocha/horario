@@ -39,8 +39,20 @@ use App\Modules\AG\Domain\Operators\Selection\FitnessSharing\SharingFunction;
 use App\Modules\AG\Domain\Operators\Selection\TournamentSelection;
 use App\Modules\AG\Domain\Termination\MaxGenerationsOrFitnessCriterion;
 use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
+use App\Modules\AG\Infrastructure\Progress\NullProgressReporter;
+use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\TeacherConflictRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\WorkloadExceededRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\ConsecutiveLessonRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\DistributionRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\MaxLessonsPerDayRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\PreferredTimeRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule;
 use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
 use Illuminate\Support\Facades\Log;
 
@@ -48,34 +60,55 @@ final class RunGeneticAlgorithm
 {
     public function execute(Horario $horario, ?ProgressReporterInterface $progress = null): array
     {
-
         Log::info("RunGeneticAlgorithm::execute() iniciado");
 
-        /* ============================================================
-         | 1️⃣ Construção dos dados do problema
-         ============================================================ */
+        $config = GeneticAlgorithmConfigDTO::fromModels($horario);
+        $executionMetrics = null;
+
+        $progress = $progress ?? new NullProgressReporter();
+
+        /*
+        =============================================================
+        1️⃣ Construção dos dados
+        =============================================================
+        */
 
         $dataBuilder = new ScheduleDataBuilder();
-
         $scheduleData = $dataBuilder->build($horario);
 
-        /* ============================================================
-         | 2️⃣ Fitness
-         ============================================================ */
+        /*
+        =============================================================
+        2️⃣ Fitness
+        =============================================================
+        */
 
-        $fitnessEvaluator = new FitnessEvaluator(weights: FitnessWeights::default(), rules: []);
+        $fitnessEvaluator = new FitnessEvaluator(weights: FitnessWeights::default(), rules: [
+            new TeacherConflictRule(),
+            new ClassConflictRule(),
+            new WorkloadExceededRule(),
+            new MandatoryBlockViolationRule(),
+            new WindowPenaltyRule(),
+            new DistributionRule(),
+            new MaxLessonsPerDayRule($config->aulasPorDia),
+            new ConsecutiveLessonRule(),
+            new PreferredTimeRule(),
+        ]);
 
         $repairOperator = new GreedyRepairOperator();
-        /* ============================================================
-         | 3️⃣ Problema específico
-         ============================================================ */
+
+        /*
+        =============================================================
+        3️⃣ Problema
+        =============================================================
+        */
 
         $problem = new ScheduleProblem(data: $scheduleData, contextBuilder: new EvaluationContextBuilder(), fitnessEvaluator: $fitnessEvaluator, repairOperator: $repairOperator);
 
-        /* ============================================================
-         | 4️⃣ Operadores base
-         ============================================================ */
-
+        /*
+        =============================================================
+        4️⃣ Operadores
+        =============================================================
+        */
 
         $distance = new GeneticDistance();
 
@@ -85,41 +118,55 @@ final class RunGeneticAlgorithm
 
         $selection = new TournamentSelection(3, $sharingCalculator);
 
-
         $crossover = new ConflictGraphCrossoverOperator();
 
-        $elitism = new TopEliteStrategy(3);
+        $elitism = new TopEliteStrategy(max(1, $config->eliteCount()));
 
-        $termination = new MaxGenerationsOrFitnessCriterion(maxGenerations: 500, targetFitness: 100.0, maxGenerationsWithoutImprovement: 120);
+        $termination = new MaxGenerationsOrFitnessCriterion(
+            maxGenerations: $config->numeroGeracoes,
+            targetFitness: $config->targetFitness,
+            maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement
+        );
 
-        /* ============================================================
-         | 5️⃣ Configuração Island Model
-         ============================================================ */
+        /*
+        =============================================================
+        5️⃣ Island Model
+        =============================================================
+        */
 
-        $islandCount = 4;
-        $populationSize = 120;
+        $islandCount = 2;
+        $populationSize = $config->tamanhoPopulacao;
         $migrationInterval = 25;
 
         $islandEngine = new IslandModelEngine(migrationPolicy: new BestIndividualsMigration(2), migrationInterval: $migrationInterval);
 
         $metricsGlobal = [];
 
-        /* ============================================================
-         | 6️⃣ Criação das ilhas
-         ============================================================ */
+        /*
+        =============================================================
+        6️⃣ Criar ilhas
+        =============================================================
+        */
 
         for ($i = 0; $i < $islandCount; $i++) {
+
             Log::info("Ilha {$i} iniciada");
+
             $metrics = new MetricsRecorder();
+
+            $metrics->setExecutionId($horario->id);
 
 
             $metrics->setDiversityCalculator(new HashDiversityCalculator());
-
-
             $metrics->setEntropyCalculator(new PopulationEntropyCalculator());
+
+            $metricsGlobal[] = $metrics;
 
             $mutation = new AdaptiveDiversityMutation(structured: new StructuredSwapMutation(), swap: new GeneSwapMutation(), conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6));
 
+            /*
+            Hyper Heuristic
+            */
 
             $tracker = new OperatorPerformanceTracker();
 
@@ -129,12 +176,23 @@ final class RunGeneticAlgorithm
 
             $hyperHeuristic = new LearningHyperHeuristicController($tracker, $selectionStrategy, $rewardCalculator);
 
+            /*
+            Mutation controller
+            */
 
             $adaptiveMutation = new AdaptiveMutationController(baseRate: 0.02, amplification: 0.25, maxRate: 0.35);
+
+            /*
+            Population evaluator
+            */
 
             $populationEvaluator = new PopulationFitnessEvaluator(problem: $problem, concurrency: config('ag.max_workers', 8));
 
             $replacement = new WorstIndividualReplacement(2);
+
+            /*
+            ALNS
+            */
 
             $conflictDetector = new ConflictDetector();
 
@@ -151,31 +209,40 @@ final class RunGeneticAlgorithm
 
             $lns = new AdaptiveLargeNeighborhoodSearch($destroyOperators, $repairOperators);
 
+            /*
+            GA engine
+            */
 
-            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: 50);
+
+            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: 50, executionMetrics: $executionMetrics);
 
 
             $islandEngine->addIsland(new Island($i + 1, engine: $engine, populationSize: $populationSize, replacement: $replacement));
-
-            $metricsGlobal[] = $metrics;
         }
 
-        Log::info("RunGeneticAlgorithm::execute() finalizado: Ilhas criadas com sucesso!");
+        Log::info("Ilhas criadas com sucesso!");
 
-        /* ============================================================
-         | 7️⃣ Conexão de Telemetria e Execução Global
-         ============================================================ */
+        /*
+        =============================================================
+        7️⃣ Telemetria
+        =============================================================
+        */
 
-        // Injeta o ProgressReporter e o primeiro MetricsRecorder para monitorar o cenário global
-        $islandEngine->setTelemetry($metricsGlobal[0], $progress);
+        $islandEngine->setTelemetry($metricsGlobal[0], $progress, $config->taxaMutacao);
 
-        // Roda as gerações (Agora o painel vai atualizar a cada ciclo!)
-        $best = $islandEngine->run(50);
+        /*
+        =============================================================
+        8️⃣ Execução
+        =============================================================
+        */
 
-        /* ============================================================
-         | 8️⃣ Consolidação de métricas
-         ============================================================ */
+        $best = $islandEngine->run($config->numeroGeracoes);
 
+        /*
+        =============================================================
+        9️⃣ Consolidar métricas
+        =============================================================
+        */
 
         $generationMetrics = [];
 
@@ -183,9 +250,11 @@ final class RunGeneticAlgorithm
             $generationMetrics[] = $metrics->generationData();
         }
 
-        /* ============================================================
-         | 9️⃣ Resultado estruturado
-         ============================================================ */
+        /*
+        =============================================================
+        🔟 Resultado
+        =============================================================
+        */
 
         return [
             'best' => $best,

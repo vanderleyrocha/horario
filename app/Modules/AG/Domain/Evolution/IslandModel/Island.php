@@ -57,6 +57,11 @@ final class Island
         return $this->population;
     }
 
+    public function telemetrySnapshot(): array
+    {
+        return $this->engine->lastEvolutionTelemetry();
+    }
+
     public function injectIndividual(Cromossomo $individual): void
     {
         $this->replacement->replace($this->population, $individual);

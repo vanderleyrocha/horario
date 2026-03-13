@@ -6,8 +6,10 @@ namespace App\Modules\AG\Domain\Operators\Crossover;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class SinglePointCrossover implements CrossoverOperatorInterface {
-    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array {
+final class SinglePointCrossover implements CrossoverOperatorInterface
+{
+    public function crossover(Cromossomo $pai1, Cromossomo $pai2): array
+    {
         $size = $pai1->count();
 
         if ($size === 0) {
@@ -36,5 +38,10 @@ final class SinglePointCrossover implements CrossoverOperatorInterface {
             new Cromossomo($genes1),
             new Cromossomo($genes2),
         ];
+    }
+
+    public function getName(): string
+    {
+        return 'SinglePointCrossover';
     }
 }

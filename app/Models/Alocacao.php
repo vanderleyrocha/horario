@@ -31,6 +31,8 @@ class Alocacao extends Model
     protected $casts = [
         'tempo' => 'integer',
         'duracao_tempos' => 'integer',
+        'horario_inicio' => 'datetime:H:i',
+        'horario_fim' => 'datetime:H:i',
         'eh_manual' => 'boolean',
         'bloqueada' => 'boolean'
     ];

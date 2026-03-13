@@ -13,12 +13,12 @@ class ExecutionMetricsRecorder
 
     private int $batchSize = 25;
 
-    public function startExecution(int $scheduleId, int $populationSize, int $generations, array $parameters): int
+    public function startExecution(int $horarioId, int $populationSize, int $generations, array $parameters): int
     {
 
         $this->executionId = DB::table('schedule_executions')
             ->insertGetId([
-                'schedule_id' => $scheduleId,
+                'horario_id' => $horarioId,
                 'start_time' => now(),
                 'population_size' => $populationSize,
                 'generations' => $generations,
@@ -74,4 +74,10 @@ class ExecutionMetricsRecorder
                 'updated_at' => now()
             ]);
     }
+
+    public function getExecutionId(): int
+    {
+        return $this->executionId;
+    }
+
 }

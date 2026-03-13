@@ -4,21 +4,18 @@ namespace App\Modules\AG\Domain\Operators\Crossover;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class BlockPreservingCrossover implements CrossoverOperatorInterface {
+final class BlockPreservingCrossover implements CrossoverOperatorInterface
+{
     /**
      * @return Cromossomo[] Array contendo dois filhos.
      */
-    public function crossover(
-        Cromossomo $parentA,
-        Cromossomo $parentB
-    ): array {
+    public function crossover(Cromossomo $parentA, Cromossomo $parentB): array
+    {
 
         $size = $parentA->count();
 
         if ($size !== $parentB->count()) {
-            throw new \RuntimeException(
-                'Pais com tamanhos diferentes no crossover.'
-            );
+            throw new \RuntimeException('Pais com tamanhos diferentes no crossover.');
         }
 
         if ($size < 2) {
@@ -29,7 +26,7 @@ final class BlockPreservingCrossover implements CrossoverOperatorInterface {
         }
 
         $start = random_int(0, $size - 2);
-        $end   = random_int($start + 1, $size - 1);
+        $end = random_int($start + 1, $size - 1);
 
         $genesA = $parentA->genes();
         $genesB = $parentB->genes();
@@ -46,5 +43,10 @@ final class BlockPreservingCrossover implements CrossoverOperatorInterface {
             new Cromossomo($childGenesA),
             new Cromossomo($childGenesB),
         ];
+    }
+
+    public function getName(): string
+    {
+        return 'BlockPreservingCrossover';
     }
 }

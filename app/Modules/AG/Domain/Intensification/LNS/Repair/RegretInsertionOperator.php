@@ -7,13 +7,14 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
-class RegretInsertionOperator implements RepairOperatorInterface {
-    public function __construct(
-        private readonly ScheduleData $data
-    ) {
+class RegretInsertionOperator implements RepairOperatorInterface
+{
+    public function __construct(private readonly ScheduleData $data)
+    {
     }
 
-    public function repair(PartialSolution $partial): Cromossomo {
+    public function repair(PartialSolution $partial): Cromossomo
+    {
         $assigned = $partial->assigned();
         $unassigned = $partial->unassigned();
 
@@ -52,7 +53,8 @@ class RegretInsertionOperator implements RepairOperatorInterface {
         return new Cromossomo(array_values($genes));
     }
 
-    private function evaluateInsertionOptions(Gene $gene, array $currentGenes): array {
+    private function evaluateInsertionOptions(Gene $gene, array $currentGenes): array
+    {
         $slots = $this->data->timeSlots;
 
         $bestCost = INF;
@@ -63,16 +65,10 @@ class RegretInsertionOperator implements RepairOperatorInterface {
         foreach ($slots as $slot) {
 
             $candidate =
-                $gene->withDiaPeriodo(
-                    $slot['day'],
-                    $slot['period']
-                );
+                $gene->withDiaPeriodo($slot['day'], $slot['period']);
 
             $cost =
-                $this->estimateConflictCost(
-                    $candidate,
-                    $currentGenes
-                );
+                $this->estimateConflictCost($candidate, $currentGenes);
 
             if ($cost < $bestCost) {
 
@@ -88,7 +84,8 @@ class RegretInsertionOperator implements RepairOperatorInterface {
         return [$bestCost, $secondCost, $bestCandidate];
     }
 
-    private function estimateConflictCost(Gene $candidate, array $genes): float {
+    private function estimateConflictCost(Gene $candidate, array $genes): float
+    {
         $cost = 0;
 
         foreach ($genes as $gene) {
@@ -99,5 +96,10 @@ class RegretInsertionOperator implements RepairOperatorInterface {
         }
 
         return $cost;
+    }
+
+    public function getName(): string
+    {
+        return 'RegretInsertion';
     }
 }

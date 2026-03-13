@@ -5,8 +5,10 @@ namespace App\Modules\AG\Domain\Intensification\LNS\Destroy;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class ClusterDestroyOperator implements DestroyOperatorInterface {
-    public function destroy(Cromossomo $solution): PartialSolution {
+class ClusterDestroyOperator implements DestroyOperatorInterface
+{
+    public function destroy(Cromossomo $solution): PartialSolution
+    {
         $genes = $solution->genes();
 
         $targetTurma =
@@ -25,5 +27,10 @@ class ClusterDestroyOperator implements DestroyOperatorInterface {
         }
 
         return new PartialSolution($assigned, $unassigned);
+    }
+
+    public function getName(): string
+    {
+        return 'ClusterDestroyOperator';
     }
 }

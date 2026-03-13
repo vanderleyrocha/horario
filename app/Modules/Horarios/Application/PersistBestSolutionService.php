@@ -20,7 +20,7 @@ final class PersistBestSolutionService {
             foreach ($best->genes() as $gene) {
 
                 $horario->alocacoes()->create(
-                    $this->mapper->toArray($gene)
+                    $this->mapper->toArray($horario, $gene)
                 );
             }
         });

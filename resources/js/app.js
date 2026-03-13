@@ -1,5 +1,6 @@
 // resources/js/app.js
 import './bootstrap';
+import './ga-live-dashboard';
 
 import Alpine from 'alpinejs';
 

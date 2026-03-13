@@ -4,13 +4,20 @@ namespace App\Modules\AG\Domain\Operators\Mutation;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class GeneSwapMutation implements MutationOperatorInterface {
-    public function mutate(Cromossomo $individual): Cromossomo {
+final class GeneSwapMutation implements MutationOperatorInterface
+{
+    public function mutate(Cromossomo $individual): Cromossomo
+    {
         $i = random_int(0, $individual->count() - 1);
         $j = random_int(0, $individual->count() - 1);
 
         $individual->swapGenes($i, $j);
 
         return $individual;
+    }
+
+    public function getName(): string
+    {
+        return 'GeneSwapMutation';
     }
 }

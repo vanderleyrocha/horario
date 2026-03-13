@@ -1,4 +1,5 @@
 <?php
+
 // routes/web.php
 
 use App\Http\Controllers\TesteController;
@@ -8,9 +9,7 @@ use App\Livewire\Professores;
 use App\Livewire\Turmas;
 use App\Livewire\Disciplinas;
 use App\Livewire\Aulas;
-
 use App\Livewire\Auth\UserManager;
-
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -50,18 +49,22 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/', App\Modules\Horarios\UI\Livewire\Index::class)->name('index');
         Route::get('/criar', App\Modules\Horarios\UI\Livewire\Create::class)->name('create');
+        // Route::get('/solver', App\Modules\Horarios\UI\Livewire\Solver::class)->name('solver');
+
 
         // SPA DE GERENCIAMENTO
         Route::get('/{horario}/manage', App\Modules\Horarios\UI\Livewire\Manage::class)->name('manage');
     });
 
     // ✅ CORRIGIDO: Adicionar parâmetro {horario} na rota
-    Route::get('/algoritmo/{horario}', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
+    Route::get('/algoritmo/{horario}/run', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
+    Route::get('/algoritmo/execution/{execution}', \App\Livewire\Algoritmo\ExecutionDashboard::class)->name('algoritmo.execution');
+
 
     // Profile e Configurações (temporário)
     Route::get('/users', UserManager::class)->name('users.index');
-    Route::get('/perfil', fn() => 'Em desenvolvimento')->name('profile');
-    Route::get('/configuracoes', fn() => 'Em desenvolvimento')->name('configuracoes');
+    Route::get('/perfil', fn () => 'Em desenvolvimento')->name('profile');
+    Route::get('/configuracoes', fn () => 'Em desenvolvimento')->name('configuracoes');
 
     // Testes
     Route::get('/teste/alocacoes', [TesteController::class, 'alocacoes'])->name('teste.alocacoes');

@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\HyperHeuristic\Strategies;
 
 use App\Modules\AG\Domain\HyperHeuristic\OperatorSelectionStrategy;
 
-class EpsilonGreedySelector implements OperatorSelectionStrategy
+final class EpsilonGreedySelector implements OperatorSelectionStrategy
 {
     private float $epsilon;
 
@@ -13,25 +15,51 @@ class EpsilonGreedySelector implements OperatorSelectionStrategy
         $this->epsilon = $epsilon;
     }
 
-    public function select(array $operators): string
+    public function select(array $operatorStats): string
     {
-        $rand = mt_rand() / mt_getrandmax();
-
-        if ($rand < $this->epsilon) {
-            return array_rand($operators);
+        if (empty($operatorStats)) {
+            throw new \RuntimeException('EpsilonGreedySelector recebeu estatísticas vazias.');
         }
 
-        $best = null;
+        /*
+        |-------------------------------------------------------------
+        | Exploração (epsilon)
+        |-------------------------------------------------------------
+        */
+
+        if (mt_rand() / mt_getrandmax() < $this->epsilon) {
+
+            $keys = array_keys($operatorStats);
+
+            return $keys[array_rand($keys)];
+        }
+
+        /*
+        |-------------------------------------------------------------
+        | Exploração greedy
+        |-------------------------------------------------------------
+        */
+
+        $bestOperator = null;
         $bestScore = -INF;
 
-        foreach ($operators as $name => $data) {
+        foreach ($operatorStats as $name => $stats) {
 
-            if ($data['reward'] > $bestScore) {
-                $bestScore = $data['reward'];
-                $best = $name;
+            $score = $stats['score'] ?? 0;
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestOperator = $name;
             }
         }
 
-        return $best;
+        if ($bestOperator === null) {
+
+            $keys = array_keys($operatorStats);
+
+            return $keys[array_rand($keys)];
+        }
+
+        return $bestOperator;
     }
 }
