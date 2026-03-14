@@ -29,6 +29,20 @@
             </div>
 
         </div>
+
+        {{-- BOTÃO PARA VISUALIZAR HORÁRIO --}}
+        @if ($execution->status === 'completed' || $executionInfo['bestFitness'] < 1)
+            <div class="mt-4 bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                <h3 class="text-lg font-semibold text-green-800">Geração Concluída!</h3>
+                <p class="text-green-700 mt-2">O horário foi gerado com sucesso e a melhor solução foi salva.</p>
+                <a href="{{ route('horarios.show', ['horario' => $execution->horario_id]) }}"
+                    class="mt-4 inline-block bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-transform transform hover:scale-105"
+                    wire:navigate>
+                    Visualizar Horário Gerado →
+                </a>
+            </div>
+        @endif
+
     </div>
 
 

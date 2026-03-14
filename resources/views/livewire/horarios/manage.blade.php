@@ -46,7 +46,7 @@
                 ];
             @endphp
 
-            @foreach ($tabs as $key => $label)
+            @foreach ($this->tabs() as $key => $label)
                 <button wire:click="setTab('{{ $key }}')"
                     class="px-4 py-2 rounded-lg text-sm font-medium
                     {{ $tab === $key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
@@ -66,24 +66,24 @@
                 @break
 
                 @case('config')
-                    @livewire('horarios.configurar', ['horario' => $horario])
+                    @livewire(\App\Modules\Horarios\UI\Livewire\Configurar::class, ['horario' => $horario])
                 @break
 
                 @case('aulas')
-                    @livewire('horarios.gerenciar-aulas', ['horario' => $horario])
+                    @livewire(\App\Modules\Horarios\UI\Livewire\GerenciarAulas::class, ['horario' => $horario])
                 @break
 
                 @case('restricoes')
-                    @livewire('horarios.gerenciar-restricoes', ['horario' => $horario])
+                    @livewire(\App\Modules\Horarios\UI\Livewire\GerenciarRestricoes::class, ['horario' => $horario])
                 @break
 
                 @case('algoritmo')
-                    @livewire('algoritmo.index', ['horario' => $horario])
+                    @livewire(\App\Livewire\Algoritmo\Index::class, ['horario' => $horario])
                 @break
 
                 @case('diagnostico')
-                    @livewire('ag.diagnostico-inviabilidade', [
-                        'diagnostico' => $horario->diagnostico_json,
+                    @livewire(\App\Livewire\Ag\DiagnosticoInviabilidade::class, [
+                        'diagnostico' => $this->diagnosticoData(),
                     ])
                 @break
             @endswitch

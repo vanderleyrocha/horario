@@ -11,17 +11,17 @@ final class PersistBestSolutionService {
     public function __construct(private GeneMapper $mapper) {
     }
 
-    public function persist(Horario $horario, Cromossomo $best): void {
+    public function persist(Horario $horario, Cromossomo $best, int $executionId): void {
 
-        DB::transaction(function () use ($horario, $best) {
+        DB::transaction(function () use ($horario, $best, $executionId) {
 
             $horario->alocacoes()->delete();
 
             foreach ($best->genes() as $gene) {
+                $alocacaoData = $this->mapper->toArray($horario, $gene);
+                $alocacaoData['execution_id'] = $executionId;
 
-                $horario->alocacoes()->create(
-                    $this->mapper->toArray($horario, $gene)
-                );
+                $horario->alocacoes()->create($alocacaoData);
             }
         });
     }

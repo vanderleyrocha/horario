@@ -64,7 +64,7 @@
                         Gerar
                     </a>
 
-                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
+                    <a href="{{ route('horarios.show', $horario) }}" wire:navigate class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
                         Abrir
                     </a>
 
@@ -76,11 +76,11 @@
                 {{-- MENU SECUNDÁRIO --}}
                 <div class="flex flex-wrap gap-2 text-xs text-gray-600 mt-2">
                     {{-- 
-                    <a href="{{ route('horarios.configurar', $horario) }}" wire:navigate class="hover:text-blue-600">Configurar</a>
+                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="hover:text-blue-600">Configurar</a>
 
                     <a href="{{ route('aulas.index', $horario->id) }}" wire:navigate class="hover:text-blue-600">Aulas</a>
 
-                    <a href="{{ route('horarios.configurar', $horario) }}" wire:navigate class="hover:text-blue-600">Restrições</a> --}}
+                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="hover:text-blue-600">Restrições</a> --}}
 
                 </div>
 

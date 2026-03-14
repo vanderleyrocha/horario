@@ -63,7 +63,11 @@ class GerarHorarioJob implements ShouldQueue
             );
 
             $action = app(GenerateScheduleAction::class);
-            $result = $action->execute($this->horario, $progressBridge);
+            $result = $action->execute(
+                $this->horario,
+                $dbRecorder->getExecutionId(),
+                $progressBridge
+            );
 
             $bestFitness = (float) ($result['best_fitness'] ?? 0.0);
 

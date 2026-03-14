@@ -60,7 +60,7 @@
                 </div>
 
                 <button wire:click="iniciarGeracao" class="px-6 py-3 bg-green-600 text-white rounded-lg">
-                    Iniciar Geracao
+                    Iniciar Geração
                 </button>
             </div>
         @endif
@@ -128,7 +128,7 @@
                     Geracao Concluida
                 </h2>
 
-                <a href="{{ route('horarios.show', $horario) }}" class="text-blue-600 underline">
+                <a href="{{ route('horarios.manage', $horario) }}" class="text-blue-600 underline">
                     Ver Horario
                 </a>
             </div>

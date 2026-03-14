@@ -10,7 +10,17 @@ use App\Livewire\Turmas;
 use App\Livewire\Disciplinas;
 use App\Livewire\Aulas;
 use App\Livewire\Auth\UserManager;
+use App\Models\Horario;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/home', function () {
+
+    /** @var \Illuminate\Contracts\Auth\Guard $auth */
+    $auth = auth();
+    return $auth->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
+})->name('home');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', Login::class)->name('login');
@@ -49,16 +59,40 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/', App\Modules\Horarios\UI\Livewire\Index::class)->name('index');
         Route::get('/criar', App\Modules\Horarios\UI\Livewire\Create::class)->name('create');
-        // Route::get('/solver', App\Modules\Horarios\UI\Livewire\Solver::class)->name('solver');
 
-
-        // SPA DE GERENCIAMENTO
+        // Estrutura unificada (SPA de gerenciamento)
         Route::get('/{horario}/manage', App\Modules\Horarios\UI\Livewire\Manage::class)->name('manage');
+        Route::get('/{horario}/visualizar', App\Modules\Horarios\UI\Livewire\Show::class)->name('show');
+        Route::get('/{horario}/configurar', function (Horario $horario) {
+            $etapa = (int) request()->integer('etapa', 1);
+            $tabByEtapa = [
+                1 => 'overview',
+                2 => 'aulas',
+                3 => 'restricoes',
+                4 => 'algoritmo',
+                5 => 'overview',
+            ];
+
+            return redirect()->route('horarios.manage', [
+                'horario' => $horario,
+                'tab' => $tabByEtapa[$etapa] ?? 'overview',
+            ]);
+        })->name('configurar');
+
+        // Aliases por secao (redirecionam para tabs do Manage)
+        Route::get('/{horario}/overview', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'overview']))->name('overview');
+        Route::get('/{horario}/configuracao', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'config']))->name('config');
+        Route::get('/{horario}/aulas', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'aulas']))->name('aulas');
+        Route::get('/{horario}/restricoes', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'restricoes']))->name('restricoes');
+        Route::get('/{horario}/resumo', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'overview']))->name('resumo');
+        Route::get('/{horario}/algoritmo', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'algoritmo']))->name('algoritmo');
+        Route::get('/{horario}/diagnostico', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'diagnostico']))->name('diagnostico');
     });
 
     // ✅ CORRIGIDO: Adicionar parâmetro {horario} na rota
     Route::get('/algoritmo/{horario}/run', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
     Route::get('/algoritmo/execution/{execution}', \App\Livewire\Algoritmo\ExecutionDashboard::class)->name('algoritmo.execution');
+    Route::get('/algoritmo/execution/{execution}/stream', \App\Livewire\Algoritmo\ExecutionMetricsStream::class)->name('algoritmo.stream');
 
 
     // Profile e Configurações (temporário)

@@ -20,8 +20,10 @@ use Illuminate\Support\Facades\Log;
 final class ScheduleProblem implements GeneticProblem
 {
     private const MAX_BUILD_ATTEMPTS = 12;
-    private const MAX_BACKTRACK_STEPS = 1500;
-    private const MAX_CANDIDATES_PER_STEP = 10;
+    private const RCL_MIN_SIZE = 3;
+    private const RCL_ALPHA_MIN = 0.15;
+    private const RCL_ALPHA_MAX = 0.45;
+    private const TELEMETRY_EVERY_ALLOCATIONS = 25;
 
     private string $lastBuildFailure = 'Falha ao montar individuo inicial.';
 
@@ -43,23 +45,41 @@ final class ScheduleProblem implements GeneticProblem
             $teacherBusy = [];
             $classBusy = [];
             $assignedGenes = [];
-            $backtrackSteps = 0;
+            $alpha = $this->randomAlpha();
+            $telemetry = [
+                'attempt' => $attempt,
+                'alpha' => round($alpha, 4),
+                'queue_size' => count($queue),
+                'allocations' => 0,
+                'forced_allocations' => 0,
+                'hard_conflict_allocations' => 0,
+                'rcl_sizes' => [],
+            ];
 
-            if ($this->assignOccurrence(
-                0,
-                $queue,
-                $assignedGenes,
-                $teacherBusy,
-                $classBusy,
-                $backtrackSteps
-            )) {
-                return new Cromossomo(array_values($assignedGenes));
+            Log::info('schedule.initial_population.grasp.start', $telemetry);
+
+            if ($this->constructWithGrasp($queue, $alpha, $assignedGenes, $teacherBusy, $classBusy, $telemetry)) {
+                Log::info('schedule.initial_population.grasp.completed', [
+                    'attempt' => $attempt,
+                    'alpha' => round($alpha, 4),
+                    'allocations' => $telemetry['allocations'],
+                    'forced_allocations' => $telemetry['forced_allocations'],
+                    'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'rcl_avg' => $this->averageRclSize($telemetry['rcl_sizes']),
+                    'rcl_min' => empty($telemetry['rcl_sizes']) ? 0 : min($telemetry['rcl_sizes']),
+                    'rcl_max' => empty($telemetry['rcl_sizes']) ? 0 : max($telemetry['rcl_sizes']),
+                ]);
+
+                return new Cromossomo($assignedGenes);
             }
 
             Log::warning('schedule.initial_population.retry', [
                 'attempt' => $attempt,
                 'reason' => $this->lastBuildFailure,
-                'backtrack_steps' => $backtrackSteps,
+                'alpha' => round($alpha, 4),
+                'allocations' => $telemetry['allocations'],
+                'forced_allocations' => $telemetry['forced_allocations'],
+                'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
             ]);
         }
 
@@ -97,45 +117,57 @@ final class ScheduleProblem implements GeneticProblem
         $this->fitnessEvaluator->clearCache();
     }
 
-    private function assignOccurrence(
-        int $index,
+    private function constructWithGrasp(
         array $queue,
+        float $alpha,
         array &$assignedGenes,
         array &$teacherBusy,
         array &$classBusy,
-        int &$backtrackSteps
+        array &$telemetry
     ): bool {
-        if ($index >= count($queue)) {
-            return true;
-        }
+        foreach ($queue as $index => $task) {
+            /** @var LessonData $lesson */
+            $lesson = $task['lesson'];
+            $occurrence = $task['occurrence'];
 
-        if ($backtrackSteps >= self::MAX_BACKTRACK_STEPS) {
-            $this->lastBuildFailure = 'Limite de backtracking atingido ao montar individuo inicial.';
+            $scoredCandidates = $this->scoreFeasibleCandidates(
+                $lesson,
+                $queue,
+                $index,
+                $teacherBusy,
+                $classBusy
+            );
 
-            return false;
-        }
+            if (!empty($scoredCandidates)) {
+                $rcl = $this->buildRestrictedCandidateList($scoredCandidates, $alpha);
+                $slotId = $this->selectFromRcl($rcl);
+                $slot = $this->data->timeSlots[$slotId];
+                $telemetry['rcl_sizes'][] = count($rcl);
+            } else {
+                $slot = $this->selectFallbackSlot($lesson);
 
-        /** @var LessonData $lesson */
-        $lesson = $queue[$index]['lesson'];
-        $occurrence = $queue[$index]['occurrence'];
+                if ($slot === null) {
+                    $this->lastBuildFailure = "Nenhum slot estrutural para aula {$lesson->id} (ocorrencia {$occurrence}).";
+                    return false;
+                }
 
-        $candidateSlotIds = $this->selectSlotCandidates(
-            $lesson,
-            $queue,
-            $index,
-            $teacherBusy,
-            $classBusy
-        );
+                $telemetry['forced_allocations']++;
 
-        if (empty($candidateSlotIds)) {
-            $this->lastBuildFailure = "Nenhum slot disponivel para aula {$lesson->id} (ocorrencia {$occurrence}).";
+                Log::warning('schedule.initial_population.grasp.fallback', [
+                    'lesson_id' => $lesson->id,
+                    'occurrence' => $occurrence,
+                    'class_id' => $lesson->classId,
+                    'professor_id' => $lesson->professorId,
+                    'day' => $slot->day,
+                    'period' => $slot->lessonNumber,
+                ]);
+            }
 
-            return false;
-        }
+            if (!$this->canUseSlot($lesson, $slot, $teacherBusy, $classBusy)) {
+                $telemetry['hard_conflict_allocations']++;
+            }
 
-        foreach (array_slice($candidateSlotIds, 0, self::MAX_CANDIDATES_PER_STEP) as $slotId) {
-            $slot = $this->data->timeSlots[$slotId];
-            $gene = new Gene(
+            $assignedGenes[] = new Gene(
                 aulaId: $lesson->id,
                 professorId: $lesson->professorId,
                 turmaId: $lesson->classId,
@@ -146,25 +178,26 @@ final class ScheduleProblem implements GeneticProblem
             );
 
             $this->occupySlot($lesson, $slot, $teacherBusy, $classBusy);
-            $assignedGenes[$index] = $gene;
 
-            if ($this->assignOccurrence(
-                $index + 1,
-                $queue,
-                $assignedGenes,
-                $teacherBusy,
-                $classBusy,
-                $backtrackSteps
-            )) {
-                return true;
+            $telemetry['allocations']++;
+
+            if (
+                $telemetry['allocations'] % self::TELEMETRY_EVERY_ALLOCATIONS === 0
+                || $telemetry['allocations'] === $telemetry['queue_size']
+            ) {
+                Log::info('schedule.initial_population.grasp.progress', [
+                    'attempt' => $telemetry['attempt'],
+                    'alpha' => $telemetry['alpha'],
+                    'allocations' => $telemetry['allocations'],
+                    'queue_size' => $telemetry['queue_size'],
+                    'forced_allocations' => $telemetry['forced_allocations'],
+                    'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'fill_ratio' => round($telemetry['allocations'] / max(1, $telemetry['queue_size']), 4),
+                ]);
             }
-
-            unset($assignedGenes[$index]);
-            $this->releaseSlot($lesson, $slot, $teacherBusy, $classBusy);
-            $backtrackSteps++;
         }
 
-        return false;
+        return count($assignedGenes) === count($queue);
     }
 
     private function buildPlacementQueue(): array
@@ -176,14 +209,17 @@ final class ScheduleProblem implements GeneticProblem
             $candidates = $this->getStaticCandidateSlotIds($lesson);
             $candidateCount = count($candidates);
             $demand = $lesson->weeklyOccurrences * $lesson->requiredSlots;
-            $preferenceTightness = count($lesson->preferredDays) + count($lesson->preferredPeriods);
+            $professorDays = $this->availableDaysCount($lesson->professorId, true);
+            $classDays = $this->availableDaysCount($lesson->classId, false);
 
             $difficulty[$lesson->id] = [
                 'candidate_count' => $candidateCount,
                 'demand' => $demand,
                 'duration' => $lesson->requiredSlots,
                 'weekly_occurrences' => $lesson->weeklyOccurrences,
-                'preference_tightness' => $preferenceTightness,
+                'professor_days' => $professorDays,
+                'class_days' => $classDays,
+                'tie_breaker' => mt_rand(1, 1000),
             ];
         }
 
@@ -192,9 +228,25 @@ final class ScheduleProblem implements GeneticProblem
             $scoreB = $difficulty[$b->id];
 
             return
-                [$scoreA['candidate_count'], -$scoreA['demand'], -$scoreA['duration'], -$scoreA['weekly_occurrences'], -$scoreA['preference_tightness']]
+                [
+                    $scoreA['candidate_count'],
+                    $scoreA['professor_days'],
+                    $scoreA['class_days'],
+                    -$scoreA['demand'],
+                    -$scoreA['duration'],
+                    -$scoreA['weekly_occurrences'],
+                    $scoreA['tie_breaker'],
+                ]
                 <=>
-                [$scoreB['candidate_count'], -$scoreB['demand'], -$scoreB['duration'], -$scoreB['weekly_occurrences'], -$scoreB['preference_tightness']];
+                [
+                    $scoreB['candidate_count'],
+                    $scoreB['professor_days'],
+                    $scoreB['class_days'],
+                    -$scoreB['demand'],
+                    -$scoreB['duration'],
+                    -$scoreB['weekly_occurrences'],
+                    $scoreB['tie_breaker'],
+                ];
         });
 
         $queue = [];
@@ -218,22 +270,23 @@ final class ScheduleProblem implements GeneticProblem
 
         foreach ($this->data->lessons as $lesson) {
             $candidateSlotIds = $this->getStaticCandidateSlotIds($lesson);
-            $preferredSlotIds = $this->filterPreferredSlotIds($lesson, $candidateSlotIds);
 
             $diagnostics[] = [
                 'lesson_id' => $lesson->id,
                 'candidate_slots' => count($candidateSlotIds),
-                'preferred_slots' => count($preferredSlotIds),
                 'weekly_occurrences' => $lesson->weeklyOccurrences,
                 'required_slots' => $lesson->requiredSlots,
                 'class_id' => $lesson->classId,
                 'professor_id' => $lesson->professorId,
+                'professor_available_days' => $this->availableDaysCount($lesson->professorId, true),
+                'class_available_days' => $this->availableDaysCount($lesson->classId, false),
             ];
         }
 
         usort($diagnostics, fn (array $a, array $b) => $a['candidate_slots'] <=> $b['candidate_slots']);
 
         Log::info('schedule.initial_population.diagnosis', [
+            'queue_size' => count($queue),
             'hardest_lessons' => array_slice($diagnostics, 0, 10),
         ]);
 
@@ -247,7 +300,7 @@ final class ScheduleProblem implements GeneticProblem
         }
     }
 
-    private function selectSlotCandidates(
+    private function scoreFeasibleCandidates(
         LessonData $lesson,
         array $queue,
         int $currentIndex,
@@ -275,7 +328,7 @@ final class ScheduleProblem implements GeneticProblem
 
         asort($candidateScores);
 
-        return array_keys($candidateScores);
+        return $candidateScores;
     }
 
     private function scoreCandidateSlot(
@@ -287,14 +340,6 @@ final class ScheduleProblem implements GeneticProblem
         array $classBusy
     ): float {
         $score = 0.0;
-
-        if (!empty($lesson->preferredDays) && !in_array($slot->day, $lesson->preferredDays, true)) {
-            $score += 15;
-        }
-
-        if (!empty($lesson->preferredPeriods) && !in_array($slot->lessonNumber, $lesson->preferredPeriods, true)) {
-            $score += 10;
-        }
 
         $score += $this->sameDayLoadPenalty($lesson, $slot, $teacherBusy, $classBusy);
         $score -= $this->futureFlexibilityScore($slot, $queue, $currentIndex, $lesson, $teacherBusy, $classBusy);
@@ -366,16 +411,98 @@ final class ScheduleProblem implements GeneticProblem
         return ($teacherDayLoad * 0.2) + ($classDayLoad * 0.3);
     }
 
+    private function buildRestrictedCandidateList(array $candidateScores, float $alpha): array
+    {
+        if (empty($candidateScores)) {
+            return [];
+        }
+
+        $values = array_values($candidateScores);
+        $minScore = min($values);
+        $maxScore = max($values);
+        $threshold = $minScore + ($alpha * ($maxScore - $minScore));
+
+        $rcl = [];
+
+        foreach ($candidateScores as $slotId => $score) {
+            if ($score <= $threshold) {
+                $rcl[] = $slotId;
+            }
+        }
+
+        if (count($rcl) < self::RCL_MIN_SIZE) {
+            $rcl = array_slice(array_keys($candidateScores), 0, min(self::RCL_MIN_SIZE, count($candidateScores)));
+        }
+
+        return $rcl;
+    }
+
+    private function selectFromRcl(array $rcl): int
+    {
+        $index = random_int(0, count($rcl) - 1);
+
+        return $rcl[$index];
+    }
+
+    private function selectFallbackSlot(LessonData $lesson): ?TimeSlot
+    {
+        $candidateSlotIds = $this->getStaticCandidateSlotIds($lesson);
+
+        if (empty($candidateSlotIds)) {
+            return null;
+        }
+
+        $slotId = $candidateSlotIds[random_int(0, count($candidateSlotIds) - 1)];
+
+        return $this->data->timeSlots[$slotId] ?? null;
+    }
+
+    private function availableDaysCount(int $entityId, bool $isProfessor): int
+    {
+        $slotIds = $isProfessor
+            ? ($this->data->availableSlotsByProfessor[$entityId] ?? [])
+            : ($this->data->availableSlotsByClass[$entityId] ?? []);
+
+        if (empty($slotIds)) {
+            return 0;
+        }
+
+        $days = [];
+
+        foreach ($slotIds as $slotId) {
+            $slot = $this->data->timeSlots[$slotId] ?? null;
+
+            if ($slot === null) {
+                continue;
+            }
+
+            $days[$slot->day] = true;
+        }
+
+        return count($days);
+    }
+
+    private function randomAlpha(): float
+    {
+        $rand = mt_rand() / mt_getrandmax();
+
+        return self::RCL_ALPHA_MIN + ($rand * (self::RCL_ALPHA_MAX - self::RCL_ALPHA_MIN));
+    }
+
+    private function averageRclSize(array $sizes): float
+    {
+        if (empty($sizes)) {
+            return 0.0;
+        }
+
+        return round(array_sum($sizes) / count($sizes), 2);
+    }
+
     private function getStaticCandidateSlotIds(LessonData $lesson): array
     {
-        $classSlots = $this->data->availableSlotsByClass[$lesson->classId] ?? [];
-        $teacherSlots = $this->data->availableSlotsByProfessor[$lesson->professorId] ?? [];
-
-        $intersection = array_values(array_intersect($classSlots, $teacherSlots));
         $candidateSlotIds = [];
 
-        foreach ($intersection as $slotId) {
-            $slot = $this->data->timeSlots[$slotId];
+        foreach ($this->data->timeSlots as $slotId => $slot) {
 
             if (!$this->slotSupportsDuration($lesson, $slot)) {
                 continue;
@@ -385,23 +512,6 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         return $candidateSlotIds;
-    }
-
-    private function filterPreferredSlotIds(LessonData $lesson, array $slotIds): array
-    {
-        return array_values(array_filter($slotIds, function (int $slotId) use ($lesson) {
-            $slot = $this->data->timeSlots[$slotId];
-
-            if (!empty($lesson->preferredDays) && !in_array($slot->day, $lesson->preferredDays, true)) {
-                return false;
-            }
-
-            if (!empty($lesson->preferredPeriods) && !in_array($slot->lessonNumber, $lesson->preferredPeriods, true)) {
-                return false;
-            }
-
-            return true;
-        }));
     }
 
     private function canUseSlot(LessonData $lesson, TimeSlot $slot, array $teacherBusy, array $classBusy): bool
@@ -433,15 +543,6 @@ final class ScheduleProblem implements GeneticProblem
 
             $teacherBusy[$lesson->professorId][$key] = true;
             $classBusy[$lesson->classId][$key] = true;
-        }
-    }
-
-    private function releaseSlot(LessonData $lesson, TimeSlot $slot, array &$teacherBusy, array &$classBusy): void
-    {
-        for ($offset = 0; $offset < $lesson->requiredSlots; $offset++) {
-            $key = $slot->day . '-' . ($slot->lessonNumber + $offset);
-
-            unset($teacherBusy[$lesson->professorId][$key], $classBusy[$lesson->classId][$key]);
         }
     }
 

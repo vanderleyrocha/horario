@@ -17,7 +17,10 @@ final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
         $windows = $context->cromossomo()->turmaJanelas();
 
         $penalty = array_sum($windows);
-        Log::info("WindowPenaltyRule: penalty = {$penalty}");
+
+        if (config('ag.log_window_penalty', false)) {
+            Log::debug("WindowPenaltyRule: penalty = {$penalty}");
+        }
 
         return new RuleResult($penalty, self::class);
     }

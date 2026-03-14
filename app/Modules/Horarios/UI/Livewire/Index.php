@@ -54,7 +54,7 @@ class Index extends Component {
 
         session()->flash('success', 'Horário duplicado com sucesso!');
 
-        $this->redirect(route('horarios.show', $novoHorario));
+        $this->redirect(route('horarios.manage', $novoHorario));
     }
 
     public function setActive(int $id): void {
@@ -81,9 +81,24 @@ class Index extends Component {
         | Futuro: carregar diagnóstico salvo no banco
         |--------------------------------------------------------------------------
         */
-        $this->diagnosticoSelecionado = $horario->diagnostico_json ?? [];
+        $this->diagnosticoSelecionado = $this->normalizeDiagnostico($horario->diagnostico_json ?? []);
 
         $this->showDiagnostico = true;
+    }
+
+    private function normalizeDiagnostico(mixed $diagnostico): array
+    {
+        if (is_array($diagnostico)) {
+            return $diagnostico;
+        }
+
+        if (is_string($diagnostico) && $diagnostico !== '') {
+            $decoded = json_decode($diagnostico, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
     }
 
     public function fecharDiagnostico(): void {
