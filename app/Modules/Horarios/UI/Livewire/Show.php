@@ -7,8 +7,8 @@ use App\Models\Horario;
 use App\Models\Professor;
 use App\Models\Turma;
 use Illuminate\Support\Collection;
-use Livewire\Component;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Visualização de Horários'])]
 class Show extends Component
@@ -23,7 +23,7 @@ class Show extends Component
 
     protected $queryString = [
         'entidadeId' => ['except' => null],
-        'view' => ['except' => 'turmas']
+        'view' => ['except' => 'turmas'],
     ];
 
     private const PROFESSOR_PALETTE = [
@@ -41,10 +41,8 @@ class Show extends Component
     {
         $this->horario = $horario;
 
-        if (!$this->entidadeId) {
-            $this->entidadeId = $this->view === 'professores'
-                ? Professor::ativo()->value('id')
-                : Turma::ativa()->value('id');
+        if (! $this->entidadeId) {
+            $this->entidadeId = $this->view === 'professores' ? Professor::ativo()->value('id') : Turma::ativa()->value('id');
         }
     }
 
@@ -52,14 +50,14 @@ class Show extends Component
     {
         $executionId = $this->horario->lastExecution?->id;
 
-        if (!$executionId) {
+        if (! $executionId) {
             return collect();
         }
 
         return Alocacao::query()
             ->where('horario_id', $this->horario->id)
             ->where('execution_id', $executionId)
-            ->with(['disciplina:id,nome', 'professor:id,nome', 'turma:id,nome'])
+            ->with(['disciplina:id,codigo', 'professor:id,nome_abreviado', 'turma:id,nome'])
             ->get();
     }
 
@@ -87,14 +85,12 @@ class Show extends Component
 
     public function updatedView()
     {
-        $this->entidadeId = $this->view === 'professores'
-            ? Professor::ativo()->value('id')
-            : Turma::ativa()->value('id');
+        $this->entidadeId = $this->view === 'professores' ? Professor::ativo()->value('id') : Turma::ativa()->value('id');
     }
 
     public function getGradeProperty(): array
     {
-        if (!$this->entidadeId) {
+        if (! $this->entidadeId) {
             return [];
         }
 
@@ -104,18 +100,16 @@ class Show extends Component
 
         foreach ($this->allocations as $a) {
 
-            $match = $isProfessorView
-                ? ($a->professor_id == $this->entidadeId)
-                : ($a->turma_id == $this->entidadeId);
+            $match = $isProfessorView ? ($a->professor_id == $this->entidadeId) : ($a->turma_id == $this->entidadeId);
 
-            if (!$match) {
+            if (! $match) {
                 continue;
             }
 
             // O tempo 1 equivale ao índice 0 do array de timeSlots
             $index = $a->tempo - 1;
 
-            if (!isset($slots[$index])) {
+            if (! isset($slots[$index])) {
                 continue;
             }
 
@@ -126,20 +120,20 @@ class Show extends Component
             $grid[$day][$slot] = [
                 'type' => 'start',
                 'span' => $duration,
-                'allocation' => $a
+                'allocation' => $a,
             ];
 
             for ($i = 1; $i < $duration; $i++) {
                 $nextIndex = $index + $i;
 
-                if (!isset($slots[$nextIndex])) {
+                if (! isset($slots[$nextIndex])) {
                     break;
                 }
 
                 $nextSlot = $slots[$nextIndex];
 
                 $grid[$day][$nextSlot] = [
-                    'type' => 'continuation'
+                    'type' => 'continuation',
                 ];
             }
         }
@@ -154,19 +148,16 @@ class Show extends Component
             'terca' => 'Terça',
             'quarta' => 'Quarta',
             'quinta' => 'Quinta',
-            'sexta' => 'Sexta'
+            'sexta' => 'Sexta',
         ];
     }
 
-    /**
-     * Retorna a grade de horários gerada dinamicamente com base nas configurações.
-     */
     public function getTimeSlotsProperty(): array
     {
         // Recupera a configuração do banco ligada a este horário
         $config = $this->horario->configuracaoHorario;
 
-        if (!$config) {
+        if (! $config) {
             return []; // Retorna vazio caso não haja configuração para evitar erro
         }
 
@@ -183,6 +174,32 @@ class Show extends Component
         }
 
         return $slots;
+    }
+
+    public function handleDrop(int $allocationId, string $day, string $time): void
+    {
+        $allocation = Alocacao::find($allocationId);
+
+        if (! $allocation) {
+            return;
+        }
+
+        $slots = array_keys($this->timeSlots);
+        $index = array_search($time, $slots);
+
+        if ($index === false) {
+            return;
+        }
+
+        $newTempo = $index + 1;
+
+        $allocation->update([
+            'dia_semana' => $day,
+            'tempo' => $newTempo,
+        ]);
+
+        unset($this->grade);
+        unset($this->allocations);
     }
 
     public function render()

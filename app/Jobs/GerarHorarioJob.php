@@ -24,7 +24,7 @@ class GerarHorarioJob implements ShouldQueue
 
     public $timeout = 3600;
 
-    public function __construct(public Horario $horario)
+    public function __construct(public Horario $horario, public ?int $executionId = null)
     {
     }
 
@@ -46,7 +46,8 @@ class GerarHorarioJob implements ShouldQueue
                 $this->horario->id,
                 (int) ($configuracao['populacao'] ?? 100),
                 (int) ($configuracao['geracoes'] ?? 500),
-                $configuracao
+                $configuracao,
+                $this->executionId
             );
 
             $telemetryLogger->executionStarted(
@@ -66,7 +67,8 @@ class GerarHorarioJob implements ShouldQueue
             $result = $action->execute(
                 $this->horario,
                 $dbRecorder->getExecutionId(),
-                $progressBridge
+                $progressBridge,
+                $dbRecorder
             );
 
             $bestFitness = (float) ($result['best_fitness'] ?? 0.0);
@@ -86,7 +88,7 @@ class GerarHorarioJob implements ShouldQueue
 
             Log::info("Job de geracao de horario finalizado com sucesso [ID: {$this->horario->id}]");
         } catch (\Throwable $e) {
-            $dbRecorder->flush();
+            $dbRecorder->failExecution();
 
             $telemetryLogger->executionFailed(
                 $this->horario->id,
@@ -96,6 +98,7 @@ class GerarHorarioJob implements ShouldQueue
             );
 
             Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: " . $e->getMessage());
+
             throw $e;
         }
     }

@@ -110,7 +110,7 @@ class ResumoConfiguracao extends Component {
             return;
         }
 
-        return redirect()->route('algoritmo.index', ['horario' => $this->horario->id]);
+        return redirect()->route('algoritmo.center', ['horario' => $this->horario->id]);
     }
 
     public function voltarParaEdicao($etapa) {

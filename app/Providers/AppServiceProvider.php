@@ -12,6 +12,10 @@ use Livewire\Livewire;
 use App\Modules\Horarios\UI\Livewire\Index;
 use App\Modules\Horarios\UI\Livewire\Create;
 use App\Modules\Horarios\UI\Livewire\Manage;
+use App\Modules\Horarios\UI\Livewire\Configurar;
+use App\Modules\Horarios\UI\Livewire\GerenciarAulas;
+use App\Modules\Horarios\UI\Livewire\GerenciarRestricoes;
+use App\Modules\Horarios\UI\Livewire\ResumoConfiguracao;
 
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {
@@ -22,6 +26,10 @@ class AppServiceProvider extends ServiceProvider {
         Livewire::component('horarios.index', Index::class);
         Livewire::component('horarios.create', Create::class);
         Livewire::component('horarios.manage', Manage::class);
+        Livewire::component('horarios.configurar', Configurar::class);
+        Livewire::component('horarios.gerenciar-aulas', GerenciarAulas::class);
+        Livewire::component('horarios.gerenciar-restricoes', GerenciarRestricoes::class);
+        Livewire::component('horarios.resumo-configuracao', ResumoConfiguracao::class);
     }
 
     protected function configureDefaults(): void {

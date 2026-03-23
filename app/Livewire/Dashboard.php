@@ -1,18 +1,20 @@
 <?php
-// app/Livewire/Dashboard.php (ou app/Http/Livewire/Dashboard.php - vamos mover depois)
 
 namespace App\Livewire;
 
-use App\Models\Professor;
-use App\Models\Turma;
 use App\Models\Disciplina;
 use App\Models\Horario;
+use App\Models\Professor;
+use App\Models\ScheduleExecution;
+use App\Models\Turma;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Dashboard'])]
-class Dashboard extends Component {
-    public function getStatsProperty(): array {
+class Dashboard extends Component
+{
+    public function getStatsProperty(): array
+    {
         return [
             [
                 'label' => 'Professores',
@@ -39,80 +41,83 @@ class Dashboard extends Component {
                 'route' => 'disciplinas.index',
             ],
             [
-                'label' => 'Horários',
+                'label' => 'Horarios',
                 'value' => Horario::count(),
                 'ativos' => Horario::where('status', 'ativo')->count(),
                 'icon' => 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
                 'color' => 'orange',
                 'route' => 'horarios.index',
             ],
+            [
+                'label' => 'Execucoes do Solver',
+                'value' => ScheduleExecution::count(),
+                'ativos' => ScheduleExecution::where('status', 'running')->count(),
+                'icon' => 'M13 10V3L4 14h7v7l9-11h-7z',
+                'color' => 'indigo',
+                'route' => 'horarios.index',
+            ],
         ];
     }
 
-    public function getRecentActivitiesProperty(): array {
+    public function getRecentActivitiesProperty(): array
+    {
         $activities = [];
 
-        // Últimos horários gerados
-        $horariosRecentes = Horario::latest()->take(3)->get();
-        foreach ($horariosRecentes as $horario) {
+        foreach (Horario::latest()->take(3)->get() as $horario) {
             $activities[] = [
                 'type' => 'horario',
-                'message' => "Horário '{$horario->nome}' " . ($horario->status === 'concluido' ? 'gerado com sucesso' : 'criado'),
+                'message' => "Horario '{$horario->nome}' " . ($horario->status === 'concluido' ? 'gerado com sucesso' : 'criado'),
                 'time' => $horario->created_at?->diffForHumans(),
+                'sort' => $horario->created_at?->getTimestamp() ?? 0,
                 'color' => $horario->status === 'concluido' ? 'green' : 'blue',
             ];
         }
 
-        // Últimos professores cadastrados
-        $professoresRecentes = Professor::latest()->take(2)->get();
-        foreach ($professoresRecentes as $professor) {
+        foreach (Professor::latest()->take(2)->get() as $professor) {
             $activities[] = [
                 'type' => 'professor',
                 'message' => "Professor '{$professor->nome}' cadastrado",
                 'time' => $professor->created_at?->diffForHumans(),
+                'sort' => $professor->created_at?->getTimestamp() ?? 0,
                 'color' => 'blue',
             ];
         }
 
-        // Últimas turmas cadastradas
-        $turmasRecentes = Turma::latest()->take(2)->get();
-        foreach ($turmasRecentes as $turma) {
+        foreach (Turma::latest()->take(2)->get() as $turma) {
             $activities[] = [
                 'type' => 'turma',
                 'message' => "Turma '{$turma->nome}' cadastrada",
                 'time' => $turma->created_at?->diffForHumans(),
+                'sort' => $turma->created_at?->getTimestamp() ?? 0,
                 'color' => 'green',
             ];
         }
 
-        // Ordenar por data
-        usort(
-            $activities,
-            fn($a, $b) =>
-            strtotime('-' . $a['time']) <=> strtotime('-' . $b['time'])
-        );
+        usort($activities, fn (array $a, array $b) => $b['sort'] <=> $a['sort']);
 
-        return array_slice($activities, 0, 5);
+        return array_map(function (array $activity) {
+            unset($activity['sort']);
+
+            return $activity;
+        }, array_slice($activities, 0, 5));
     }
 
-    public function getCargaHorariaInfoProperty(): array {
+    public function getCargaHorariaInfoProperty(): array
+    {
         $totalCargaHoraria = Disciplina::sum('carga_horaria_semanal');
         $totalProfessores = Professor::where('ativo', true)->count();
         $totalTurmas = Turma::where('ativa', true)->count();
 
-        $cargaMediaPorProfessor = $totalProfessores > 0
-            ? round($totalCargaHoraria / $totalProfessores, 1)
-            : 0;
-
         return [
             'total' => $totalCargaHoraria,
-            'media_professor' => $cargaMediaPorProfessor,
+            'media_professor' => $totalProfessores > 0 ? round($totalCargaHoraria / $totalProfessores, 1) : 0,
             'total_professores' => $totalProfessores,
             'total_turmas' => $totalTurmas,
         ];
     }
 
-    public function render() {
+    public function render()
+    {
         return view('livewire.dashboard');
     }
 }

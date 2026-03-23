@@ -108,6 +108,20 @@
                     <p class="text-sm text-gray-600">Criar e gerar</p>
                 </div>
             </a>
+            <a href="{{ route('horarios.index') }}" wire:navigate class="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+
+                <div>
+                    <p class="font-medium text-gray-900">Executar Solver</p>
+                    <p class="text-sm text-gray-600">Gerar horário automaticamente</p>
+                </div>
+
+            </a>
         </div>
     </div>
 

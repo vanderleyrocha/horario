@@ -78,7 +78,7 @@
                 @break
 
                 @case('algoritmo')
-                    @livewire(\App\Livewire\Algoritmo\Index::class, ['horario' => $horario])
+                    @livewire(\App\Livewire\Algoritmo\ExecutionCenter::class, ['horario' => $horario], key('algoritmo-center-' . $horario->id))
                 @break
 
                 @case('diagnostico')

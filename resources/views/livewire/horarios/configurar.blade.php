@@ -25,12 +25,12 @@
 
             {{-- Etapa 2: Gerenciar Aulas --}}
             @if ($etapaAtual === 2)
-                @livewire('horarios.gerenciar-aulas', ['horario' => $horario])
+                @livewire(\App\Modules\Horarios\UI\Livewire\GerenciarAulas::class, ['horario' => $horario])
             @endif
 
             {{-- Etapa 3: Gerenciar Restrições --}}
             @if ($etapaAtual === 3)
-                @livewire('horarios.gerenciar-restricoes', ['horario' => $horario])
+                @livewire(\App\Modules\Horarios\UI\Livewire\GerenciarRestricoes::class, ['horario' => $horario])
             @endif
 
             {{-- ✅ NOVA ETAPA 4: Configuração do Algoritmo Genético --}}
@@ -43,7 +43,7 @@
                 @php
                     Illuminate\Support\Facades\Log::info("Renderizando etapa resumo e geração para o horário ID: {$horario->id} via livewire.horarios.configurar");
                 @endphp
-                @livewire('horarios.resumo-configuracao', ['horario' => $horario])
+                @livewire(\App\Modules\Horarios\UI\Livewire\ResumoConfiguracao::class, ['horario' => $horario])
             @endif
         </div>
 

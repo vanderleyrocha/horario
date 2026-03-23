@@ -8,7 +8,8 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('components.app-layout', ['title' => 'Horários'])]
-class Index extends Component {
+class Index extends Component
+{
     use WithPagination;
 
     public string $search = '';
@@ -17,26 +18,31 @@ class Index extends Component {
     public bool $showDiagnostico = false;
     public array $diagnosticoSelecionado = [];
 
-    public function updatingSearch(): void {
+    public function updatingSearch(): void
+    {
         $this->resetPage();
     }
 
-    public function updatingFilterStatus(): void {
+    public function updatingFilterStatus(): void
+    {
         $this->resetPage();
     }
 
-    public function updatingFilterAno(): void {
+    public function updatingFilterAno(): void
+    {
         $this->resetPage();
     }
 
-    public function delete(int $id): void {
+    public function delete(int $id): void
+    {
         $horario = Horario::findOrFail($id);
         $horario->delete();
 
         session()->flash('success', 'Horário excluído com sucesso!');
     }
 
-    public function duplicate(int $id): void {
+    public function duplicate(int $id): void
+    {
         $horario = Horario::findOrFail($id);
 
         $novoHorario = $horario->replicate();
@@ -57,7 +63,8 @@ class Index extends Component {
         $this->redirect(route('horarios.manage', $novoHorario));
     }
 
-    public function setActive(int $id): void {
+    public function setActive(int $id): void
+    {
         // Desativar todos os horários
         Horario::where('status', 'ativo')->update(['status' => 'concluido']);
 
@@ -69,21 +76,17 @@ class Index extends Component {
         session()->flash('success', 'Horário ativado com sucesso!');
     }
 
-    public function getAnosProperty() {
+    public function getAnosProperty()
+    {
         return Horario::distinct()->pluck('ano')->sort()->values();
     }
 
-    public function abrirDiagnostico(int $id): void {
-        $horario = Horario::findOrFail($id);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Futuro: carregar diagnóstico salvo no banco
-        |--------------------------------------------------------------------------
-        */
-        $this->diagnosticoSelecionado = $this->normalizeDiagnostico($horario->diagnostico_json ?? []);
-
-        $this->showDiagnostico = true;
+    public function abrirDiagnostico(int $id)
+    {
+        return $this->redirect(route('horarios.manage', [
+                'horario' => $id,
+                'tab' => 'diagnostico'
+            ]));
     }
 
     private function normalizeDiagnostico(mixed $diagnostico): array
@@ -101,31 +104,29 @@ class Index extends Component {
         return [];
     }
 
-    public function fecharDiagnostico(): void {
+    public function fecharDiagnostico(): void
+    {
         $this->showDiagnostico = false;
         $this->diagnosticoSelecionado = [];
     }
 
-    public function render() {
+    public function abrirSolver(int $id)
+    {
+        return redirect()->route('algoritmo.center', $id);
+    }
+
+    public function render()
+    {
         $horarios = Horario::query()
-            ->when(
-                $this->search,
-                fn($query) =>
-                $query->where('nome', 'like', "%{$this->search}%")
-            )
-            ->when(
-                $this->filterStatus,
-                fn($query) =>
-                $query->where('status', $this->filterStatus)
-            )
-            ->when(
-                $this->filterAno,
-                fn($query) =>
-                $query->where('ano', $this->filterAno)
-            )
+            ->when($this->search, fn ($query) =>
+                $query->where('nome', 'like', "%{$this->search}%"))
+            ->when($this->filterStatus, fn ($query) =>
+                $query->where('status', $this->filterStatus))
+            ->when($this->filterAno, fn ($query) =>
+                $query->where('ano', $this->filterAno))
             ->orderBy('created_at', 'desc')
             ->paginate(10);
-        
+
         return view('livewire.horarios.index', [
             'horarios' => $horarios,
         ]);

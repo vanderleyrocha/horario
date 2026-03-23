@@ -48,12 +48,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/disciplinas/criar', Disciplinas\Create::class)->name('disciplinas.create');
     Route::get('/disciplinas/{disciplina}/editar', Disciplinas\Edit::class)->name('disciplinas.edit');
 
-    // Horários
+
+    // SOLVER
+
+    Route::get('/algoritmo/{horario}', \App\Livewire\Algoritmo\ExecutionCenter::class)->name('algoritmo.center');
+    Route::get('/algoritmo/index/{horario}', fn (Horario $horario) => redirect()->route('algoritmo.center', $horario))->name('algoritmo.index');
+
+
+    Route::get('/algoritmo/execution/{execution}', \App\Livewire\Algoritmo\ExecutionDashboard::class)->name('algoritmo.execution');
+
+    Route::get('/algoritmo/execution/{execution}/stream', \App\Livewire\Algoritmo\ExecutionMetricsStream::class)->name('algoritmo.stream');
+
+    /* NOVA ROTA PARA POLLING DO DASHBOARD */
+
+    Route::get('/algoritmo/execution/{execution}/metrics', \App\Livewire\Algoritmo\ExecutionMetricsStream::class)->name('algoritmo.metrics');
+
     /*
-|--------------------------------------------------------------------------
-| MÓDULO HORÁRIOS
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | MÓDULO HORÁRIOS
+    |--------------------------------------------------------------------------
+    */
 
     Route::prefix('horarios')->name('horarios.')->group(function () {
 
@@ -88,12 +102,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/{horario}/algoritmo', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'algoritmo']))->name('algoritmo');
         Route::get('/{horario}/diagnostico', fn (Horario $horario) => redirect()->route('horarios.manage', ['horario' => $horario, 'tab' => 'diagnostico']))->name('diagnostico');
     });
-
-    // ✅ CORRIGIDO: Adicionar parâmetro {horario} na rota
-    Route::get('/algoritmo/{horario}/run', App\Livewire\Algoritmo\Index::class)->name('algoritmo.index');
-    Route::get('/algoritmo/execution/{execution}', \App\Livewire\Algoritmo\ExecutionDashboard::class)->name('algoritmo.execution');
-    Route::get('/algoritmo/execution/{execution}/stream', \App\Livewire\Algoritmo\ExecutionMetricsStream::class)->name('algoritmo.stream');
-
 
     // Profile e Configurações (temporário)
     Route::get('/users', UserManager::class)->name('users.index');

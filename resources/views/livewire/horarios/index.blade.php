@@ -58,24 +58,35 @@
                 </div>
 
                 {{-- AÇÕES RÁPIDAS --}}
-                <div class="grid grid-cols-3 gap-2 mb-2">
+                <div class="grid grid-cols-4 gap-2 mb-2">
 
-                    <a href="{{ route('algoritmo.index', $horario) }}" wire:navigate class="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg text-center">
-                        Gerar
+                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
+                        Configurar
                     </a>
 
-                    <a href="{{ route('horarios.show', $horario) }}" wire:navigate class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
-                        Abrir
+                    <a href="{{ route('algoritmo.center', $horario) }}" wire:navigate class="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg text-center">
+                        Executar Solver
                     </a>
 
-                    <button wire:click="abrirDiagnostico({{ $horario->id }})" class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg">
-                        Diagnóstico
-                    </button>
+                    @if ($horario->lastExecution)
+                        <a href="{{ route('algoritmo.execution', $horario->lastExecution->id) }}" wire:navigate class="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg text-center">
+                            Dashboard
+                        </a>
+                    @else
+                        <div class="px-3 py-2 bg-gray-300 text-gray-600 text-sm rounded-lg text-center">
+                            Dashboard
+                        </div>
+                    @endif
+
+                    <a href="{{ route('horarios.show', $horario) }}" wire:navigate class="px-3 py-2 bg-gray-700 text-white text-sm rounded-lg text-center">
+                        Visualizar
+                    </a>
+
                 </div>
 
                 {{-- MENU SECUNDÁRIO --}}
                 <div class="flex flex-wrap gap-2 text-xs text-gray-600 mt-2">
-                    {{-- 
+                    {{--
                     <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="hover:text-blue-600">Configurar</a>
 
                     <a href="{{ route('aulas.index', $horario->id) }}" wire:navigate class="hover:text-blue-600">Aulas</a>
@@ -87,4 +98,5 @@
             </div>
         @endforeach
     </div>
+
 </div>

@@ -5,17 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Turma extends Model {
-
+class Turma extends Model
+{
     use HasFactory;
 
     protected $fillable = [
+        'id',
         'nome',
         'codigo',
         'turno',
+        'serie',
         'numero_alunos',
         'ano',
         'ativa',
@@ -25,15 +26,18 @@ class Turma extends Model {
         'ativa' => 'boolean',
     ];
 
-    public function alocacoes(): HasMany {
+    public function alocacoes(): HasMany
+    {
         return $this->hasMany(Alocacao::class);
     }
 
-    public function scopeAtiva($query) {
+    public function scopeAtiva($query)
+    {
         return $query->where('ativa', true);
     }
 
-    public function getTurnoLabelAttribute(): string {
+    public function getTurnoLabelAttribute(): string
+    {
         return match ($this->turno) {
             'matutino' => 'Matutino (07:00 - 12:00)',
             'vespertino' => 'Vespertino (13:00 - 18:00)',
@@ -43,15 +47,18 @@ class Turma extends Model {
         };
     }
 
-    public function restricoesTempo(): MorphMany {
+    public function restricoesTempo(): MorphMany
+    {
         return $this->morphMany(RestricaoTempo::class, 'entidade');
     }
 
-    public function aulas(): HasMany {
+    public function aulas(): HasMany
+    {
         return $this->hasMany(Aula::class)->orderBy("disciplina_id");
     }
 
-    public function getAulasCountAttribute(): int {
+    public function getAulasCountAttribute(): int
+    {
         $aulas = $this->aulas()->get();
         $totalTemposNecessarios = $aulas->sum(function ($aula) {
             return $aula->aulas_semana * match ($aula->tipo) {

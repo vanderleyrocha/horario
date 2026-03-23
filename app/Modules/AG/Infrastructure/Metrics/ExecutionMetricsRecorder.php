@@ -2,28 +2,47 @@
 
 namespace App\Modules\AG\Infrastructure\Metrics;
 
-use Illuminate\Support\Facades\DB;
 use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
+use Illuminate\Support\Facades\DB;
 
 class ExecutionMetricsRecorder
 {
-    private int $executionId;
+    private ?int $executionId = null;
 
     private array $buffer = [];
 
     private int $batchSize = 25;
 
-    public function startExecution(int $horarioId, int $populationSize, int $generations, array $parameters): int
-    {
+    public function startExecution(
+        int $horarioId,
+        int $populationSize,
+        int $generations,
+        array $parameters,
+        ?int $executionId = null
+    ): int {
+        $payload = [
+            'horario_id' => $horarioId,
+            'start_time' => now(),
+            'status' => 'running',
+            'population_size' => $populationSize,
+            'generations' => $generations,
+            'parameters_json' => json_encode($parameters),
+            'updated_at' => now(),
+        ];
+
+        if ($executionId !== null) {
+            DB::table('schedule_executions')
+                ->where('id', $executionId)
+                ->update($payload);
+
+            $this->executionId = $executionId;
+
+            return $this->executionId;
+        }
 
         $this->executionId = DB::table('schedule_executions')
-            ->insertGetId([
-                'horario_id' => $horarioId,
-                'start_time' => now(),
-                'population_size' => $populationSize,
-                'generations' => $generations,
-                'parameters_json' => json_encode($parameters),
-                'created_at' => now()
+            ->insertGetId($payload + [
+                'created_at' => now(),
             ]);
 
         return $this->executionId;
@@ -31,7 +50,6 @@ class ExecutionMetricsRecorder
 
     public function recordGeneration(GenerationMetrics $metrics): void
     {
-
         $this->buffer[] = [
             'execution_id' => $this->executionId,
             'generation' => $metrics->generation,
@@ -42,7 +60,8 @@ class ExecutionMetricsRecorder
             'entropy' => $metrics->entropy,
             'mutation_rate' => $metrics->mutationRate,
             'stagnation' => $metrics->stagnation,
-            'created_at' => now()
+            'landscape_state' => $metrics->landscapeState,
+            'created_at' => now(),
         ];
 
         if (count($this->buffer) >= $this->batchSize) {
@@ -56,28 +75,57 @@ class ExecutionMetricsRecorder
             return;
         }
 
-        DB::table('schedule_generation_metrics')
-            ->insert($this->buffer);
+        DB::table('schedule_generation_metrics')->insert($this->buffer);
 
         $this->buffer = [];
     }
 
     public function finishExecution(float $bestFitness): void
     {
+        if ($this->executionId === null) {
+            return;
+        }
+
         $this->flush();
 
         DB::table('schedule_executions')
             ->where('id', $this->executionId)
             ->update([
+                'status' => 'finished',
                 'best_fitness' => $bestFitness,
                 'end_time' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
+    }
+
+    public function failExecution(): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        $this->flush();
+
+        DB::table('schedule_executions')
+            ->where('id', $this->executionId)
+            ->update([
+                'status' => 'failed',
+                'end_time' => now(),
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function hasExecutionId(): bool
+    {
+        return $this->executionId !== null;
     }
 
     public function getExecutionId(): int
     {
+        if ($this->executionId === null) {
+            throw new \RuntimeException('Execution ID not initialized.');
+        }
+
         return $this->executionId;
     }
-
 }

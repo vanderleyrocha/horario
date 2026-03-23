@@ -11,6 +11,34 @@ class OperatorPerformanceTracker
 
     private int $totalUses = 0;
 
+    private OperatorCreditManager $creditManager;
+
+    public function __construct()
+    {
+        $this->creditManager = new OperatorCreditManager();
+    }
+
+    /*
+    ---------------------------------------------------------
+    Registrar operador
+    ---------------------------------------------------------
+    */
+
+    public function registerOperator(string $operator): void
+    {
+        if (!isset($this->scores[$operator])) {
+
+            $this->scores[$operator] = new OperatorScore($operator);
+
+        }
+    }
+
+    /*
+    ---------------------------------------------------------
+    Registrar uso
+    ---------------------------------------------------------
+    */
+
     public function registerUse(string $operator): void
     {
         $score = $this->getOrCreateScore($operator);
@@ -20,6 +48,12 @@ class OperatorPerformanceTracker
         $this->totalUses++;
     }
 
+    /*
+    ---------------------------------------------------------
+    Registrar reward
+    ---------------------------------------------------------
+    */
+
     public function record(string $operator, float $reward): void
     {
         $score = $this->getOrCreateScore($operator);
@@ -27,13 +61,37 @@ class OperatorPerformanceTracker
         $score->addReward($reward);
     }
 
+    /*
+    ---------------------------------------------------------
+    Credit Assignment
+    ---------------------------------------------------------
+    */
+
+    public function recordReward(string $operator, float $reward): void
+    {
+        $score = $this->getOrCreateScore($operator);
+
+        $score->addReward($reward);
+
+        $this->creditManager->reward($operator, $reward);
+    }
+
+    /*
+    ---------------------------------------------------------
+    Estatísticas (compatível com seletores)
+    ---------------------------------------------------------
+    */
+
     public function getOperatorStatistics(): array
     {
         $stats = [];
 
-        foreach ($this->scores as $name => $score) {
+        foreach ($this->scores as $operator => $score) {
 
-            $stats[$name] = $score->toArray();
+            $stats[$operator] = [
+                'score' => $score->score(),
+                'uses' => $score->uses()
+            ];
         }
 
         return $stats;
@@ -72,10 +130,18 @@ class OperatorPerformanceTracker
         return $this->scores;
     }
 
+    /*
+    ---------------------------------------------------------
+    Utilitário
+    ---------------------------------------------------------
+    */
+
     private function getOrCreateScore(string $operator): OperatorScore
     {
         if (!isset($this->scores[$operator])) {
+
             $this->scores[$operator] = new OperatorScore($operator);
+
         }
 
         return $this->scores[$operator];

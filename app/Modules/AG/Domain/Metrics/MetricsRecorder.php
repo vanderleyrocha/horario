@@ -15,11 +15,17 @@ final class MetricsRecorder
     private float $bestFitnessOverall = 0.0;
     private ?int $executionId = null;
 
+    /*
+     |----------------------------------------------------
+     | Diversity optimisation
+     |----------------------------------------------------
+     */
+
     private int $diversitySamplingInterval = 5;
     private float $lastDiversity = 1.0;
+    private int $lastDiversityGeneration = -1;
 
     private ?DiversityCalculatorInterface $diversityCalculator = null;
-
     private ?PopulationEntropyCalculator $entropyCalculator = null;
 
     public function setDiversityCalculator(DiversityCalculatorInterface $calculator): void
@@ -49,7 +55,17 @@ final class MetricsRecorder
             throw new \RuntimeException("Population cannot be empty");
         }
 
-        $fitnessValues = array_map(fn (Cromossomo $c) => $c->fitness(), $population);
+        /*
+         |----------------------------------------------------
+         | Fitness metrics
+         |----------------------------------------------------
+         */
+
+        $fitnessValues = [];
+
+        foreach ($population as $c) {
+            $fitnessValues[] = $c->fitness();
+        }
 
         $best = max($fitnessValues);
 
@@ -57,30 +73,36 @@ final class MetricsRecorder
             $this->bestFitnessOverall = $best;
         }
 
-        $avg = array_sum($fitnessValues) / count($fitnessValues);
+        $count = count($fitnessValues);
+        $avg = array_sum($fitnessValues) / $count;
 
         $variance = $this->variance($fitnessValues, $avg);
 
-
+        /*
+         |----------------------------------------------------
+         | Diversity (optimized)
+         |----------------------------------------------------
+         */
 
         if ($this->diversityCalculator) {
 
-            /*
-             |------------------------------------------------------
-             | Early-stop diversity calculation
-             |------------------------------------------------------
-             */
-
+            // Early stop when diversity collapsed
             if ($this->lastDiversity < 0.05) {
 
                 $diversity = $this->lastDiversity;
 
             } else {
 
-                if ($generation % $this->diversitySamplingInterval === 0) {
+                // Sampling interval
+                if (
+                    $generation % $this->diversitySamplingInterval === 0 &&
+                    $generation !== $this->lastDiversityGeneration
+                ) {
 
                     $this->lastDiversity =
                         $this->diversityCalculator->calculate($population);
+
+                    $this->lastDiversityGeneration = $generation;
                 }
 
                 $diversity = $this->lastDiversity;
@@ -91,8 +113,21 @@ final class MetricsRecorder
             $diversity = 0.0;
         }
 
+        /*
+         |----------------------------------------------------
+         | Entropy
+         |----------------------------------------------------
+         */
 
-        $entropy = $this->entropyCalculator ? $this->entropyCalculator->normalized($population) : 0.0;
+        $entropy = $this->entropyCalculator
+            ? $this->entropyCalculator->normalized($population)
+            : 0.0;
+
+        /*
+         |----------------------------------------------------
+         | Store generation data
+         |----------------------------------------------------
+         */
 
         $generationData = [
             'generation' => $generation,
@@ -116,7 +151,8 @@ final class MetricsRecorder
         $sum = 0.0;
 
         foreach ($values as $v) {
-            $sum += ($v - $mean) ** 2;
+            $d = $v - $mean;
+            $sum += $d * $d;
         }
 
         return $sum / count($values);
@@ -134,14 +170,12 @@ final class MetricsRecorder
     public function lastEntropy(): float
     {
         $last = $this->lastGeneration();
-
         return $last['entropy'] ?? 1.0;
     }
 
     public function lastDiversity(): float
     {
         $last = $this->lastGeneration();
-
         return $last['diversity'] ?? 1.0;
     }
 

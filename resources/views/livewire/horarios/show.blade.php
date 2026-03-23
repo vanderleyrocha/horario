@@ -1,4 +1,21 @@
-<div class="space-y-6">
+<div class="space-y-6" x-data="{
+    draggedAllocationId: null,
+    isDragging: false,
+    handleDrop(el, day, time) {
+        if (this.draggedAllocationId) {
+            const targetCell = el;
+            const originalCell = document.getElementById(`allocation-${this.draggedAllocationId}`).parentElement;
+
+            if (targetCell.children.length === 0 || targetCell.children[0].classList.contains('h-14')) {
+                $wire.call('handleDrop', this.draggedAllocationId, day, time);
+            } else {
+                console.warn('Target cell is not empty.');
+            }
+        }
+        this.draggedAllocationId = null;
+        this.isDragging = false;
+    }
+}">
 
     <div class="bg-white rounded-lg shadow p-6 border">
 
@@ -52,7 +69,10 @@
                                     $cell = $this->grade[$dayKey][$timeKey] ?? null;
                                 @endphp
 
-                                <td class="border p-1">
+                                <td class="border p-1"
+                                    @dragover.prevent="isDragging = true"
+                                    @dragleave.prevent="isDragging = false"
+                                    @drop="handleDrop($el, '{{ $dayKey }}', '{{ $timeKey }}')">
 
                                     @if ($cell && $cell['type'] === 'start')
                                         @php
@@ -60,14 +80,18 @@
                                             $palette = $this->colorForProfessor($allocation->professor_id);
                                         @endphp
 
-                                        <div class="p-2 rounded {{ $palette['bg'] }} {{ $palette['text'] }} {{ $palette['border'] }}">
+                                        <div id="allocation-{{ $allocation->id }}"
+                                             draggable="true"
+                                             @dragstart="draggedAllocationId = {{ $allocation->id }}; isDragging = true"
+                                             @dragend="draggedAllocationId = null; isDragging = false"
+                                             class="p-2 rounded cursor-move {{ $palette['bg'] }} {{ $palette['text'] }} {{ $palette['border'] }}">
 
                                             <div class="text-xs font-semibold">
-                                                {{ $allocation->disciplina->nome }}
+                                                {{ $allocation->disciplina->codigo }}
                                             </div>
 
                                             <div class="text-xs">
-                                                {{ $allocation->professor->nome }}
+                                                {{ $allocation->professor->nome_abreviado }}
                                             </div>
 
                                             <div class="text-[10px]">

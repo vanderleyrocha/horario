@@ -192,6 +192,12 @@ final class GeneticAlgorithmEngine
 
                 $response = $this->landscapeEngine->evaluate($landscapeMetrics);
 
+                if ($this->hyperHeuristic) {
+                    $this->hyperHeuristic->updateLandscapeState($response->state);
+                }
+
+                $heatmap = $this->landscapeEngine->heatmap();
+
                 $landscapeState = $response->state->value;
 
                 $mutationRate *= $response->mutationMultiplier;
@@ -224,8 +230,11 @@ final class GeneticAlgorithmEngine
                 'landscape_state' => $landscapeState ?? 'unknown',
                 'operator_used' => $operatorUsed,
                 'operator_reward' => $operatorReward,
+                'landscape_heatmap' => $heatmap,
                 'timestamp' => microtime(true)
             ], $this->executionMetrics?->getExecutionId() ?? 0);
+
+
 
 
             /* LNS */
@@ -406,12 +415,27 @@ final class GeneticAlgorithmEngine
             }
         }
 
+
         $this->populationEvaluator->evaluate($newPopulation);
+
+        /* calcular reward médio */
+
+        $operatorReward = 0.0;
+
+        if (!empty($operatorRewards)) {
+
+            $operatorReward = array_sum($operatorRewards) / count($operatorRewards);
+
+        }
+
         $this->lastEvolutionTelemetry = [
             'mutation_rate' => $mutationRate,
             'operator_used' => $operatorUsed ?? 'none',
-            'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
+            'operator_reward' => $operatorReward,
+            'diversity' => $diversity,
+            'entropy' => $entropy
         ];
+
 
         return $newPopulation;
     }
