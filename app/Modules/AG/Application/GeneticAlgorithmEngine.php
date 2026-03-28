@@ -29,6 +29,8 @@ use Illuminate\Support\Facades\Log;
 
 final class GeneticAlgorithmEngine
 {
+    private const INITIAL_POPULATION_LOG_SAMPLE_SIZE = 3;
+
     private array $mutationPool;
 
     private array $lastEvolutionTelemetry = [];
@@ -58,6 +60,7 @@ final class GeneticAlgorithmEngine
             $activateDynamicLNS = false;
             $diversificationBoost = 0.0;
             $alnsTelemetry = [];
+            $heatmap = [];
 
             $entropy = $this->metrics->lastEntropy();
             $diversity = $this->metrics->lastDiversity();
@@ -82,78 +85,20 @@ final class GeneticAlgorithmEngine
 
                 [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
 
-                /* CHILD A */
+                $childAResult = $this->evolveChild($childA, $mutationRate);
+                $childBResult = $this->evolveChild($childB, $mutationRate);
 
-                $beforeA = $childA->fitness();
+                $childA = $childAResult['child'];
+                $childB = $childBResult['child'];
 
-                if ($this->shouldMutate($mutationRate)) {
-
-                    if ($this->hyperHeuristic) {
-
-                        $operator = $this->hyperHeuristic->selectOperator($this->mutationPool);
-
-                        if (! $operator instanceof MutationOperatorInterface) {
-                            throw new \RuntimeException('Selected operator is not a mutation operator');
-                        }
-
-                    } else {
-                        $operator = $this->mutation;
-                    }
-
-                    $childA = $operator->mutate($childA);
+                if ($childAResult['operator_name'] !== null) {
+                    $operatorRewards[$childAResult['operator_name']][] = $childAResult['reward'];
+                    $operatorUsed = $childAResult['operator_name'];
                 }
 
-                $childA = $this->problem->repair($childA);
-
-                $resultA = $this->problem->evaluate($childA);
-
-                $afterA = $resultA->score();
-
-                $reward = $afterA - $beforeA;
-
-                $name = method_exists($operator, 'getName')
-                    ? $operator->getName()
-                    : class_basename($operator);
-
-                $operatorRewards[$name][] = $reward;
-                $operatorUsed = $name;
-
-                if ($this->hyperHeuristic) {
-                    $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeA, $afterA);
-                }
-
-                /* CHILD B */
-
-                $beforeB = $childB->fitness();
-
-                if ($this->shouldMutate($mutationRate)) {
-
-                    $operator = $this->hyperHeuristic ? $this->hyperHeuristic->selectOperator($this->mutationPool) : $this->mutation;
-
-                    if (! $operator instanceof MutationOperatorInterface) {
-                        throw new \RuntimeException('Selected operator is not a mutation operator');
-                    }
-
-                    $childB = $operator->mutate($childB);
-                }
-
-                $childB = $this->problem->repair($childB);
-
-                $resultB = $this->problem->evaluate($childB);
-
-                $afterB = $resultB->score();
-
-                $reward = $afterB - $beforeB;
-
-                $name = method_exists($operator, 'getName')
-                    ? $operator->getName()
-                    : class_basename($operator);
-
-                $operatorRewards[$name][] = $reward;
-                $operatorUsed = $name;
-
-                if ($this->hyperHeuristic) {
-                    $this->hyperHeuristic->record($operator ?? $this->mutation, $beforeB, $afterB);
+                if ($childBResult['operator_name'] !== null) {
+                    $operatorRewards[$childBResult['operator_name']][] = $childBResult['reward'];
+                    $operatorUsed = $childBResult['operator_name'];
                 }
 
                 $newPopulation[] = $childA;
@@ -289,20 +234,38 @@ final class GeneticAlgorithmEngine
     private function initializePopulation(int $size): array
     {
         $population = [];
+        $sampleGenes = [];
 
         for ($i = 0; $i < $size; $i++) {
             $this->assertNotCancelled();
-
-            Log::info("Criando indivíduo {$i}");
 
             $individual = $this->problem->createIndividual();
 
             $individual = $this->problem->repair($individual);
 
             $population[] = $individual;
+
+            if (count($sampleGenes) < self::INITIAL_POPULATION_LOG_SAMPLE_SIZE) {
+                $sampleGenes[] = $individual->count();
+            }
         }
 
         $this->populationEvaluator->evaluate($population);
+
+        $fitnessValues = array_map(
+            static fn (Cromossomo $individual): float => $individual->fitness(),
+            $population
+        );
+
+        Log::info('ga.population.initialized', [
+            'execution_id' => $this->executionMetrics?->getExecutionId(),
+            'population_size' => count($population),
+            'sample_gene_counts' => $sampleGenes,
+            'best_fitness' => $fitnessValues === [] ? null : max($fitnessValues),
+            'avg_fitness' => $fitnessValues === []
+                ? null
+                : array_sum($fitnessValues) / count($fitnessValues),
+        ]);
 
         return $population;
     }
@@ -364,51 +327,21 @@ final class GeneticAlgorithmEngine
 
             [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
 
-            /* CHILD A */
-            $beforeA = $childA->fitness();
+            $childAResult = $this->evolveChild($childA, $mutationRate);
+            $childBResult = $this->evolveChild($childB, $mutationRate);
 
-            if ($this->shouldMutate($mutationRate)) {
+            $childA = $childAResult['child'];
+            $childB = $childBResult['child'];
 
-                $operator = $this->hyperHeuristic
-                    ? $this->hyperHeuristic->selectOperator($this->mutationPool)
-                    : $this->mutation;
-
-                if (! $operator instanceof MutationOperatorInterface) {
-                    throw new \RuntimeException('Selected operator is not a mutation operator');
-                }
-
-                $childA = $operator->mutate($childA);
-                $operatorUsed = method_exists($operator, 'getName')
-                    ? $operator->getName()
-                    : class_basename($operator);
+            if ($childAResult['operator_name'] !== null) {
+                $operatorRewards[] = $childAResult['reward'];
+                $operatorUsed = $childAResult['operator_name'];
             }
 
-            $childA = $this->problem->repair($childA);
-            $afterA = $this->problem->evaluate($childA)->score();
-            $operatorRewards[] = $afterA - $beforeA;
-
-            /* CHILD B */
-            $beforeB = $childB->fitness();
-
-            if ($this->shouldMutate($mutationRate)) {
-
-                $operator = $this->hyperHeuristic
-                    ? $this->hyperHeuristic->selectOperator($this->mutationPool)
-                    : $this->mutation;
-
-                if (! $operator instanceof MutationOperatorInterface) {
-                    throw new \RuntimeException('Selected operator is not a mutation operator');
-                }
-
-                $childB = $operator->mutate($childB);
-                $operatorUsed = method_exists($operator, 'getName')
-                    ? $operator->getName()
-                    : class_basename($operator);
+            if ($childBResult['operator_name'] !== null) {
+                $operatorRewards[] = $childBResult['reward'];
+                $operatorUsed = $childBResult['operator_name'];
             }
-
-            $childB = $this->problem->repair($childB);
-            $afterB = $this->problem->evaluate($childB)->score();
-            $operatorRewards[] = $afterB - $beforeB;
 
             $newPopulation[] = $childA;
 
@@ -479,6 +412,57 @@ final class GeneticAlgorithmEngine
         }
 
         return $telemetry;
+    }
+
+    /**
+     * @return array{
+     *     child: Cromossomo,
+     *     reward: float,
+     *     operator_name: string|null
+     * }
+     */
+    private function evolveChild(Cromossomo $child, float $mutationRate): array
+    {
+        $before = $child->fitness();
+        $operator = null;
+
+        if ($this->shouldMutate($mutationRate)) {
+            $operator = $this->resolveMutationOperator();
+            $child = $operator->mutate($child);
+        }
+
+        $child = $this->problem->repair($child);
+        $after = $this->problem->evaluate($child)->score();
+
+        if ($operator !== null && $this->hyperHeuristic) {
+            $this->hyperHeuristic->record($operator, $before, $after);
+        }
+
+        return [
+            'child' => $child,
+            'reward' => $after - $before,
+            'operator_name' => $operator !== null ? $this->operatorName($operator) : null,
+        ];
+    }
+
+    private function resolveMutationOperator(): MutationOperatorInterface
+    {
+        $operator = $this->hyperHeuristic
+            ? $this->hyperHeuristic->selectOperator($this->mutationPool)
+            : $this->mutation;
+
+        if (! $operator instanceof MutationOperatorInterface) {
+            throw new \RuntimeException('Selected operator is not a mutation operator');
+        }
+
+        return $operator;
+    }
+
+    private function operatorName(object $operator): string
+    {
+        return method_exists($operator, 'getName')
+            ? $operator->getName()
+            : class_basename($operator);
     }
 
     private function assertNotCancelled(): void
