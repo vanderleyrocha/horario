@@ -17,12 +17,14 @@ final class LandscapeEngine
         private LandscapeMemory $memory,
         private ?SearchResponsePolicy $searchResponsePolicy = null,
         private ?SearchResponseOutcomeTracker $searchResponseOutcomeTracker = null,
-        private ?SearchResponseActivationGate $searchResponseActivationGate = null
+        private ?SearchResponseActivationGate $searchResponseActivationGate = null,
+        private ?SearchResponseReadinessDashboardBuilder $searchResponseReadinessDashboardBuilder = null
     ) {
         $this->heatmapBuilder = new LandscapeHeatmapBuilder;
         $this->searchResponsePolicy ??= new SearchResponsePolicy;
         $this->searchResponseOutcomeTracker ??= new SearchResponseOutcomeTracker;
         $this->searchResponseActivationGate ??= new SearchResponseActivationGate;
+        $this->searchResponseReadinessDashboardBuilder ??= new SearchResponseReadinessDashboardBuilder;
     }
 
     public function evaluate(LandscapeMetrics $metrics): LandscapeResponse
@@ -185,12 +187,19 @@ final class LandscapeEngine
         $activationGate = $effectivenessReportObject !== null
             ? $this->searchResponseActivationGate?->evaluate($effectivenessReportObject)?->toArray()
             : null;
+        $readinessDashboard = $this->searchResponseReadinessDashboardBuilder?->build(
+            effectivenessReport: $effectivenessReport,
+            activationGate: $activationGate,
+            latestOutcome: $latestOutcome,
+            pendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0
+        )?->toArray();
 
         $this->lastObservation = $this->lastObservation->withSearchResponseOutcome(
             searchResponseOutcome: $latestOutcome,
             searchResponsePendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0,
             searchResponseEffectivenessReport: $effectivenessReport,
-            searchResponseActivationGate: $activationGate
+            searchResponseActivationGate: $activationGate,
+            searchResponseReadinessDashboard: $readinessDashboard
         );
 
         return $state;

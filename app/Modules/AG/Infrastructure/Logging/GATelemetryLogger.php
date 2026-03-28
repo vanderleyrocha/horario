@@ -128,6 +128,8 @@ final class GATelemetryLogger
                 ? (bool) $metrics['landscape_observation']['search_response_activation_gate']['eligible_as_candidate']
                 : null,
             'search_response_activation_mode' => $metrics['landscape_observation']['search_response_activation_gate']['mode'] ?? null,
+            'search_response_readiness_status' => $metrics['landscape_observation']['search_response_readiness_dashboard']['status'] ?? null,
+            'search_response_readiness_headline' => $metrics['landscape_observation']['search_response_readiness_dashboard']['headline'] ?? null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

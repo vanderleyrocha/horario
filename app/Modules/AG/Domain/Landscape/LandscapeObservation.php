@@ -33,7 +33,8 @@ final class LandscapeObservation
         public readonly ?array $searchResponseOutcome = null,
         public readonly int $searchResponsePendingAudits = 0,
         public readonly ?array $searchResponseEffectivenessReport = null,
-        public readonly ?array $searchResponseActivationGate = null
+        public readonly ?array $searchResponseActivationGate = null,
+        public readonly ?array $searchResponseReadinessDashboard = null
     ) {}
 
     public function withEpisodeContext(
@@ -69,7 +70,8 @@ final class LandscapeObservation
             searchResponseOutcome: $this->searchResponseOutcome,
             searchResponsePendingAudits: $this->searchResponsePendingAudits,
             searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport,
-            searchResponseActivationGate: $this->searchResponseActivationGate
+            searchResponseActivationGate: $this->searchResponseActivationGate,
+            searchResponseReadinessDashboard: $this->searchResponseReadinessDashboard
         );
     }
 
@@ -102,7 +104,8 @@ final class LandscapeObservation
             searchResponseOutcome: $this->searchResponseOutcome,
             searchResponsePendingAudits: $this->searchResponsePendingAudits,
             searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport,
-            searchResponseActivationGate: $this->searchResponseActivationGate
+            searchResponseActivationGate: $this->searchResponseActivationGate,
+            searchResponseReadinessDashboard: $this->searchResponseReadinessDashboard
         );
     }
 
@@ -135,7 +138,8 @@ final class LandscapeObservation
             searchResponseOutcome: $this->searchResponseOutcome,
             searchResponsePendingAudits: $this->searchResponsePendingAudits,
             searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport,
-            searchResponseActivationGate: $this->searchResponseActivationGate
+            searchResponseActivationGate: $this->searchResponseActivationGate,
+            searchResponseReadinessDashboard: $this->searchResponseReadinessDashboard
         );
     }
 
@@ -143,7 +147,8 @@ final class LandscapeObservation
         ?array $searchResponseOutcome,
         int $searchResponsePendingAudits,
         ?array $searchResponseEffectivenessReport = null,
-        ?array $searchResponseActivationGate = null
+        ?array $searchResponseActivationGate = null,
+        ?array $searchResponseReadinessDashboard = null
     ): self {
         return new self(
             phenomenon: $this->phenomenon,
@@ -172,7 +177,8 @@ final class LandscapeObservation
             searchResponseOutcome: $searchResponseOutcome,
             searchResponsePendingAudits: $searchResponsePendingAudits,
             searchResponseEffectivenessReport: $searchResponseEffectivenessReport ?? $this->searchResponseEffectivenessReport,
-            searchResponseActivationGate: $searchResponseActivationGate ?? $this->searchResponseActivationGate
+            searchResponseActivationGate: $searchResponseActivationGate ?? $this->searchResponseActivationGate,
+            searchResponseReadinessDashboard: $searchResponseReadinessDashboard ?? $this->searchResponseReadinessDashboard
         );
     }
 
@@ -206,6 +212,7 @@ final class LandscapeObservation
             'search_response_pending_audits' => $this->searchResponsePendingAudits,
             'search_response_effectiveness_report' => $this->searchResponseEffectivenessReport,
             'search_response_activation_gate' => $this->searchResponseActivationGate,
+            'search_response_readiness_dashboard' => $this->searchResponseReadinessDashboard,
         ];
     }
 }

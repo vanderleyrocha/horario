@@ -44,6 +44,7 @@ it('marks a policy as activation candidate when evidence thresholds are satisfie
         'minimum_success_rate' => 0.6,
         'minimum_approach_rate' => 0.75,
         'minimum_avg_progress_score' => 0.65,
+        'blocking_reasons' => [],
     ]);
 });
 
@@ -73,5 +74,8 @@ it('keeps activation disabled when policies still lack evidence', function (): v
         'eligible_as_candidate' => false,
         'candidate_policy' => null,
         'mode' => 'diagnostic_only',
-    ]);
+    ])
+        ->and($decision['blocking_reasons'] ?? [])->toContain('Need more resolved shadow outcomes.')
+        ->and($decision['blocking_reasons'] ?? [])->toContain('Success rate is still below the activation threshold.')
+        ->and($decision['blocking_reasons'] ?? [])->toContain('Average progress score is still below the activation threshold.');
 });

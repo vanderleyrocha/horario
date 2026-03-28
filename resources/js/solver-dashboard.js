@@ -314,6 +314,7 @@ function appendMetric(metric) {
 
     appendLandscapeMetric(generation, metric.landscape_state ?? metric.landscapeState ?? "unknown")
     updateLandscapeObservation(landscapePhenomenon, landscapeObservation)
+    updateSearchResponseReadiness(landscapeObservation)
 }
 
 function updateLandscapeObservation(phenomenon, observation) {
@@ -359,6 +360,116 @@ function updateLandscapeObservation(phenomenon, observation) {
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
     summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+}
+
+function updateSearchResponseReadiness(observation) {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const readiness = observation && typeof observation === "object"
+        ? observation.search_response_readiness_dashboard ?? {}
+        : {}
+
+    const headlineElement = root.querySelector("[data-sr-readiness-headline]")
+    const statusElement = root.querySelector("[data-sr-readiness-status]")
+    const evidenceCountElement = root.querySelector("[data-sr-evidence-count]")
+    const pendingAuditsElement = root.querySelector("[data-sr-pending-audits]")
+    const gateStatusElement = root.querySelector("[data-sr-gate-status]")
+    const gateCandidateElement = root.querySelector("[data-sr-gate-candidate]")
+    const bestOutcomeElement = root.querySelector("[data-sr-best-outcome]")
+    const bestProgressElement = root.querySelector("[data-sr-best-progress]")
+    const latestOutcomeElement = root.querySelector("[data-sr-latest-outcome]")
+    const latestOutcomeDetailElement = root.querySelector("[data-sr-latest-outcome-detail]")
+    const policyRowsElement = root.querySelector("[data-sr-policy-rows]")
+    const blockingReasonsElement = root.querySelector("[data-sr-blocking-reasons]")
+
+    if (
+        !headlineElement ||
+        !statusElement ||
+        !evidenceCountElement ||
+        !pendingAuditsElement ||
+        !gateStatusElement ||
+        !gateCandidateElement ||
+        !bestOutcomeElement ||
+        !bestProgressElement ||
+        !latestOutcomeElement ||
+        !latestOutcomeDetailElement ||
+        !policyRowsElement ||
+        !blockingReasonsElement
+    ) {
+        return
+    }
+
+    const status = String(readiness.status ?? "idle")
+    const headline = String(readiness.headline ?? "No readiness evidence collected yet")
+    const resolvedEvidenceCount = Number(readiness.resolved_evidence_count ?? 0)
+    const pendingAudits = Number(readiness.pending_audits ?? 0)
+    const bestBySuccess = readiness.best_policy_by_success ?? null
+    const bestByProgress = readiness.best_policy_by_progress ?? null
+    const latestOutcome = readiness.latest_outcome ?? null
+    const activationGate = readiness.activation_gate ?? null
+    const blockingReasons = Array.isArray(readiness.blocking_reasons) ? readiness.blocking_reasons : []
+    const policyRows = Array.isArray(readiness.policy_rows) ? readiness.policy_rows : []
+
+    headlineElement.textContent = headline
+    statusElement.textContent = status.replaceAll("_", " ")
+    evidenceCountElement.textContent = String(resolvedEvidenceCount)
+    pendingAuditsElement.textContent = String(pendingAudits)
+    gateStatusElement.textContent = Boolean(activationGate?.eligible_as_candidate)
+        ? "Candidate ready"
+        : "Diagnostic only"
+    gateCandidateElement.textContent = activationGate?.candidate_policy
+        ? `Candidate: ${activationGate.candidate_policy}`
+        : String(activationGate?.reason ?? "No candidate yet")
+
+    bestOutcomeElement.textContent = bestBySuccess?.policy
+        ? `${bestBySuccess.policy} | success ${(Number(bestBySuccess.success_rate ?? 0) * 100).toFixed(0)}%`
+        : "Not enough evidence"
+    bestProgressElement.textContent = bestByProgress?.policy
+        ? `${bestByProgress.policy} | progress ${Number(bestByProgress.avg_progress_score ?? 0).toFixed(2)}`
+        : "Progress not available"
+
+    latestOutcomeElement.textContent = latestOutcome?.policy
+        ? `${latestOutcome.policy} | ${Boolean(latestOutcome.targets_satisfied) ? "targets hit" : "targets missed"}`
+        : "No resolved outcome yet"
+    latestOutcomeDetailElement.textContent = latestOutcome?.policy
+        ? `Progress ${Number(latestOutcome.progress_score ?? 0).toFixed(2)} | resolved gen ${Number(latestOutcome.resolved_generation ?? 0)}`
+        : "Waiting for first horizon to expire"
+
+    if (policyRows.length === 0) {
+        policyRowsElement.innerHTML = `
+            <tr>
+                <td colspan="5" class="py-4 text-sm text-slate-500">No policies evaluated yet.</td>
+            </tr>
+        `
+    } else {
+        policyRowsElement.innerHTML = policyRows.map((policy) => `
+            <tr>
+                <td class="py-3 pr-4 font-medium text-slate-900">${String(policy.policy ?? "-")}</td>
+                <td class="py-3 pr-4 text-slate-600">${Number(policy.resolved_outcomes ?? 0)}</td>
+                <td class="py-3 pr-4 text-slate-600">${(Number(policy.success_rate ?? 0) * 100).toFixed(0)}%</td>
+                <td class="py-3 pr-4 text-slate-600">${(Number(policy.approach_rate ?? 0) * 100).toFixed(0)}%</td>
+                <td class="py-3 text-slate-600">${Number(policy.avg_progress_score ?? 0).toFixed(2)}</td>
+            </tr>
+        `).join("")
+    }
+
+    if (blockingReasons.length === 0) {
+        blockingReasonsElement.innerHTML = `
+            <p class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                No blocking reasons at the moment.
+            </p>
+        `
+    } else {
+        blockingReasonsElement.innerHTML = blockingReasons.map((reason) => `
+            <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                ${String(reason)}
+            </p>
+        `).join("")
+    }
 }
 
 function updateAllCharts() {

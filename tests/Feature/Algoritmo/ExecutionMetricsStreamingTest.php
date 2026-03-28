@@ -131,17 +131,17 @@ it('flushes generation metrics immediately and publishes the current metric to c
             ],
             'search_response_pending_audits' => 2,
             'search_response_effectiveness_report' => [
-                'total_resolved_outcomes' => 4,
+                'total_resolved_outcomes' => 6,
                 'best_policy_by_success' => 'basin_lock_escape',
                 'best_policy_by_progress' => 'deep_valley_probe',
                 'policies' => [
                     [
                         'policy' => 'basin_lock_escape',
-                        'resolved_outcomes' => 2,
-                        'targets_satisfied_count' => 1,
-                        'approached_targets_count' => 2,
-                        'avg_progress_score' => 0.74,
-                        'success_rate' => 0.5,
+                        'resolved_outcomes' => 4,
+                        'targets_satisfied_count' => 3,
+                        'approached_targets_count' => 4,
+                        'avg_progress_score' => 0.76,
+                        'success_rate' => 0.75,
                         'approach_rate' => 1.0,
                     ],
                     [
@@ -166,13 +166,87 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'supporting_stats' => [
                     'policy' => 'basin_lock_escape',
                     'resolved_outcomes' => 4,
-                    'targets_satisfied_count' => 2,
+                    'targets_satisfied_count' => 3,
                     'approached_targets_count' => 4,
-                    'avg_progress_score' => 0.74,
-                    'success_rate' => 0.5,
+                    'avg_progress_score' => 0.76,
+                    'success_rate' => 0.75,
                     'approach_rate' => 1.0,
                 ],
+                'blocking_reasons' => [],
                 'reason' => 'Policy crossed the evidence thresholds and is now a diagnostic candidate for future real activation.',
+            ],
+            'search_response_readiness_dashboard' => [
+                'status' => 'candidate_ready',
+                'headline' => 'Diagnostic candidate ready: basin_lock_escape',
+                'resolved_evidence_count' => 6,
+                'pending_audits' => 2,
+                'best_policy_by_success' => [
+                    'policy' => 'basin_lock_escape',
+                    'resolved_outcomes' => 4,
+                    'targets_satisfied_count' => 3,
+                    'approached_targets_count' => 4,
+                    'avg_progress_score' => 0.76,
+                    'success_rate' => 0.75,
+                    'approach_rate' => 1.0,
+                ],
+                'best_policy_by_progress' => [
+                    'policy' => 'deep_valley_probe',
+                    'resolved_outcomes' => 2,
+                    'targets_satisfied_count' => 0,
+                    'approached_targets_count' => 2,
+                    'avg_progress_score' => 0.79,
+                    'success_rate' => 0.0,
+                    'approach_rate' => 1.0,
+                ],
+                'latest_outcome' => [
+                    'policy' => 'basin_lock_escape',
+                    'audit_generation' => 5,
+                    'resolved_generation' => 11,
+                    'targets_satisfied' => false,
+                    'approached_targets' => true,
+                    'progress_score' => 0.67,
+                ],
+                'activation_gate' => [
+                    'eligible_as_candidate' => true,
+                    'candidate_policy' => 'basin_lock_escape',
+                    'mode' => 'diagnostic_only',
+                    'minimum_resolved_outcomes' => 3,
+                    'minimum_success_rate' => 0.6,
+                    'minimum_approach_rate' => 0.75,
+                    'minimum_avg_progress_score' => 0.65,
+                    'supporting_stats' => [
+                        'policy' => 'basin_lock_escape',
+                        'resolved_outcomes' => 4,
+                        'targets_satisfied_count' => 3,
+                        'approached_targets_count' => 4,
+                        'avg_progress_score' => 0.76,
+                        'success_rate' => 0.75,
+                        'approach_rate' => 1.0,
+                    ],
+                    'blocking_reasons' => [],
+                    'reason' => 'Policy crossed the evidence thresholds and is now a diagnostic candidate for future real activation.',
+                ],
+                'blocking_reasons' => [],
+                'policy_rows' => [
+                    [
+                        'policy' => 'basin_lock_escape',
+                        'resolved_outcomes' => 4,
+                        'targets_satisfied_count' => 3,
+                        'approached_targets_count' => 4,
+                        'avg_progress_score' => 0.76,
+                        'success_rate' => 0.75,
+                        'approach_rate' => 1.0,
+                    ],
+                    [
+                        'policy' => 'deep_valley_probe',
+                        'resolved_outcomes' => 2,
+                        'targets_satisfied_count' => 0,
+                        'approached_targets_count' => 2,
+                        'avg_progress_score' => 0.79,
+                        'success_rate' => 0.0,
+                        'approach_rate' => 1.0,
+                    ],
+                ],
             ],
         ],
         'operator_used' => 'StructuredSwapMutation',
@@ -220,7 +294,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
         ->and($cachedMetric['landscape_observation']['search_response_pending_audits'] ?? null)->toBe(2)
         ->and($cachedMetric['landscape_observation']['search_response_effectiveness_report']['best_policy_by_success'] ?? null)->toBe('basin_lock_escape')
-        ->and($cachedMetric['landscape_observation']['search_response_activation_gate']['candidate_policy'] ?? null)->toBe('basin_lock_escape');
+        ->and($cachedMetric['landscape_observation']['search_response_activation_gate']['candidate_policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($cachedMetric['landscape_observation']['search_response_readiness_dashboard']['status'] ?? null)->toBe('candidate_ready');
 
     $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
 
@@ -235,6 +310,7 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['search_response_outcome']['resolved_generation'] ?? null)->toBe(11)
         ->and($storedObservation['search_response_outcome']['approached_targets'] ?? null)->toBeTrue()
         ->and($storedObservation['search_response_effectiveness_report']['best_policy_by_progress'] ?? null)->toBe('deep_valley_probe')
-        ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(2)
-        ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue();
+        ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(4)
+        ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue()
+        ->and($storedObservation['search_response_readiness_dashboard']['best_policy_by_success']['policy'] ?? null)->toBe('basin_lock_escape');
 });

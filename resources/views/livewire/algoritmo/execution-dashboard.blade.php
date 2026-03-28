@@ -100,6 +100,90 @@
             </div>
         </div>
 
+        <div class="col-span-2 overflow-hidden rounded-2xl border border-slate-200 bg-linear-to-br from-slate-50 via-white to-emerald-50 shadow-sm">
+            <div class="border-b border-slate-200 px-6 py-4">
+                <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900">Search Response Readiness</h3>
+                        <p class="text-sm text-slate-600" data-sr-readiness-headline>
+                            No readiness evidence collected yet
+                        </p>
+                    </div>
+                    <div class="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold tracking-wide text-white" data-sr-readiness-status>
+                        idle
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid gap-4 px-6 py-5 lg:grid-cols-4">
+                <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Evidence</p>
+                    <p class="mt-3 text-3xl font-semibold text-slate-900" data-sr-evidence-count>0</p>
+                    <p class="mt-1 text-sm text-slate-600">
+                        Pending audits:
+                        <span class="font-semibold text-slate-900" data-sr-pending-audits>0</span>
+                    </p>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gate Status</p>
+                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-gate-status>Diagnostic only</p>
+                    <p class="mt-1 text-sm text-slate-600" data-sr-gate-candidate>No candidate yet</p>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Best Outcome</p>
+                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-best-outcome>Not enough evidence</p>
+                    <p class="mt-1 text-sm text-slate-600" data-sr-best-progress>Progress not available</p>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Latest Outcome</p>
+                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-latest-outcome>No resolved outcome yet</p>
+                    <p class="mt-1 text-sm text-slate-600" data-sr-latest-outcome-detail>Waiting for first horizon to expire</p>
+                </div>
+            </div>
+
+            <div class="grid gap-4 border-t border-slate-200 px-6 py-5 lg:grid-cols-[1.1fr_0.9fr]">
+                <div class="rounded-xl border border-slate-200 bg-white/90 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <h4 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Policies</h4>
+                        <span class="text-xs text-slate-500">Shadow-mode effectiveness</span>
+                    </div>
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="text-left text-xs uppercase tracking-[0.14em] text-slate-500">
+                                <tr>
+                                    <th class="pb-2 pr-4 font-medium">Policy</th>
+                                    <th class="pb-2 pr-4 font-medium">Resolved</th>
+                                    <th class="pb-2 pr-4 font-medium">Success</th>
+                                    <th class="pb-2 pr-4 font-medium">Approach</th>
+                                    <th class="pb-2 font-medium">Progress</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100" data-sr-policy-rows>
+                                <tr>
+                                    <td colspan="5" class="py-4 text-sm text-slate-500">No policies evaluated yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white/90 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <h4 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Blocking Reasons</h4>
+                        <span class="text-xs text-slate-500">Before real activation</span>
+                    </div>
+                    <div class="mt-4 space-y-2" data-sr-blocking-reasons>
+                        <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
+                            No blocking reasons yet.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="bg-white shadow rounded p-4">
             <h3 class="font-semibold mb-2">Fitness Curve</h3>
             <div class="relative h-72">

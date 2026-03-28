@@ -25,9 +25,12 @@ final class SearchResponseActivationGate
                 minimumApproachRate: $this->minimumApproachRate,
                 minimumAvgProgressScore: $this->minimumAvgProgressScore,
                 supportingStats: null,
+                blockingReasons: ['No resolved shadow outcomes available yet.'],
                 reason: 'No resolved shadow outcomes available yet.'
             );
         }
+
+        $bestPolicy = $report->policies[0] ?? null;
 
         $eligiblePolicies = array_values(array_filter(
             $report->policies,
@@ -36,6 +39,10 @@ final class SearchResponseActivationGate
                 && ($policy['approach_rate'] ?? 0.0) >= $this->minimumApproachRate
                 && ($policy['avg_progress_score'] ?? 0.0) >= $this->minimumAvgProgressScore
         ));
+
+        $blockingReasons = $bestPolicy === null
+            ? ['No policy statistics available.']
+            : $this->blockingReasons($bestPolicy);
 
         if ($eligiblePolicies === []) {
             return new SearchResponseActivationDecision(
@@ -46,7 +53,8 @@ final class SearchResponseActivationGate
                 minimumSuccessRate: $this->minimumSuccessRate,
                 minimumApproachRate: $this->minimumApproachRate,
                 minimumAvgProgressScore: $this->minimumAvgProgressScore,
-                supportingStats: $report->policies,
+                supportingStats: $bestPolicy,
+                blockingReasons: $blockingReasons,
                 reason: 'Policies still lack enough resolved evidence to become real activation candidates.'
             );
         }
@@ -67,7 +75,35 @@ final class SearchResponseActivationGate
             minimumApproachRate: $this->minimumApproachRate,
             minimumAvgProgressScore: $this->minimumAvgProgressScore,
             supportingStats: $candidate,
+            blockingReasons: [],
             reason: 'Policy crossed the evidence thresholds and is now a diagnostic candidate for future real activation.'
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $policy
+     * @return string[]
+     */
+    private function blockingReasons(array $policy): array
+    {
+        $reasons = [];
+
+        if (($policy['resolved_outcomes'] ?? 0) < $this->minimumResolvedOutcomes) {
+            $reasons[] = 'Need more resolved shadow outcomes.';
+        }
+
+        if (($policy['success_rate'] ?? 0.0) < $this->minimumSuccessRate) {
+            $reasons[] = 'Success rate is still below the activation threshold.';
+        }
+
+        if (($policy['approach_rate'] ?? 0.0) < $this->minimumApproachRate) {
+            $reasons[] = 'Approximation rate is still below the activation threshold.';
+        }
+
+        if (($policy['avg_progress_score'] ?? 0.0) < $this->minimumAvgProgressScore) {
+            $reasons[] = 'Average progress score is still below the activation threshold.';
+        }
+
+        return $reasons;
     }
 }

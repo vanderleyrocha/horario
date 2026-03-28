@@ -15,6 +15,7 @@ final class SearchResponseActivationDecision
         public readonly float $minimumApproachRate,
         public readonly float $minimumAvgProgressScore,
         public readonly ?array $supportingStats,
+        public readonly array $blockingReasons,
         public readonly string $reason
     ) {}
 
@@ -29,6 +30,7 @@ final class SearchResponseActivationDecision
             'minimum_approach_rate' => round($this->minimumApproachRate, 6),
             'minimum_avg_progress_score' => round($this->minimumAvgProgressScore, 6),
             'supporting_stats' => $this->supportingStats,
+            'blocking_reasons' => $this->blockingReasons,
             'reason' => $this->reason,
         ];
     }
