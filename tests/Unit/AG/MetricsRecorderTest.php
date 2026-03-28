@@ -73,6 +73,41 @@ it('reuses sampled diversity between telemetry generations to keep metrics effic
         ->and($diversityCalculator->calls)->toBe(2);
 });
 
+it('overwrites the same generation when metrics are recalculated after intensification', function (): void {
+    $population = makeMetricsPopulation();
+    $diversityCalculator = new SequenceDiversityCalculator([0.64, 0.28]);
+
+    $recorder = new MetricsRecorder;
+    $recorder->setPopulationStatistics(new PopulationStatistics(
+        diversityCalculator: $diversityCalculator,
+        entropyCalculator: new PopulationEntropyCalculator,
+        diversitySamplingInterval: 5,
+        diversityCollapseThreshold: 0.05
+    ));
+
+    $first = $recorder->recordExtended(5, $population, 0.10, 0);
+    $recalculated = $recorder->recordExtended(
+        generation: 5,
+        population: $population,
+        mutationRate: 0.12,
+        stagnation: 1,
+        landscapeState: 'intensified',
+        forceRefreshStatistics: true
+    );
+
+    expect($first->diversity)->toBe(0.64)
+        ->and($recalculated->diversity)->toBe(0.28)
+        ->and($diversityCalculator->calls)->toBe(2)
+        ->and($recorder->generationData())->toHaveCount(1)
+        ->and($recorder->generationData()[0])->toMatchArray([
+            'generation' => 5,
+            'diversity' => 0.28,
+            'mutation_rate' => 0.12,
+            'stagnation' => 1,
+            'landscape_state' => 'intensified',
+        ]);
+});
+
 function makeMetricsPopulation(): array
 {
     return [

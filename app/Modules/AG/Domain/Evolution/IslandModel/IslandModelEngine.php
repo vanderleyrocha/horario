@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Evolution\IslandModel;
 
+use App\Models\ScheduleExecution;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
-use App\Models\ScheduleExecution;
 use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use Illuminate\Support\Facades\Log;
 
@@ -17,15 +17,17 @@ final class IslandModelEngine
     private array $islands = [];
 
     private ?MetricsRecorder $globalMetrics = null;
+
     private ?ProgressReporterInterface $progress = null;
+
     private float $telemetryMutationRate = 0.05;
+
     private ?int $executionId = null;
 
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
         private readonly int $migrationInterval = 20
-    ) {
-    }
+    ) {}
 
     public function addIsland(Island $island): void
     {
@@ -90,9 +92,22 @@ final class IslandModelEngine
                     $telemetrySnapshots
                 ), static fn ($value) => $value !== null));
 
+                $alnsImprovements = array_values(array_filter(array_map(
+                    static fn (array $snapshot) => $snapshot['alns_improvement'] ?? null,
+                    $telemetrySnapshots
+                ), static fn ($value) => $value !== null));
+
                 $operatorUsed = collect($telemetrySnapshots)
                     ->pluck('operator_used')
                     ->first(fn ($operator) => $operator !== null && $operator !== 'none');
+
+                $alnsDestroyOperator = collect($telemetrySnapshots)
+                    ->pluck('alns_destroy_operator')
+                    ->first(fn ($operator) => $operator !== null);
+
+                $alnsRepairOperator = collect($telemetrySnapshots)
+                    ->pluck('alns_repair_operator')
+                    ->first(fn ($operator) => $operator !== null);
 
                 $metricsDto = $this->globalMetrics->recordExtended(
                     $generation,
@@ -116,6 +131,9 @@ final class IslandModelEngine
                     'landscape_state' => $metricsDto->landscapeState,
                     'operator_used' => $operatorUsed,
                     'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
+                    'alns_destroy_operator' => $alnsDestroyOperator,
+                    'alns_repair_operator' => $alnsRepairOperator,
+                    'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
                 ]);
             }
         }

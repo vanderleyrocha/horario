@@ -266,6 +266,9 @@ function appendMetric(metric) {
 
     const operatorUsed = metric.operator_used ?? metric.operatorUsed
     const operatorReward = metric.operator_reward ?? metric.operatorReward
+    const alnsDestroyOperator = metric.alns_destroy_operator ?? metric.alnsDestroyOperator
+    const alnsRepairOperator = metric.alns_repair_operator ?? metric.alnsRepairOperator
+    const alnsImprovement = metric.alns_improvement ?? metric.alnsImprovement
 
     if (operatorUsed) {
         const currentStats = chartState.operatorUsage.get(String(operatorUsed)) ?? {
@@ -276,6 +279,19 @@ function appendMetric(metric) {
         currentStats.count += 1
         currentStats.rewardTotal += Number(operatorReward ?? 0)
         chartState.operatorUsage.set(String(operatorUsed), currentStats)
+        syncOperatorChart()
+    }
+
+    if (alnsDestroyOperator || alnsRepairOperator) {
+        const label = `ALNS: ${alnsDestroyOperator ?? "?"} + ${alnsRepairOperator ?? "?"}`
+        const currentStats = chartState.operatorUsage.get(label) ?? {
+            count: 0,
+            rewardTotal: 0,
+        }
+
+        currentStats.count += 1
+        currentStats.rewardTotal += Number(alnsImprovement ?? 0)
+        chartState.operatorUsage.set(label, currentStats)
         syncOperatorChart()
     }
 

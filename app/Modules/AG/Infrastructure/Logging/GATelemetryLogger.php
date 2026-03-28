@@ -37,6 +37,11 @@ final class GATelemetryLogger
             'landscape_state' => $metrics['landscape_state'] ?? null,
             'operator_used' => $metrics['operator_used'] ?? null,
             'operator_reward' => round((float) ($metrics['operator_reward'] ?? 0), 6),
+            'alns_destroy_operator' => $metrics['alns_destroy_operator'] ?? null,
+            'alns_repair_operator' => $metrics['alns_repair_operator'] ?? null,
+            'alns_improvement' => isset($metrics['alns_improvement'])
+                ? round((float) $metrics['alns_improvement'], 6)
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

@@ -1,45 +1,81 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\Intensification\LNS\ALNS;
 
-class OperatorScoreManager {
+use App\Modules\AG\Domain\Operators\EvolutionaryOperatorInterface;
+
+final class OperatorScoreManager
+{
+    /**
+     * @var array<string, OperatorPerformance>
+     */
     private array $destroyStats = [];
 
+    /**
+     * @var array<string, OperatorPerformance>
+     */
     private array $repairStats = [];
 
-    public function __construct(
-        private array $destroyOperators,
-        private array $repairOperators
-    ) {
-
-        foreach ($destroyOperators as $op) {
-            $this->destroyStats[spl_object_id($op)]
-                = new OperatorPerformance();
+    /**
+     * @param  EvolutionaryOperatorInterface[]  $destroyOperators
+     * @param  EvolutionaryOperatorInterface[]  $repairOperators
+     */
+    public function __construct(array $destroyOperators, array $repairOperators)
+    {
+        foreach ($destroyOperators as $operator) {
+            $this->destroyStats[$this->nameOf($operator)] = new OperatorPerformance;
         }
 
-        foreach ($repairOperators as $op) {
-            $this->repairStats[spl_object_id($op)]
-                = new OperatorPerformance();
+        foreach ($repairOperators as $operator) {
+            $this->repairStats[$this->nameOf($operator)] = new OperatorPerformance;
         }
     }
 
-    public function reward($destroy, $repair, float $improvement): void {
-        if ($improvement <= 0) {
+    public function registerSelection(EvolutionaryOperatorInterface $destroy, EvolutionaryOperatorInterface $repair): void
+    {
+        $this->destroyStats[$this->nameOf($destroy)]?->registerUse();
+        $this->repairStats[$this->nameOf($repair)]?->registerUse();
+    }
+
+    public function reward(EvolutionaryOperatorInterface $destroy, EvolutionaryOperatorInterface $repair, float $improvement): void
+    {
+        if ($improvement <= 0.0) {
             return;
         }
 
-        $this->destroyStats[spl_object_id($destroy)]
-            ->reward($improvement);
-
-        $this->repairStats[spl_object_id($repair)]
-            ->reward($improvement);
+        $this->destroyStats[$this->nameOf($destroy)]?->reward($improvement);
+        $this->repairStats[$this->nameOf($repair)]?->reward($improvement);
     }
 
-    public function destroyStats(): array {
-        return $this->destroyStats;
+    public function destroyStats(): array
+    {
+        return $this->serializeStats($this->destroyStats);
     }
 
-    public function repairStats(): array {
-        return $this->repairStats;
+    public function repairStats(): array
+    {
+        return $this->serializeStats($this->repairStats);
+    }
+
+    private function nameOf(EvolutionaryOperatorInterface $operator): string
+    {
+        return $operator->getName();
+    }
+
+    /**
+     * @param  array<string, OperatorPerformance>  $stats
+     * @return array<string, array<string, float|int>>
+     */
+    private function serializeStats(array $stats): array
+    {
+        $serialized = [];
+
+        foreach ($stats as $operator => $performance) {
+            $serialized[$operator] = $performance->toArray();
+        }
+
+        return $serialized;
     }
 }

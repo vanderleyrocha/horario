@@ -21,8 +21,11 @@ class ScheduleGenerationMetric extends Model
         'crossover_rate',
         'operator_used',
         'operator_reward',
+        'alns_destroy_operator',
+        'alns_repair_operator',
+        'alns_improvement',
         'landscape_state',
-        'stagnation'
+        'stagnation',
     ];
 
     protected $casts = [
@@ -35,6 +38,7 @@ class ScheduleGenerationMetric extends Model
         'mutation_rate' => 'float',
         'crossover_rate' => 'float',
         'operator_reward' => 'float',
+        'alns_improvement' => 'float',
         'stagnation' => 'integer',
     ];
 

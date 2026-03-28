@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 it('flushes generation metrics immediately and publishes the current metric to cache', function () {
     $horario = Horario::factory()->create();
 
-    $recorder = new ExecutionMetricsRecorder();
+    $recorder = new ExecutionMetricsRecorder;
     $executionId = $recorder->startExecution(
         horarioId: $horario->id,
         populationSize: 120,
@@ -39,6 +39,9 @@ it('flushes generation metrics immediately and publishes the current metric to c
         'landscape_state' => 'equilibrado',
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
+        'alns_destroy_operator' => 'ConflictDestroy',
+        'alns_repair_operator' => 'RegretInsertion',
+        'alns_improvement' => 0.42,
     ]);
 
     $storedMetric = DB::table('schedule_generation_metrics')
@@ -51,6 +54,9 @@ it('flushes generation metrics immediately and publishes the current metric to c
     expect($storedMetric)->not->toBeNull()
         ->and((int) $storedMetric->generation)->toBe(5)
         ->and((float) $storedMetric->best_fitness)->toBe(91.25)
+        ->and($storedMetric->alns_destroy_operator)->toBe('ConflictDestroy')
+        ->and($storedMetric->alns_repair_operator)->toBe('RegretInsertion')
+        ->and((float) $storedMetric->alns_improvement)->toBe(0.42)
         ->and($cachedMetric)->toMatchArray([
             'execution_id' => $executionId,
             'generation' => 5,
@@ -58,5 +64,7 @@ it('flushes generation metrics immediately and publishes the current metric to c
             'avg_fitness' => 84.10,
             'operator_used' => 'StructuredSwapMutation',
             'landscape_state' => 'equilibrado',
+            'alns_destroy_operator' => 'ConflictDestroy',
+            'alns_repair_operator' => 'RegretInsertion',
         ]);
 });

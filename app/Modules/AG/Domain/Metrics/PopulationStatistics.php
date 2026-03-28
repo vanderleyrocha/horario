@@ -23,7 +23,7 @@ final class PopulationStatistics
     /**
      * @param  Cromossomo[]  $population
      */
-    public function calculate(array $population, ?int $generation = null): array
+    public function calculate(array $population, ?int $generation = null, bool $forceDiversityRefresh = false): array
     {
         $n = count($population);
 
@@ -32,7 +32,7 @@ final class PopulationStatistics
         }
 
         $fitnessSummary = $this->calculateFitnessSummary($population);
-        $diversity = $this->resolveDiversity($population, $generation);
+        $diversity = $this->resolveDiversity($population, $generation, $forceDiversityRefresh);
         $entropy = $this->entropyCalculator?->normalized($population) ?? 0.0;
 
         return [
@@ -52,9 +52,10 @@ final class PopulationStatistics
         array $population,
         float $mutationRate,
         int $stagnation,
-        ?string $landscapeState = null
+        ?string $landscapeState = null,
+        bool $forceDiversityRefresh = false
     ): GenerationMetrics {
-        $stats = $this->calculate($population, $generation);
+        $stats = $this->calculate($population, $generation, $forceDiversityRefresh);
 
         return new GenerationMetrics(
             generation: $generation,
@@ -101,10 +102,14 @@ final class PopulationStatistics
     /**
      * @param  Cromossomo[]  $population
      */
-    private function resolveDiversity(array $population, ?int $generation): float
+    private function resolveDiversity(array $population, ?int $generation, bool $forceRefresh = false): float
     {
         if ($this->diversityCalculator === null) {
             return 0.0;
+        }
+
+        if ($forceRefresh) {
+            return $this->storeDiversity($this->diversityCalculator->calculate($population), $generation);
         }
 
         if ($generation === null || $this->diversitySamplingInterval <= 1) {

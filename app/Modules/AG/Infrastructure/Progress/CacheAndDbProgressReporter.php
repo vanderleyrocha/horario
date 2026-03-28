@@ -41,7 +41,10 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
             stagnation: (int) $data['stagnation'],
             landscapeState: $data['landscape_state'] ?? null,
             operatorUsed: $data['operator_used'] ?? null,
-            operatorReward: isset($data['operator_reward']) ? (float) $data['operator_reward'] : null
+            operatorReward: isset($data['operator_reward']) ? (float) $data['operator_reward'] : null,
+            alnsDestroyOperator: $data['alns_destroy_operator'] ?? null,
+            alnsRepairOperator: $data['alns_repair_operator'] ?? null,
+            alnsImprovement: isset($data['alns_improvement']) ? (float) $data['alns_improvement'] : null
         );
 
         $this->dbRecorder->recordGeneration($metrics);

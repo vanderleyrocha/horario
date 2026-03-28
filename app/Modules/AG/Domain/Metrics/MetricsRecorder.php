@@ -48,8 +48,14 @@ final class MetricsRecorder
         $this->recordExtended($generation, $population, 0.0, 0);
     }
 
-    public function recordExtended(int $generation, array $population, float $mutationRate, int $stagnation, ?string $landscapeState = null): GenerationMetrics
-    {
+    public function recordExtended(
+        int $generation,
+        array $population,
+        float $mutationRate,
+        int $stagnation,
+        ?string $landscapeState = null,
+        bool $forceRefreshStatistics = false
+    ): GenerationMetrics {
         if (empty($population)) {
             throw new \RuntimeException('Population cannot be empty');
         }
@@ -59,14 +65,25 @@ final class MetricsRecorder
             population: $population,
             mutationRate: $mutationRate,
             stagnation: $stagnation,
-            landscapeState: $landscapeState
+            landscapeState: $landscapeState,
+            forceDiversityRefresh: $forceRefreshStatistics
         );
 
         if ($metrics->bestFitness > $this->bestFitnessOverall) {
             $this->bestFitnessOverall = $metrics->bestFitness;
         }
 
-        $this->generationMetrics[] = $metrics->toArray();
+        $payload = $metrics->toArray();
+        $lastKey = array_key_last($this->generationMetrics);
+        $lastGeneration = $lastKey !== null
+            ? ($this->generationMetrics[$lastKey]['generation'] ?? null)
+            : null;
+
+        if ($lastKey !== null && $lastGeneration === $generation) {
+            $this->generationMetrics[$lastKey] = $payload;
+        } else {
+            $this->generationMetrics[] = $payload;
+        }
 
         return $metrics;
     }

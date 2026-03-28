@@ -33,6 +33,8 @@ final class GeneticAlgorithmEngine
 
     private array $lastEvolutionTelemetry = [];
 
+    private int $evolutionGeneration = 0;
+
     public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
     {
         $this->mutationPool = [$this->mutation];
@@ -55,6 +57,7 @@ final class GeneticAlgorithmEngine
             $landscapeState = null;
             $activateDynamicLNS = false;
             $diversificationBoost = 0.0;
+            $alnsTelemetry = [];
 
             $entropy = $this->metrics->lastEntropy();
             $diversity = $this->metrics->lastDiversity();
@@ -213,9 +216,31 @@ final class GeneticAlgorithmEngine
                 $diversificationBoost = $response->diversificationBoost;
             }
 
+            /* LNS */
+
+            if (
+                $this->lns !== null &&
+                $generation > 0 &&
+                ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
+            ) {
+                $alnsTelemetry = $this->applyLns($population);
+
+                $metrics = $this->metrics->recordExtended(
+                    generation: $generation,
+                    population: $population,
+                    mutationRate: $mutationRate,
+                    stagnation: $stagnation,
+                    landscapeState: $landscapeState,
+                    forceRefreshStatistics: true
+                );
+            }
+
             $metrics->landscapeState = $landscapeState;
             $metrics->operatorUsed = $operatorUsed;
             $metrics->operatorReward = $operatorReward;
+            $metrics->alnsDestroyOperator = $alnsTelemetry['alns_destroy_operator'] ?? null;
+            $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
+            $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
 
             if ($this->executionMetrics !== null) {
                 $this->executionMetrics->recordGeneration($metrics);
@@ -229,27 +254,6 @@ final class GeneticAlgorithmEngine
                 'landscape_heatmap' => $heatmap,
                 'timestamp' => microtime(true),
             ]);
-
-            /* LNS */
-
-            if (
-                $this->lns !== null &&
-                $generation > 0 &&
-                ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
-            ) {
-
-                $best = $this->getBest($population);
-
-                $candidate = $this->lns->improve($best->copy());
-
-                $candidate = $this->problem->repair($candidate);
-
-                $this->problem->evaluate($candidate);
-
-                $this->replacement->replace($population, $candidate);
-
-                $this->problem->clearFitnessCache();
-            }
 
             /* PROGRESS */
 
@@ -268,7 +272,7 @@ final class GeneticAlgorithmEngine
                 $progress->stagnation = $stagnation;
                 $progress->landscapeState = $landscapeState ?? 'unknown';
 
-                $this->progress->report($progress->toArray());
+                $this->progress->report($progress->toArray() + $alnsTelemetry);
             }
 
             $generation++;
@@ -329,6 +333,7 @@ final class GeneticAlgorithmEngine
     public function evolveGeneration(array $population, int $populationSize): array
     {
         $this->assertNotCancelled();
+        $currentGeneration = $this->evolutionGeneration;
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
 
@@ -341,6 +346,7 @@ final class GeneticAlgorithmEngine
         $newPopulation = [];
         $operatorRewards = [];
         $operatorUsed = null;
+        $alnsTelemetry = [];
 
         /* ELITISMO */
 
@@ -413,6 +419,14 @@ final class GeneticAlgorithmEngine
 
         $this->populationEvaluator->evaluate($newPopulation);
 
+        if (
+            $this->lns !== null &&
+            $currentGeneration > 0 &&
+            $currentGeneration % $this->lnsFrequency === 0
+        ) {
+            $alnsTelemetry = $this->applyLns($newPopulation);
+        }
+
         /* calcular reward médio */
 
         $operatorReward = 0.0;
@@ -429,9 +443,42 @@ final class GeneticAlgorithmEngine
             'operator_reward' => $operatorReward,
             'diversity' => $diversity,
             'entropy' => $entropy,
-        ];
+        ] + $alnsTelemetry;
+
+        $this->evolutionGeneration++;
 
         return $newPopulation;
+    }
+
+    private function applyLns(array &$population): array
+    {
+        if ($this->lns === null || $population === []) {
+            return [];
+        }
+
+        $best = $this->getBest($population);
+        $candidate = $this->lns->improve($best->copy());
+        $candidate = $this->problem->repair($candidate);
+        $this->problem->evaluate($candidate);
+        $this->replacement->replace($population, $candidate);
+        $this->problem->clearFitnessCache();
+
+        $telemetry = $this->lns->lastTelemetry();
+
+        if ($telemetry !== []) {
+            Log::info('ga.alns.applied', [
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'destroy_operator' => $telemetry['alns_destroy_operator'] ?? null,
+                'repair_operator' => $telemetry['alns_repair_operator'] ?? null,
+                'improvement' => $telemetry['alns_improvement'] ?? null,
+                'destroy_uses' => $telemetry['alns_destroy_stats']['uses'] ?? null,
+                'destroy_mean_reward' => $telemetry['alns_destroy_stats']['mean_reward'] ?? null,
+                'repair_uses' => $telemetry['alns_repair_stats']['uses'] ?? null,
+                'repair_mean_reward' => $telemetry['alns_repair_stats']['mean_reward'] ?? null,
+            ]);
+        }
+
+        return $telemetry;
     }
 
     private function assertNotCancelled(): void

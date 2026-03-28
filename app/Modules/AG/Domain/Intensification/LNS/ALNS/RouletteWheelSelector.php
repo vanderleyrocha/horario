@@ -1,28 +1,54 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\Intensification\LNS\ALNS;
 
-class RouletteWheelSelector {
-    public function select(array $operators, array $stats) {
-        $total = 0;
+use App\Modules\AG\Domain\Operators\EvolutionaryOperatorInterface;
 
-        foreach ($operators as $op) {
-            $total += $stats[spl_object_id($op)]->weight;
+final class RouletteWheelSelector implements OperatorSelectionStrategy
+{
+    public function select(array $operators, array $stats): object
+    {
+        if ($operators === []) {
+            throw new \RuntimeException('RouletteWheelSelector recebeu operadores vazios.');
         }
 
-        $rand = mt_rand() / mt_getrandmax() * $total;
+        $totalWeight = 0.0;
 
-        $sum = 0;
+        foreach ($operators as $operator) {
+            $totalWeight += $this->weightOf($operator, $stats);
+        }
 
-        foreach ($operators as $op) {
+        if ($totalWeight <= 0.0) {
+            return $operators[array_key_first($operators)];
+        }
 
-            $sum += $stats[spl_object_id($op)]->weight;
+        $random = (mt_rand() / mt_getrandmax()) * $totalWeight;
+        $accumulated = 0.0;
 
-            if ($rand <= $sum) {
-                return $op;
+        foreach ($operators as $operator) {
+            $accumulated += $this->weightOf($operator, $stats);
+
+            if ($random <= $accumulated) {
+                return $operator;
             }
         }
 
         return $operators[array_key_first($operators)];
+    }
+
+    /**
+     * @param  array<string, array<string, float|int|string|null>>  $stats
+     */
+    private function weightOf(object $operator, array $stats): float
+    {
+        if (! $operator instanceof EvolutionaryOperatorInterface) {
+            return 1.0;
+        }
+
+        $name = $operator->getName();
+
+        return (float) ($stats[$name]['weight'] ?? 1.0);
     }
 }
