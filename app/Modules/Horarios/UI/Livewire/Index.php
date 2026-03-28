@@ -13,9 +13,13 @@ class Index extends Component
     use WithPagination;
 
     public string $search = '';
+
     public string $filterStatus = '';
+
     public string $filterAno = '';
+
     public bool $showDiagnostico = false;
+
     public array $diagnosticoSelecionado = [];
 
     public function updatingSearch(): void
@@ -46,7 +50,7 @@ class Index extends Component
         $horario = Horario::findOrFail($id);
 
         $novoHorario = $horario->replicate();
-        $novoHorario->nome = $horario->nome . ' (Cópia)';
+        $novoHorario->nome = $horario->nome.' (Cópia)';
         $novoHorario->status = 'rascunho';
         $novoHorario->gerado_em = null;
         $novoHorario->save();
@@ -84,9 +88,9 @@ class Index extends Component
     public function abrirDiagnostico(int $id)
     {
         return $this->redirect(route('horarios.manage', [
-                'horario' => $id,
-                'tab' => 'diagnostico'
-            ]));
+            'horario' => $id,
+            'tab' => 'diagnostico',
+        ]));
     }
 
     private function normalizeDiagnostico(mixed $diagnostico): array
@@ -118,12 +122,11 @@ class Index extends Component
     public function render()
     {
         $horarios = Horario::query()
-            ->when($this->search, fn ($query) =>
-                $query->where('nome', 'like', "%{$this->search}%"))
-            ->when($this->filterStatus, fn ($query) =>
-                $query->where('status', $this->filterStatus))
-            ->when($this->filterAno, fn ($query) =>
-                $query->where('ano', $this->filterAno))
+            ->with('lastExecution')
+            ->withCount(['alocacoes', 'executions'])
+            ->when($this->search, fn ($query) => $query->where('nome', 'like', "%{$this->search}%"))
+            ->when($this->filterStatus, fn ($query) => $query->where('status', $this->filterStatus))
+            ->when($this->filterAno, fn ($query) => $query->where('ano', $this->filterAno))
             ->orderBy('id')
             ->paginate(10);
 
