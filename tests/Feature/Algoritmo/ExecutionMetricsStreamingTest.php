@@ -89,6 +89,47 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'diversification_boost' => 0.85,
                 'reason' => 'Persistent basin-of-attraction lock with stable elite signature and low turnover.',
             ],
+            'search_response_audit' => [
+                'policy' => 'basin_lock_escape',
+                'audit_generation' => 5,
+                'shadow_mode' => true,
+                'would_trigger' => true,
+                'evaluation_horizon_generations' => 6,
+                'target_best_delta_window' => 0.03,
+                'target_population_turnover' => 0.45,
+                'target_max_elite_similarity' => 0.62,
+                'target_max_basin_lock_confidence' => 0.45,
+                'observed_best_delta_window' => -0.015,
+                'observed_population_turnover' => 0.18,
+                'observed_elite_similarity' => 0.82,
+                'observed_basin_lock_confidence' => 0.77,
+                'best_delta_window_gap' => 0.045,
+                'population_turnover_gap' => 0.27,
+                'elite_similarity_reduction_needed' => 0.2,
+                'basin_lock_confidence_reduction_needed' => 0.32,
+                'reason' => 'Persistent basin-of-attraction lock with stable elite signature and low turnover. Episode duration=3',
+            ],
+            'search_response_outcome' => [
+                'policy' => 'basin_lock_escape',
+                'audit_generation' => 5,
+                'resolved_generation' => 11,
+                'horizon_generations' => 6,
+                'shadow_mode' => true,
+                'would_trigger' => true,
+                'targets_satisfied' => false,
+                'approached_targets' => true,
+                'progress_score' => 0.67,
+                'best_delta_window_progress' => 0.72,
+                'population_turnover_progress' => 0.62,
+                'elite_similarity_progress' => 0.70,
+                'basin_lock_confidence_progress' => 0.64,
+                'observed_best_delta_window' => 0.012,
+                'observed_population_turnover' => 0.32,
+                'observed_elite_similarity' => 0.72,
+                'observed_basin_lock_confidence' => 0.58,
+                'reason' => 'Persistent basin-of-attraction lock with stable elite signature and low turnover. Episode duration=3',
+            ],
+            'search_response_pending_audits' => 2,
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -130,7 +171,10 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse()
         ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
-        ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape');
+        ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($cachedMetric['landscape_observation']['search_response_audit']['target_population_turnover'] ?? null)->toBe(0.45)
+        ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
+        ->and($cachedMetric['landscape_observation']['search_response_pending_audits'] ?? null)->toBe(2);
 
     $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
 
@@ -139,5 +183,9 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008)
         ->and($storedObservation['previous_episode']['exit_mode'] ?? null)->toBe('phenomenon_shift')
         ->and($storedObservation['basin_of_attraction_lock_confidence'] ?? null)->toBe(0.77)
-        ->and($storedObservation['search_response_simulation']['activate_alns'] ?? null)->toBeTrue();
+        ->and($storedObservation['search_response_simulation']['activate_alns'] ?? null)->toBeTrue()
+        ->and($storedObservation['search_response_audit']['best_delta_window_gap'] ?? null)->toBe(0.045)
+        ->and($storedObservation['search_response_audit']['evaluation_horizon_generations'] ?? null)->toBe(6)
+        ->and($storedObservation['search_response_outcome']['resolved_generation'] ?? null)->toBe(11)
+        ->and($storedObservation['search_response_outcome']['approached_targets'] ?? null)->toBeTrue();
 });

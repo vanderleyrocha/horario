@@ -28,7 +28,10 @@ final class LandscapeObservation
         public readonly ?array $previousEpisode = null,
         public readonly float $basinLockConfidence = 0.0,
         public readonly bool $basinLockDetected = false,
-        public readonly ?array $searchResponseSimulation = null
+        public readonly ?array $searchResponseSimulation = null,
+        public readonly ?array $searchResponseAudit = null,
+        public readonly ?array $searchResponseOutcome = null,
+        public readonly int $searchResponsePendingAudits = 0
     ) {}
 
     public function withEpisodeContext(
@@ -59,7 +62,10 @@ final class LandscapeObservation
             previousEpisode: $previousEpisode,
             basinLockConfidence: $basinLockConfidence,
             basinLockDetected: $basinLockDetected,
-            searchResponseSimulation: $this->searchResponseSimulation
+            searchResponseSimulation: $this->searchResponseSimulation,
+            searchResponseAudit: $this->searchResponseAudit,
+            searchResponseOutcome: $this->searchResponseOutcome,
+            searchResponsePendingAudits: $this->searchResponsePendingAudits
         );
     }
 
@@ -87,7 +93,72 @@ final class LandscapeObservation
             previousEpisode: $this->previousEpisode,
             basinLockConfidence: $this->basinLockConfidence,
             basinLockDetected: $this->basinLockDetected,
-            searchResponseSimulation: $searchResponseSimulation
+            searchResponseSimulation: $searchResponseSimulation,
+            searchResponseAudit: $this->searchResponseAudit,
+            searchResponseOutcome: $this->searchResponseOutcome,
+            searchResponsePendingAudits: $this->searchResponsePendingAudits
+        );
+    }
+
+    public function withSearchResponseAudit(?array $searchResponseAudit): self
+    {
+        return new self(
+            phenomenon: $this->phenomenon,
+            confidence: $this->confidence,
+            bestDelta: $this->bestDelta,
+            fitnessGap: $this->fitnessGap,
+            stagnation: $this->stagnation,
+            plateauDuration: $this->plateauDuration,
+            convergenceTrend: $this->convergenceTrend,
+            depthScore: $this->depthScore,
+            bestDeltaWindow: $this->bestDeltaWindow,
+            avgDeltaWindow: $this->avgDeltaWindow,
+            improvementAcceptanceRate: $this->improvementAcceptanceRate,
+            worseningAcceptanceRate: $this->worseningAcceptanceRate,
+            populationTurnover: $this->populationTurnover,
+            bestSignatureChanged: $this->bestSignatureChanged,
+            eliteSimilarity: $this->eliteSimilarity,
+            diversity: $this->diversity,
+            entropy: $this->entropy,
+            currentEpisode: $this->currentEpisode,
+            previousEpisode: $this->previousEpisode,
+            basinLockConfidence: $this->basinLockConfidence,
+            basinLockDetected: $this->basinLockDetected,
+            searchResponseSimulation: $this->searchResponseSimulation,
+            searchResponseAudit: $searchResponseAudit,
+            searchResponseOutcome: $this->searchResponseOutcome,
+            searchResponsePendingAudits: $this->searchResponsePendingAudits
+        );
+    }
+
+    public function withSearchResponseOutcome(?array $searchResponseOutcome, int $searchResponsePendingAudits): self
+    {
+        return new self(
+            phenomenon: $this->phenomenon,
+            confidence: $this->confidence,
+            bestDelta: $this->bestDelta,
+            fitnessGap: $this->fitnessGap,
+            stagnation: $this->stagnation,
+            plateauDuration: $this->plateauDuration,
+            convergenceTrend: $this->convergenceTrend,
+            depthScore: $this->depthScore,
+            bestDeltaWindow: $this->bestDeltaWindow,
+            avgDeltaWindow: $this->avgDeltaWindow,
+            improvementAcceptanceRate: $this->improvementAcceptanceRate,
+            worseningAcceptanceRate: $this->worseningAcceptanceRate,
+            populationTurnover: $this->populationTurnover,
+            bestSignatureChanged: $this->bestSignatureChanged,
+            eliteSimilarity: $this->eliteSimilarity,
+            diversity: $this->diversity,
+            entropy: $this->entropy,
+            currentEpisode: $this->currentEpisode,
+            previousEpisode: $this->previousEpisode,
+            basinLockConfidence: $this->basinLockConfidence,
+            basinLockDetected: $this->basinLockDetected,
+            searchResponseSimulation: $this->searchResponseSimulation,
+            searchResponseAudit: $this->searchResponseAudit,
+            searchResponseOutcome: $searchResponseOutcome,
+            searchResponsePendingAudits: $searchResponsePendingAudits
         );
     }
 
@@ -116,6 +187,9 @@ final class LandscapeObservation
             'basin_of_attraction_lock_confidence' => $this->basinLockConfidence,
             'basin_of_attraction_lock_detected' => $this->basinLockDetected,
             'search_response_simulation' => $this->searchResponseSimulation,
+            'search_response_audit' => $this->searchResponseAudit,
+            'search_response_outcome' => $this->searchResponseOutcome,
+            'search_response_pending_audits' => $this->searchResponsePendingAudits,
         ];
     }
 }

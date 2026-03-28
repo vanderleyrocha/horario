@@ -56,10 +56,10 @@ Minha ordem sugerida seria esta:
     Assim a SLAE evolui sem acoplar diagnóstico e reação cedo demais.
 
 5.Só depois ligar reação automática.
-Quando a observação estiver confiável, aí faz sentido reagir de forma forte:
-restart parcial de ilhas
-choque de mutação
-ALNS intensivo temporário
-troca de operador dominante
-redução de pressão seletiva
+    Quando a observação estiver confiável, aí faz sentido reagir de forma forte:
+    restart parcial de ilhas
+    choque de mutação
+    ALNS intensivo temporário
+    troca de operador dominante
+    redução de pressão seletiva
 

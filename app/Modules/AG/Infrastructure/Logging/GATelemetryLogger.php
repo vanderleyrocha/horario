@@ -90,6 +90,34 @@ final class GATelemetryLogger
             'search_response_activate_alns' => isset($metrics['landscape_observation']['search_response_simulation']['activate_alns'])
                 ? (bool) $metrics['landscape_observation']['search_response_simulation']['activate_alns']
                 : null,
+            'search_response_audit_horizon' => isset($metrics['landscape_observation']['search_response_audit']['evaluation_horizon_generations'])
+                ? (int) $metrics['landscape_observation']['search_response_audit']['evaluation_horizon_generations']
+                : null,
+            'search_response_audit_target_best_delta_window' => isset($metrics['landscape_observation']['search_response_audit']['target_best_delta_window'])
+                ? round((float) $metrics['landscape_observation']['search_response_audit']['target_best_delta_window'], 6)
+                : null,
+            'search_response_audit_target_population_turnover' => isset($metrics['landscape_observation']['search_response_audit']['target_population_turnover'])
+                ? round((float) $metrics['landscape_observation']['search_response_audit']['target_population_turnover'], 6)
+                : null,
+            'search_response_audit_target_max_elite_similarity' => isset($metrics['landscape_observation']['search_response_audit']['target_max_elite_similarity'])
+                ? round((float) $metrics['landscape_observation']['search_response_audit']['target_max_elite_similarity'], 6)
+                : null,
+            'search_response_audit_target_max_basin_lock_confidence' => isset($metrics['landscape_observation']['search_response_audit']['target_max_basin_lock_confidence'])
+                ? round((float) $metrics['landscape_observation']['search_response_audit']['target_max_basin_lock_confidence'], 6)
+                : null,
+            'search_response_pending_audits' => isset($metrics['landscape_observation']['search_response_pending_audits'])
+                ? (int) $metrics['landscape_observation']['search_response_pending_audits']
+                : null,
+            'search_response_outcome_policy' => $metrics['landscape_observation']['search_response_outcome']['policy'] ?? null,
+            'search_response_outcome_targets_satisfied' => isset($metrics['landscape_observation']['search_response_outcome']['targets_satisfied'])
+                ? (bool) $metrics['landscape_observation']['search_response_outcome']['targets_satisfied']
+                : null,
+            'search_response_outcome_approached_targets' => isset($metrics['landscape_observation']['search_response_outcome']['approached_targets'])
+                ? (bool) $metrics['landscape_observation']['search_response_outcome']['approached_targets']
+                : null,
+            'search_response_outcome_progress_score' => isset($metrics['landscape_observation']['search_response_outcome']['progress_score'])
+                ? round((float) $metrics['landscape_observation']['search_response_outcome']['progress_score'], 6)
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

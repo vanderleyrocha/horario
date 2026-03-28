@@ -115,7 +115,10 @@ it('observes a deep valley after persistent plateau and convergence pressure', f
         ->and($observation->basinLockConfidence)->toBeGreaterThanOrEqual(0.75)
         ->and($observation->searchResponseSimulation)->toBeArray()
         ->and($observation->searchResponseSimulation['policy'] ?? null)->toBe('basin_lock_escape')
-        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeTrue();
+        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeTrue()
+        ->and($observation->searchResponseAudit)->toBeArray()
+        ->and($observation->searchResponseAudit['would_trigger'] ?? null)->toBeTrue()
+        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBe(0.03);
 });
 
 it('closes the previous episode with recovered exit mode when the landscape returns to neutral', function (): void {
@@ -181,5 +184,62 @@ it('closes the previous episode with recovered exit mode when the landscape retu
         ->and($observation->currentEpisode['duration'] ?? null)->toBe(1)
         ->and($observation->searchResponseSimulation)->toBeArray()
         ->and($observation->searchResponseSimulation['policy'] ?? null)->toBe('stability_hold')
-        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeFalse();
+        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeFalse()
+        ->and($observation->searchResponseAudit)->toBeArray()
+        ->and($observation->searchResponseAudit['would_trigger'] ?? null)->toBeFalse()
+        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBeNull();
+});
+
+it('publishes a shadow outcome once the simulated response horizon expires', function (): void {
+    $engine = new LandscapeEngine(
+        new LandscapeAnalyzer,
+        new LandscapeDetector,
+        new LandscapeResponseStrategy,
+        new LandscapeMemory
+    );
+
+    for ($generation = 1; $generation <= 8; $generation++) {
+        $engine->observe(new LandscapeMetrics(
+            generation: $generation,
+            bestFitness: 91.0,
+            avgFitness: 89.5,
+            variance: 0.15,
+            diversity: 0.10,
+            entropy: 0.14,
+            stagnation: 45,
+            improvementAcceptanceRate: 0.0,
+            worseningAcceptanceRate: 0.85,
+            populationTurnover: 0.10,
+            bestSignatureChanged: false,
+            eliteSimilarity: 0.90,
+            bestSignature: 'locked-basin'
+        ));
+    }
+
+    $observation = null;
+
+    for ($generation = 9; $generation <= 14; $generation++) {
+        $observation = $engine->observe(new LandscapeMetrics(
+            generation: $generation,
+            bestFitness: 92.0 + (($generation - 8) * 0.2),
+            avgFitness: 91.2 + (($generation - 8) * 0.18),
+            variance: 0.70,
+            diversity: 0.50,
+            entropy: 0.62,
+            stagnation: 2,
+            improvementAcceptanceRate: 0.55,
+            worseningAcceptanceRate: 0.12,
+            populationTurnover: 0.52,
+            bestSignatureChanged: true,
+            eliteSimilarity: 0.50,
+            bestSignature: 'escaped-'.$generation
+        ));
+    }
+
+    expect($observation)->not->toBeNull()
+        ->and($observation->searchResponseOutcome)->toBeArray()
+        ->and($observation->searchResponseOutcome['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($observation->searchResponseOutcome['targets_satisfied'] ?? null)->toBeTrue()
+        ->and($observation->searchResponseOutcome['progress_score'] ?? 0.0)->toBeGreaterThan(0.5)
+        ->and($observation->searchResponsePendingAudits)->toBe(0);
 });

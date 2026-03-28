@@ -15,10 +15,12 @@ final class LandscapeEngine
         private LandscapeDetector $detector,
         private LandscapeResponseStrategy $strategy,
         private LandscapeMemory $memory,
-        private ?SearchResponsePolicy $searchResponsePolicy = null
+        private ?SearchResponsePolicy $searchResponsePolicy = null,
+        private ?SearchResponseOutcomeTracker $searchResponseOutcomeTracker = null
     ) {
         $this->heatmapBuilder = new LandscapeHeatmapBuilder;
         $this->searchResponsePolicy ??= new SearchResponsePolicy;
+        $this->searchResponseOutcomeTracker ??= new SearchResponseOutcomeTracker;
     }
 
     public function evaluate(LandscapeMetrics $metrics): LandscapeResponse
@@ -147,8 +149,39 @@ final class LandscapeEngine
             currentState: $state
         );
 
+        $audit = $simulation !== null
+            ? $this->searchResponsePolicy?->audit(
+                simulation: $simulation,
+                observation: $this->lastObservation,
+                episode: $currentEpisode,
+                generation: $metrics->generation
+            )
+            : null;
+
+        $resolvedOutcomes = $this->searchResponseOutcomeTracker?->resolveDue(
+            generation: $metrics->generation,
+            observation: $this->lastObservation
+        ) ?? [];
+
+        if ($audit !== null) {
+            $this->searchResponseOutcomeTracker?->register($audit);
+        }
+
         $this->lastObservation = $this->lastObservation->withSearchResponseSimulation(
             $simulation?->toArray()
+        );
+
+        $this->lastObservation = $this->lastObservation->withSearchResponseAudit(
+            $audit?->toArray()
+        );
+
+        $latestOutcome = $resolvedOutcomes === []
+            ? null
+            : $resolvedOutcomes[array_key_last($resolvedOutcomes)]->toArray();
+
+        $this->lastObservation = $this->lastObservation->withSearchResponseOutcome(
+            searchResponseOutcome: $latestOutcome,
+            searchResponsePendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0
         );
 
         return $state;

@@ -51,6 +51,7 @@ it('simulates an escape response when basin-of-attraction lock is detected', fun
     );
 
     $simulation = $policy->simulate($observation, $episode, LandscapeState::PrematureConvergence);
+    $audit = $policy->audit($simulation, $observation, $episode, 13);
 
     expect($simulation->toArray())->toMatchArray([
         'policy' => 'basin_lock_escape',
@@ -58,7 +59,17 @@ it('simulates an escape response when basin-of-attraction lock is detected', fun
         'would_escalate' => true,
         'target_state' => 'exploration',
         'activate_alns' => true,
-    ]);
+    ])
+        ->and($audit->toArray())->toMatchArray([
+            'policy' => 'basin_lock_escape',
+            'audit_generation' => 13,
+            'shadow_mode' => true,
+            'would_trigger' => true,
+            'evaluation_horizon_generations' => 6,
+            'target_best_delta_window' => 0.03,
+            'target_max_basin_lock_confidence' => 0.45,
+            'observed_population_turnover' => 0.06,
+        ]);
 });
 
 it('keeps the simulation in observe-only mode when no escape response is recommended', function (): void {
@@ -95,6 +106,7 @@ it('keeps the simulation in observe-only mode when no escape response is recomme
     );
 
     $simulation = $policy->simulate($observation, $episode, LandscapeState::Exploration);
+    $audit = $policy->audit($simulation, $observation, $episode, 4);
 
     expect($simulation->toArray())->toMatchArray([
         'policy' => 'stability_hold',
@@ -102,5 +114,13 @@ it('keeps the simulation in observe-only mode when no escape response is recomme
         'would_escalate' => false,
         'target_state' => 'exploration',
         'activate_alns' => false,
-    ]);
+    ])
+        ->and($audit->toArray())->toMatchArray([
+            'policy' => 'stability_hold',
+            'audit_generation' => 4,
+            'shadow_mode' => true,
+            'would_trigger' => false,
+            'evaluation_horizon_generations' => 3,
+        ])
+        ->and($audit->toArray()['target_best_delta_window'] ?? null)->toBeNull();
 });

@@ -344,11 +344,16 @@ function updateLandscapeObservation(phenomenon, observation) {
     const episodeDuration = Number(normalizedObservation.current_episode?.duration ?? 0)
     const searchResponsePolicy = String(normalizedObservation.search_response_simulation?.policy ?? "")
     const searchResponseWouldEscalate = Boolean(normalizedObservation.search_response_simulation?.would_escalate ?? false)
+    const auditTargetBestDeltaWindow = Number(normalizedObservation.search_response_audit?.target_best_delta_window ?? 0)
+    const auditTargetPopulationTurnover = Number(normalizedObservation.search_response_audit?.target_population_turnover ?? 0)
+    const searchResponseOutcomeProgress = Number(normalizedObservation.search_response_outcome?.progress_score ?? 0)
+    const searchResponseOutcomeSatisfied = Boolean(normalizedObservation.search_response_outcome?.targets_satisfied ?? false)
+    const searchResponsePendingAudits = Number(normalizedObservation.search_response_pending_audits ?? 0)
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)} | turnover ${(populationTurnover * 100).toFixed(0)}% | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateAllCharts() {
