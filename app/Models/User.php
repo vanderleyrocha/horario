@@ -1,14 +1,20 @@
 <?php
+
 // app/Models/User.php
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Fortify\TwoFactorAuthenticatable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
+    use HasFactory;
     use Notifiable;
+    use TwoFactorAuthenticatable;
 
     protected $fillable = [
         'name',
@@ -19,11 +25,14 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_recovery_codes',
+        'two_factor_secret',
     ];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'two_factor_confirmed_at' => 'datetime',
     ];
 
     /**
@@ -34,7 +43,7 @@ class User extends Authenticatable
         $words = explode(' ', $this->name);
 
         if (count($words) >= 2) {
-            return strtoupper(substr($words[0], 0, 1) . substr($words[1], 0, 1));
+            return strtoupper(substr($words[0], 0, 1).substr($words[1], 0, 1));
         }
 
         return strtoupper(substr($this->name, 0, 2));

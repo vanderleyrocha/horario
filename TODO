@@ -540,3 +540,28 @@ Ordem prática de execução:
     5. Limpeza/implementação de stubs
 
 Verifique o que já foi feito da sua proposta de intervenção e defina um plano para darmos continuidade às intervenções necessárias.
+
+
+
+Implementei o relatório histórico global por policy no ExecutionCenter, desacoplado de uma execução específica. Agora o painel responde qual policy mais frequentemente chega perto do gate real na janela recente de execuções e em quais condições de landscape isso costuma acontecer.
+
+A base analítica ficou em SearchResponseGlobalPolicyReadinessReport.php e SearchResponseGlobalPolicyReadinessReportBuilder.php. Esse builder agrega, por policy:
+
+near_gate_occurrences
+candidate_ready_occurrences
+médias de success_rate e progress_score
+contexto típico de landscape (top_landscape_state, top_landscape_phenomenon)
+sinais médios como basin_lock_confidence, depth_score, population_turnover, elite_similarity e best_delta_window
+bloqueio dominante e amostra de execuções
+Pluguei isso em ExecutionCenter.php e renderizei a nova seção em execution-center.blade.php, ao lado do readiness histórico por execução. O relatório usa a latestMetric de cada execução, então continua eficiente e sem consultas por geração.
+
+Também adicionei cobertura em SearchResponseGlobalPolicyReadinessReportBuilderTest.php e ampliei ExecutionCenterTest.php para validar o painel novo.
+
+Validação:
+php artisan test --compact tests\Unit\AG\SearchResponseGlobalPolicyReadinessReportBuilderTest.php tests\Unit\AG\SearchResponseHistoricalReadinessReportBuilderTest.php tests\Feature\Livewire\Algoritmo\ExecutionCenterTest.php tests\Unit\AG\SearchResponseReadinessDashboardBuilderTest.php tests\Feature\Algoritmo\ExecutionMetricsStreamingTest.php
+6 passed
+
+vendor\bin\pint --test ...
+PASS
+
+Próximo passo que eu sugiro: transformar esse relatório global em uma série temporal por policy, para mostrar se near_gate, candidate_ready e os sinais de landscape estão melhorando ou piorando ao longo das execuções, em vez de só olhar o agregado atual.

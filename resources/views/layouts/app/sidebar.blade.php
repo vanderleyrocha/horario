@@ -38,7 +38,7 @@
                 </flux:sidebar.group>
 
                 <flux:sidebar.group :heading="__('Sistema')" class="grid">
-                    <flux:sidebar.item icon="user-cog" :href="route('users.index')" :current="request()->routeIs('users.*')" wire:navigate>
+                    <flux:sidebar.item icon="users" :href="route('users.index')" :current="request()->routeIs('users.*')" wire:navigate>
                         {{ __('Usuarios') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>
