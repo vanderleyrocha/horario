@@ -5,6 +5,7 @@ namespace App\Livewire\Algoritmo;
 use App\Jobs\GerarHorarioJob;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\Domain\Landscape\SearchResponseHistoricalReadinessReportBuilder;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -63,15 +64,24 @@ class ExecutionCenter extends Component
     public function getExecutionsProperty()
     {
         return ScheduleExecution::where('horario_id', $this->horario->id)
+            ->with('latestMetric')
             ->latest()
             ->limit(20)
             ->get();
+    }
+
+    public function getHistoricalReadinessReportProperty(): array
+    {
+        return (new SearchResponseHistoricalReadinessReportBuilder)
+            ->build($this->executions)
+            ->toArray();
     }
 
     public function render()
     {
         return view('livewire.algoritmo.execution-center', [
             'executions' => $this->executions,
+            'historicalReadinessReport' => $this->historicalReadinessReport,
         ]);
     }
 }

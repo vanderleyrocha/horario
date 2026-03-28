@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ScheduleExecution extends Model
 {
@@ -25,7 +26,7 @@ class ScheduleExecution extends Model
         'parameters_json',
         'best_fitness',
         'avg_fitness',
-        'execution_time_ms'
+        'execution_time_ms',
     ];
 
     protected $casts = [
@@ -49,6 +50,12 @@ class ScheduleExecution extends Model
     public function metrics(): HasMany
     {
         return $this->hasMany(ScheduleGenerationMetric::class, 'execution_id');
+    }
+
+    public function latestMetric(): HasOne
+    {
+        return $this->hasOne(ScheduleGenerationMetric::class, 'execution_id')
+            ->ofMany('generation', 'max');
     }
 
     public function alocacoes(): HasMany
