@@ -61,7 +61,10 @@ it('observes a local minimum when progress stalls under low diversity and entrop
             'population_turnover' => 0.1,
             'best_signature_changed' => false,
             'elite_similarity' => 0.8,
-        ]);
+        ])
+        ->and($observation->currentEpisode)->toBeArray()
+        ->and($observation->currentEpisode['duration'] ?? null)->toBe(2)
+        ->and($observation->basinLockDetected)->toBeFalse();
 });
 
 it('observes a deep valley after persistent plateau and convergence pressure', function (): void {
@@ -100,5 +103,77 @@ it('observes a deep valley after persistent plateau and convergence pressure', f
             'population_turnover' => 0.1,
             'elite_similarity' => 0.9,
             'best_signature_changed' => false,
-        ]);
+            'basin_of_attraction_lock_detected' => true,
+        ])
+        ->and($observation->currentEpisode)->toBeArray()
+        ->and($observation->currentEpisode['phenomenon'] ?? null)->toBe('deep_valley')
+        ->and($observation->currentEpisode['duration'] ?? null)->toBe(1)
+        ->and($observation->currentEpisode['peak_depth_score'] ?? null)->toBeGreaterThan(0.7)
+        ->and($observation->previousEpisode)->toBeArray()
+        ->and($observation->previousEpisode['phenomenon'] ?? null)->toBe('local_minimum')
+        ->and($observation->previousEpisode['exit_mode'] ?? null)->toBe('phenomenon_shift')
+        ->and($observation->basinLockConfidence)->toBeGreaterThanOrEqual(0.75);
+});
+
+it('closes the previous episode with recovered exit mode when the landscape returns to neutral', function (): void {
+    $engine = new LandscapeEngine(
+        new LandscapeAnalyzer,
+        new LandscapeDetector,
+        new LandscapeResponseStrategy,
+        new LandscapeMemory
+    );
+
+    $engine->observe(new LandscapeMetrics(
+        generation: 1,
+        bestFitness: 84.0,
+        avgFitness: 82.0,
+        variance: 0.3,
+        diversity: 0.20,
+        entropy: 0.24,
+        stagnation: 12,
+        improvementAcceptanceRate: 0.0,
+        worseningAcceptanceRate: 0.5,
+        populationTurnover: 0.12,
+        bestSignatureChanged: false,
+        eliteSimilarity: 0.82,
+        bestSignature: 'locked-elite'
+    ));
+
+    $engine->observe(new LandscapeMetrics(
+        generation: 2,
+        bestFitness: 84.0,
+        avgFitness: 82.1,
+        variance: 0.25,
+        diversity: 0.19,
+        entropy: 0.23,
+        stagnation: 13,
+        improvementAcceptanceRate: 0.0,
+        worseningAcceptanceRate: 0.55,
+        populationTurnover: 0.10,
+        bestSignatureChanged: false,
+        eliteSimilarity: 0.85,
+        bestSignature: 'locked-elite'
+    ));
+
+    $observation = $engine->observe(new LandscapeMetrics(
+        generation: 3,
+        bestFitness: 85.2,
+        avgFitness: 84.6,
+        variance: 0.9,
+        diversity: 0.52,
+        entropy: 0.66,
+        stagnation: 1,
+        improvementAcceptanceRate: 0.65,
+        worseningAcceptanceRate: 0.10,
+        populationTurnover: 0.72,
+        bestSignatureChanged: true,
+        eliteSimilarity: 0.22,
+        bestSignature: 'escaped-elite'
+    ));
+
+    expect($observation->phenomenon)->toBe(LandscapePhenomenon::Neutral)
+        ->and($observation->previousEpisode)->toBeArray()
+        ->and($observation->previousEpisode['phenomenon'] ?? null)->toBe('local_minimum')
+        ->and($observation->previousEpisode['exit_mode'] ?? null)->toBe('recovered')
+        ->and($observation->currentEpisode['duration'] ?? null)->toBe(1);
 });

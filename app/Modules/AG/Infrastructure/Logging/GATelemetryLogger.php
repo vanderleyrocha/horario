@@ -70,6 +70,18 @@ final class GATelemetryLogger
             'landscape_elite_similarity' => isset($metrics['landscape_observation']['elite_similarity'])
                 ? round((float) $metrics['landscape_observation']['elite_similarity'], 6)
                 : null,
+            'landscape_episode_duration' => isset($metrics['landscape_observation']['current_episode']['duration'])
+                ? (int) $metrics['landscape_observation']['current_episode']['duration']
+                : null,
+            'landscape_episode_peak_depth_score' => isset($metrics['landscape_observation']['current_episode']['peak_depth_score'])
+                ? round((float) $metrics['landscape_observation']['current_episode']['peak_depth_score'], 6)
+                : null,
+            'landscape_basin_lock_confidence' => isset($metrics['landscape_observation']['basin_of_attraction_lock_confidence'])
+                ? round((float) $metrics['landscape_observation']['basin_of_attraction_lock_confidence'], 6)
+                : null,
+            'landscape_basin_lock_detected' => isset($metrics['landscape_observation']['basin_of_attraction_lock_detected'])
+                ? (bool) $metrics['landscape_observation']['basin_of_attraction_lock_detected']
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

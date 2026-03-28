@@ -50,6 +50,34 @@ it('flushes generation metrics immediately and publishes the current metric to c
             'population_turnover' => 0.18,
             'best_signature_changed' => false,
             'elite_similarity' => 0.82,
+            'current_episode' => [
+                'phenomenon' => 'local_minimum',
+                'start_generation' => 3,
+                'last_generation' => 5,
+                'duration' => 3,
+                'peak_confidence' => 0.83,
+                'peak_depth_score' => 0.76,
+                'avg_population_turnover' => 0.17,
+                'avg_elite_similarity' => 0.80,
+                'stable_best_signature_rate' => 1.0,
+                'active' => true,
+                'exit_mode' => 'active',
+            ],
+            'previous_episode' => [
+                'phenomenon' => 'plateau',
+                'start_generation' => 1,
+                'last_generation' => 2,
+                'duration' => 2,
+                'peak_confidence' => 0.54,
+                'peak_depth_score' => 0.50,
+                'avg_population_turnover' => 0.34,
+                'avg_elite_similarity' => 0.61,
+                'stable_best_signature_rate' => 0.5,
+                'active' => false,
+                'exit_mode' => 'phenomenon_shift',
+            ],
+            'basin_of_attraction_lock_confidence' => 0.77,
+            'basin_of_attraction_lock_detected' => true,
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -88,11 +116,15 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['confidence'] ?? null)->toBe(0.81)
         ->and($cachedMetric['landscape_observation']['population_turnover'] ?? null)->toBe(0.18)
         ->and($cachedMetric['landscape_observation']['elite_similarity'] ?? null)->toBe(0.82)
-        ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse();
+        ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse()
+        ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
+        ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3);
 
     $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
 
     expect($storedObservation)->toBeArray()
         ->and($storedObservation['best_delta_window'] ?? null)->toBe(-0.015)
-        ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008);
+        ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008)
+        ->and($storedObservation['previous_episode']['exit_mode'] ?? null)->toBe('phenomenon_shift')
+        ->and($storedObservation['basin_of_attraction_lock_confidence'] ?? null)->toBe(0.77);
 });

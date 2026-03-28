@@ -31,6 +31,10 @@ final class LandscapeMemory
 
     private int $maxTrajectory = 120;
 
+    private ?LandscapeEpisode $currentEpisode = null;
+
+    private ?LandscapeEpisode $lastCompletedEpisode = null;
+
     /*
     ---------------------------------------------------------
     Registrar estado detectado
@@ -88,6 +92,98 @@ final class LandscapeMemory
         }
 
         return $this->trajectory[array_key_last($this->trajectory)];
+    }
+
+    public function currentEpisode(): ?LandscapeEpisode
+    {
+        return $this->currentEpisode;
+    }
+
+    public function lastCompletedEpisode(): ?LandscapeEpisode
+    {
+        return $this->lastCompletedEpisode;
+    }
+
+    public function previewEpisode(
+        LandscapePhenomenon $phenomenon,
+        int $generation,
+        float $confidence,
+        float $depthScore,
+        float $populationTurnover,
+        float $eliteSimilarity,
+        bool $bestSignatureChanged
+    ): LandscapeEpisode {
+        if (
+            $this->currentEpisode !== null &&
+            $this->currentEpisode->active &&
+            $this->currentEpisode->phenomenon === $phenomenon
+        ) {
+            return $this->currentEpisode->advance(
+                generation: $generation,
+                confidence: $confidence,
+                depthScore: $depthScore,
+                populationTurnover: $populationTurnover,
+                eliteSimilarity: $eliteSimilarity,
+                bestSignatureChanged: $bestSignatureChanged
+            );
+        }
+
+        return LandscapeEpisode::start(
+            phenomenon: $phenomenon,
+            generation: $generation,
+            confidence: $confidence,
+            depthScore: $depthScore,
+            populationTurnover: $populationTurnover,
+            eliteSimilarity: $eliteSimilarity,
+            bestSignatureChanged: $bestSignatureChanged
+        );
+    }
+
+    public function recordEpisode(
+        LandscapePhenomenon $phenomenon,
+        int $generation,
+        float $confidence,
+        float $depthScore,
+        float $populationTurnover,
+        float $eliteSimilarity,
+        bool $bestSignatureChanged
+    ): LandscapeEpisode {
+        if (
+            $this->currentEpisode !== null &&
+            $this->currentEpisode->active &&
+            $this->currentEpisode->phenomenon === $phenomenon
+        ) {
+            $this->currentEpisode = $this->currentEpisode->advance(
+                generation: $generation,
+                confidence: $confidence,
+                depthScore: $depthScore,
+                populationTurnover: $populationTurnover,
+                eliteSimilarity: $eliteSimilarity,
+                bestSignatureChanged: $bestSignatureChanged
+            );
+
+            return $this->currentEpisode;
+        }
+
+        if ($this->currentEpisode !== null && $this->currentEpisode->active) {
+            $exitMode = $phenomenon === LandscapePhenomenon::Neutral
+                ? LandscapeEpisodeExitMode::Recovered
+                : LandscapeEpisodeExitMode::PhenomenonShift;
+
+            $this->lastCompletedEpisode = $this->currentEpisode->close($exitMode);
+        }
+
+        $this->currentEpisode = LandscapeEpisode::start(
+            phenomenon: $phenomenon,
+            generation: $generation,
+            confidence: $confidence,
+            depthScore: $depthScore,
+            populationTurnover: $populationTurnover,
+            eliteSimilarity: $eliteSimilarity,
+            bestSignatureChanged: $bestSignatureChanged
+        );
+
+        return $this->currentEpisode;
     }
 
     public function bestDeltaWindow(int $window = 5): float
@@ -212,6 +308,8 @@ final class LandscapeMemory
         $this->history = [];
         $this->points = [];
         $this->trajectory = [];
+        $this->currentEpisode = null;
+        $this->lastCompletedEpisode = null;
     }
 
     /**

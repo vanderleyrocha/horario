@@ -118,6 +118,23 @@ final class LandscapeEngine
         $this->lastState = $state;
         $this->lastObservation = $this->analyzer->analyze($metrics, $this->memory, $state);
 
+        $currentEpisode = $this->memory->recordEpisode(
+            phenomenon: $this->lastObservation->phenomenon,
+            generation: $metrics->generation,
+            confidence: $this->lastObservation->confidence,
+            depthScore: $this->lastObservation->depthScore,
+            populationTurnover: $metrics->populationTurnover,
+            eliteSimilarity: $metrics->eliteSimilarity,
+            bestSignatureChanged: $metrics->bestSignatureChanged
+        );
+
+        $this->lastObservation = $this->lastObservation->withEpisodeContext(
+            currentEpisode: $currentEpisode->toArray(),
+            previousEpisode: $this->memory->lastCompletedEpisode()?->toArray(),
+            basinLockConfidence: $this->lastObservation->basinLockConfidence,
+            basinLockDetected: $this->lastObservation->basinLockDetected
+        );
+
         return $state;
     }
 }

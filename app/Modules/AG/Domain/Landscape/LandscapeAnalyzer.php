@@ -61,6 +61,24 @@ final class LandscapeAnalyzer
             $confidence = max(0.45, $plateauScore);
         }
 
+        $episode = $memory->previewEpisode(
+            phenomenon: $phenomenon,
+            generation: $metrics->generation,
+            confidence: round($confidence, 4),
+            depthScore: round($depthScore, 6),
+            populationTurnover: $metrics->populationTurnover,
+            eliteSimilarity: $metrics->eliteSimilarity,
+            bestSignatureChanged: $metrics->bestSignatureChanged
+        );
+
+        $basinLockConfidence = $this->basinLockConfidence(
+            episode: $episode,
+            metrics: $metrics,
+            plateauDuration: $plateauDuration,
+            bestDeltaWindow: $bestDeltaWindow,
+            avgDeltaWindow: $avgDeltaWindow
+        );
+
         return new LandscapeObservation(
             phenomenon: $phenomenon,
             confidence: round($confidence, 4),
@@ -78,8 +96,44 @@ final class LandscapeAnalyzer
             bestSignatureChanged: $metrics->bestSignatureChanged,
             eliteSimilarity: round($metrics->eliteSimilarity, 6),
             diversity: round($metrics->diversity, 6),
-            entropy: round($metrics->entropy, 6)
+            entropy: round($metrics->entropy, 6),
+            currentEpisode: $episode->toArray(),
+            previousEpisode: $memory->lastCompletedEpisode()?->toArray(),
+            basinLockConfidence: round($basinLockConfidence, 6),
+            basinLockDetected: $basinLockConfidence >= 0.75
         );
+    }
+
+    private function basinLockConfidence(
+        LandscapeEpisode $episode,
+        LandscapeMetrics $metrics,
+        int $plateauDuration,
+        float $bestDeltaWindow,
+        float $avgDeltaWindow
+    ): float {
+        if ($episode->phenomenon === LandscapePhenomenon::Neutral) {
+            return 0.0;
+        }
+
+        $durationScore = $this->normalize((float) $episode->duration, 10.0);
+        $stabilityScore = min(1.0, $episode->stableBestSignatureRate);
+        $eliteLockScore = min(1.0, $episode->avgEliteSimilarity);
+        $turnoverLockScore = 1.0 - min(1.0, $episode->avgPopulationTurnover);
+        $plateauScore = $this->normalize((float) $plateauDuration, 10.0);
+        $bestProgressScore = 1.0 - min(1.0, abs($bestDeltaWindow));
+        $avgProgressScore = 1.0 - min(1.0, abs($avgDeltaWindow));
+        $stagnationScore = $this->normalize((float) $metrics->stagnation, 20.0);
+
+        return min(1.0, (
+            ($durationScore * 0.22) +
+            ($stabilityScore * 0.18) +
+            ($eliteLockScore * 0.16) +
+            ($turnoverLockScore * 0.16) +
+            ($plateauScore * 0.10) +
+            ($bestProgressScore * 0.08) +
+            ($avgProgressScore * 0.05) +
+            ($stagnationScore * 0.05)
+        ));
     }
 
     private function normalize(float $value, float $pivot): float
