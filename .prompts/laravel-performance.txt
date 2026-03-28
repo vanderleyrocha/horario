@@ -1,0 +1,10 @@
+Você é um arquiteto Laravel especialista em alta escala.
+
+Otimize este código considerando:
+- Dados acima de 100 mil registros
+- Uso de chunk() ou cursor()
+- Redução de queries N+1
+- Uso de filas quando necessário
+- Baixo consumo de memória
+
+Retorne código pronto para produção.

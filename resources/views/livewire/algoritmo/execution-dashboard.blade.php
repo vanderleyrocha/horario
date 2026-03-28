@@ -30,15 +30,43 @@
 
         </div>
 
-        {{-- BOTÃO PARA VISUALIZAR HORÁRIO --}}
+        @if (in_array($execution->status, ['running', 'cancel_requested'], true))
+            <div class="mt-4 flex justify-end">
+                <button
+                    wire:click="cancelExecution"
+                    wire:confirm="Deseja solicitar o cancelamento desta execucao?"
+                    class="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                    Cancelar Execucao
+                </button>
+            </div>
+        @endif
+
+        @if (session('success'))
+            <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if ($execution->status === 'cancel_requested')
+            <div class="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+                Cancelamento solicitado. O solver sera interrompido assim que atingir um ponto seguro.
+            </div>
+        @endif
+
+        @if ($execution->status === 'cancelled')
+            <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
+                Execucao cancelada pelo usuario.
+            </div>
+        @endif
+
         @if (in_array($execution->status, ['finished', 'completed', 'concluida', 'concluida_com_sucesso'], true))
             <div class="mt-4 bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                <h3 class="text-lg font-semibold text-green-800">Geração Concluída!</h3>
-                <p class="text-green-700 mt-2">O horário foi gerado com sucesso e a melhor solução foi salva.</p>
+                <h3 class="text-lg font-semibold text-green-800">Geracao concluida!</h3>
+                <p class="text-green-700 mt-2">O horario foi gerado com sucesso e a melhor solucao foi salva.</p>
                 <a href="{{ route('horarios.show', ['horario' => $execution->horario_id]) }}"
                     class="mt-4 inline-block bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-transform transform hover:scale-105"
                     wire:navigate>
-                    Visualizar Horário Gerado →
+                    Visualizar Horario Gerado ->
                 </a>
             </div>
         @endif
@@ -46,7 +74,7 @@
     </div>
 
     @livewire(\App\Livewire\Algoritmo\ExecutionStatusPanel::class, ['execution' => $execution], key('execution-status-' . $execution->id))
-
+    @livewire(\App\Livewire\Algoritmo\ExecutionMetricsStream::class, ['executionId' => $execution->id], key('execution-metrics-' . $execution->id))
 
     <div class="grid grid-cols-2 gap-6">
 

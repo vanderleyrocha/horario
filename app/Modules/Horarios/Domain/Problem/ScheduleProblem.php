@@ -12,6 +12,8 @@ use App\Modules\AG\Domain\Fitness\FitnessResult;
 use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
+use App\Models\ScheduleExecution;
+use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
@@ -38,11 +40,13 @@ final class ScheduleProblem implements GeneticProblem
 
     public function createIndividual(): Cromossomo
     {
+        $this->assertNotCancelled();
         $queue = $this->buildPlacementQueue();
 
         $this->runPreventiveDiagnosis($queue);
 
         for ($attempt = 1; $attempt <= self::MAX_BUILD_ATTEMPTS; $attempt++) {
+            $this->assertNotCancelled();
             $teacherBusy = [];
             $classBusy = [];
             $assignedGenes = [];
@@ -94,14 +98,15 @@ final class ScheduleProblem implements GeneticProblem
                 return new Cromossomo($assignedGenes);
             }
 
-            Log::warning('schedule.initial_population.retry', [
-                'attempt' => $attempt,
-                'reason' => $this->lastBuildFailure,
-                'alpha' => round($alpha, 4),
-                'allocations' => $telemetry['allocations'],
-                'forced_allocations' => $telemetry['forced_allocations'],
-                'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
-            ]);
+            // Log::warning('schedule.initial_population.retry', [
+            //     'attempt' => $attempt,
+            //     'reason' => $this->lastBuildFailure,
+            //     'alpha' => round($alpha, 4),
+            //     'allocations' => $telemetry['allocations'],
+            //     'forced_allocations' => $telemetry['forced_allocations'],
+            //     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+            // ]);
+
             $this->reportInitialPopulationProgress([
                 'stage' => 'grasp_retry',
                 'attempt' => $attempt,
@@ -152,6 +157,7 @@ final class ScheduleProblem implements GeneticProblem
     private function constructWithGrasp(array $queue, float $alpha, array &$assignedGenes, array &$teacherBusy, array &$classBusy, array &$telemetry): bool
     {
         foreach ($queue as $index => $task) {
+            $this->assertNotCancelled();
             /** @var LessonData $lesson */
             $lesson = $task['lesson'];
             $occurrence = $task['occurrence'];
@@ -173,14 +179,14 @@ final class ScheduleProblem implements GeneticProblem
 
                 $telemetry['forced_allocations']++;
 
-                Log::warning('schedule.initial_population.grasp.fallback', [
-                    'lesson_id' => $lesson->id,
-                    'occurrence' => $occurrence,
-                    'class_id' => $lesson->classId,
-                    'professor_id' => $lesson->professorId,
-                    'day' => $slot->day,
-                    'period' => $slot->lessonNumber,
-                ]);
+                //     Log::warning('schedule.initial_population.grasp.fallback', [
+                //         'lesson_id' => $lesson->id,
+                //         'occurrence' => $occurrence,
+                //         'class_id' => $lesson->classId,
+                //         'professor_id' => $lesson->professorId,
+                //         'day' => $slot->day,
+                //         'period' => $slot->lessonNumber,
+                //     ]);
             }
 
             if (!$this->canUseSlot($lesson, $slot, $teacherBusy, $classBusy)) {
@@ -193,9 +199,7 @@ final class ScheduleProblem implements GeneticProblem
 
             $telemetry['allocations']++;
 
-            if ($telemetry['allocations'] % self::TELEMETRY_EVERY_ALLOCATIONS === 0
-                || $telemetry['allocations'] === $telemetry['queue_size']
-            ) {
+            if ($telemetry['allocations'] % self::TELEMETRY_EVERY_ALLOCATIONS === 0 || $telemetry['allocations'] === $telemetry['queue_size']) {
                 // Log::info('schedule.initial_population.grasp.progress', [
                 //     'attempt' => $telemetry['attempt'],
                 //     'alpha' => $telemetry['alpha'],
@@ -551,6 +555,21 @@ final class ScheduleProblem implements GeneticProblem
             'phase' => 'initial_population',
             'execution_id' => $this->executionId,
         ], $payload));
+    }
+
+    private function assertNotCancelled(): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        $status = ScheduleExecution::query()
+            ->whereKey($this->executionId)
+            ->value('status');
+
+        if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
+            throw ExecutionCancelledException::forExecution($this->executionId);
+        }
     }
 
     private function canUseSlot(LessonData $lesson, TimeSlot $slot, array $teacherBusy, array $classBusy): bool

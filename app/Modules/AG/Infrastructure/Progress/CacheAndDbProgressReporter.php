@@ -9,6 +9,7 @@ use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
 use App\Modules\AG\Infrastructure\Logging\GATelemetryLogger;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Support\AGError;
+use Illuminate\Support\Facades\Cache;
 
 final class CacheAndDbProgressReporter implements ProgressReporterInterface
 {
@@ -39,10 +40,33 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
             entropy: (float) $data['entropy'],
             mutationRate: (float) $data['mutation_rate'],
             stagnation: (int) $data['stagnation'],
-            landscapeState: $data['landscape_state'] ?? null
+            landscapeState: $data['landscape_state'] ?? null,
+            operatorUsed: $data['operator_used'] ?? null,
+            operatorReward: isset($data['operator_reward']) ? (float) $data['operator_reward'] : null
         );
 
         $this->dbRecorder->recordGeneration($metrics);
+
+        Cache::put(
+            "ga_execution_metrics_{$this->dbRecorder->getExecutionId()}",
+            [
+                'execution_id' => $this->dbRecorder->getExecutionId(),
+                'generation' => (int) $data['generation'],
+                'best_fitness' => (float) $data['best_fitness'],
+                'avg_fitness' => (float) $data['avg_fitness'],
+                'variance' => (float) ($data['variance'] ?? 0.0),
+                'diversity' => (float) $data['diversity'],
+                'entropy' => (float) $data['entropy'],
+                'mutation_rate' => (float) $data['mutation_rate'],
+                'stagnation' => (int) $data['stagnation'],
+                'landscape_state' => $data['landscape_state'] ?? 'unknown',
+                'operator_used' => $data['operator_used'] ?? null,
+                'operator_reward' => isset($data['operator_reward']) ? (float) $data['operator_reward'] : null,
+                'timestamp' => microtime(true),
+            ],
+            now()->addMinutes(10)
+        );
+
         $this->telemetryLogger->generationMetrics(
             $this->horarioId,
             $data,

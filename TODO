@@ -189,11 +189,11 @@ Nos próximos passos posso detalhar:
 5️⃣ Modelo matemático formal do RiskIndex
 6️⃣ Estratégia científica de tuning de parâmetros
 
-Se quiser, posso também montar um blueprint completo do solver de timetabling nível ITC, baseado na sua arquitetura atual. 
+Se quiser, posso também montar um blueprint completo do solver de timetabling nível ITC, baseado na sua arquitetura atual.
 Isso provavelmente elevará seu projeto para um nível extremamente avançado de engenharia evolutiva.
 
 verificar a necessidade de ajustes no código do arquivo app\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine.php possibilitando
-alternar entre 
+alternar entre
 WorstIndividualReplacement
 SimilarityReplacement
 CrowdingReplacement
@@ -383,3 +383,160 @@ No ultimo chat ...
 
 
 Incremental Workload Evaluation
+
+
+analise a estrutura do solver e verifique se o Modelo Matemático do RiskIndex está totalmente implementado e sendo usado pelo solver.
+Observe especialmente a pasta app\Modules\Horarios\Domain\Risk
+
+
+Em um dos últmos chats pedi pra você verificar od arquivos:
+app\Modules\AG\Application\IslandModelCoordinator.php
+app\Modules\AG\Domain\ConflictGraph\ConflictEdge.php
+app\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface.php
+app\Modules\AG\Domain\HyperHeuristic\OperatorSelectionStrategy.php
+app\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelector.php
+app\Modules\AG\Domain\Metrics\PopulationStatistics.php
+app\Modules\AG\Domain\Operators\Replacement\CrowdingReplacement.php
+app\Modules\AG\Domain\Termination\FitnessThresholdCriterion.php
+app\Modules\AG\Domain\Termination\MaxGenerationsCriterion.php
+app\Modules\AG\Domain\Termination\VarianceBasedTerminationCriterion.php
+app\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator.php
+app\Modules\Horarios\Domain\Risk\RiskClassification.php
+app\Modules\Horarios\Domain\Risk\SaturationCalculator.php
+app\Modules\Horarios\Domain\Risk\StructuralEntropyCalculator.php
+app\Modules\Horarios\Domain\Services\ScheduleRandomGenerator.php
+app\Modules\Horarios\Domain\Services\ScheduleRepairService.php
+identificando a qual funcionalidade cada um pertence e se esta funcionalidade está ou não totalmente implementada e integrada ao solver.
+
+O Diagnóstico geral foi este abaixo:
+
+Dos 16 arquivos, 8 estão vazios (0 bytes) e 2 são stubs parciais.
+O solver hoje roda por outras peças: RunGeneticAlgorithm.php, IslandModelEngine.php, MaxGenerationsOrFitnessCriterion.php, PopulationFitnessEvaluator.php, ScheduleProblem.php, GreedyRepairOperator.php.
+IslandModelCoordinator.php
+Função: coordenação de ilhas (aplicação).
+Status: não implementado.
+Pertence a: island model/orquestração.
+Viabilidade/melhoria: alta, mas hoje já existe coordenação em IslandModelEngine; ganho real viria se virar coordenador assíncrono e de migração adaptativa.
+
+ConflictEdge.php
+Função: representar aresta de conflito.
+Status: não implementado.
+Pertence a: grafo de conflitos.
+Viabilidade/melhoria: média-alta; útil para arestas com peso/tipo (professor/turma), melhorando mutação/crossover guiado por conflito.
+
+FitnessEvaluatorInterface.php
+Função: contrato de avaliação de fitness.
+Status: não implementado.
+Pertence a: avaliação de fitness.
+Viabilidade/melhoria: alta; melhora testabilidade e pluga melhor avaliador assíncrono.
+
+OperatorSelectionStrategy.php
+Função: contrato de seleção de operadores HH.
+Status: implementado e em uso (com EpsilonGreedy, Softmax, UCB1, controlador HH).
+Pertence a: hiper-heurística.
+Observação: implementação parcialmente consistente; Softmax/UCB1 esperam campo reward, mas o tracker entrega score/uses em OperatorPerformanceTracker.php. Hoje funciona porque está usando Epsilon-Greedy.
+
+OperatorSelector.php
+Função: seleção de operadores ALNS.
+Status: stub parcial (só namespace).
+Pertence a: ALNS.
+Viabilidade/melhoria: alta; hoje isso é feito por RouletteWheelSelector.php. Consolidar evitaria duplicidade.
+
+PopulationStatistics.php
+Função: métricas agregadas (best/avg/var/div/entropy).
+Status: implementado, mas não integrado no fluxo principal.
+Pertence a: métricas/telemetria.
+Viabilidade/melhoria: alta; pode alimentar terminação por convergência e controle adaptativo.
+
+CrowdingReplacement.php
+Função: substituição nichada por indivíduo mais similar.
+Status: implementado e em uso via AdaptiveNichingReplacement.php.
+Pertence a: replacement/diversidade.
+Viabilidade/melhoria: já traz ganho de diversidade; pode evoluir com limiar adaptativo baseado em entropia real.
+
+FitnessThresholdCriterion.php
+Status: não implementado.
+Pertence a: terminação.
+Viabilidade/melhoria: média; hoje já coberto parcialmente por MaxGenerationsOrFitnessCriterion.
+
+MaxGenerationsCriterion.php
+Status: não implementado.
+Pertence a: terminação.
+Viabilidade/melhoria: média-baixa (baixo ganho isolado; já existe critério combinado).
+
+VarianceBasedTerminationCriterion.php
+Status: não implementado.
+Pertence a: terminação por convergência.
+Viabilidade/melhoria: alta; bom ganho para parar cedo quando população estagna.
+
+AsyncFitnessEvaluator.php
+Status: não implementado.
+Pertence a: paralelização de avaliação.
+Viabilidade/melhoria: alta e de maior impacto em tempo de execução; hoje PopulationFitnessEvaluator.php é sequencial.
+
+RiskClassification.php
+Função: classificar índice de risco.
+Status: implementado.
+Pertence a: análise de viabilidade/risco.
+Uso: via FeasibilityReport.php.
+
+SaturationCalculator.php
+Função: saturação global e sobrecargas.
+Status: implementado.
+Pertence a: análise estrutural pré-solver.
+
+StructuralEntropyCalculator.php
+Função: entropia estrutural normalizada.
+Status: implementado.
+Pertence a: análise estrutural pré-solver.
+
+ScheduleRandomGenerator.php
+Status: não implementado.
+Pertence a: geração inicial de solução.
+Viabilidade/melhoria: média; hoje essa função está de fato no ScheduleProblem::createIndividual().
+
+ScheduleRepairService.php
+Status: não implementado.
+Pertence a: reparo de solução.
+Viabilidade/melhoria: média; hoje já existe reparo em GreedyRepairOperator.
+
+Conclusão objetiva
+
+Funcionalidade central do solver está operacional, mas há um bloco grande de arquitetura planejada não consolidada.
+Melhor ROI para evolução do solver:
+Implementar AsyncFitnessEvaluator + FitnessEvaluatorInterface e ligar em PopulationFitnessEvaluator.
+Implementar VarianceBasedTerminationCriterion e combinar com critério atual.
+Integrar PopulationStatistics na decisão de terminação/adaptação.
+Consolidar hiper-heurística (contrato de stats único para Epsilon/Softmax/UCB1).
+Limpar stubs/legado (ou implementar de fato) para reduzir ambiguidade arquitetural.
+
+E esta foi a proposta de intervenção:
+
+1. Implementar FitnessEvaluatorInterface + AsyncFitnessEvaluator (prioridade máxima)
+    Hoje a avaliação da população está sequencial.
+    Esse é o maior gargalo do solver.
+    Comece criando interface, depois dois adapters: síncrono (atual) e assíncrono (novo), com fallback automático para síncrono.
+2. Acoplar isso em PopulationFitnessEvaluator
+    Trocar o loop direto por estratégia pluggável (sync/async).
+    Adicionar testes de equivalência: mesmo fitness no modo sync e async para a mesma população.
+3. Implementar VarianceBasedTerminationCriterion
+    Evita gastar gerações quando a população já convergiu.
+    Use junto com o critério atual (MaxGenerationsOrFitnessCriterion) em um critério híbrido.
+4. Integrar PopulationStatistics no fluxo real
+    Usar best/avg/variance/diversity/entropy para decisão de parada e tuning da mutação.
+    Hoje essa classe existe, mas está subaproveitada.
+5. Consolidar stubs e duplicidades
+    OperatorSelector (ALNS), ScheduleRandomGenerator, ScheduleRepairService, IslandModelCoordinator.
+    Ou implementa com uso real, ou remove para reduzir dívida técnica e confusão.
+6. Depois disso, evoluir qualidade de solução
+    Pesos adaptativos de operadores (HH/ALNS) com contrato de estatística único.
+    ConflictEdge com peso/tipo para mutações/crossover orientados por conflito.
+
+Ordem prática de execução:
+    1. Interface + async fitness
+    2. Integração no evaluator
+    3. Critério de terminação por variância
+    4. Integrar PopulationStatistics
+    5. Limpeza/implementação de stubs
+
+Verifique o que já foi feito da sua proposta de intervenção e defina um plano para darmos continuidade às intervenções necessárias.

@@ -2,25 +2,24 @@
 
 namespace App\Modules\Horarios\UI\Livewire;
 
-use App\Models\Horario;
 use App\Models\ConfiguracaoHorario;
-use Livewire\Component;
-use Livewire\Attributes\Layout;
+use App\Models\Horario;
 use App\Traits\ComDadosComuns;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Layout;
+use Livewire\Component;
 
-#[Layout('components.app-layout', ['title' => 'Configurar Horário'])]
-class Configurar extends Component {
+#[Layout('components.app-layout', ['title' => 'Configurar Horario'])]
+class Configurar extends Component
+{
     use ComDadosComuns;
 
     public Horario $horario;
 
-    // Etapas do wizard
     public int $etapaAtual = 1;
     public int $totalEtapas = 5;
 
-    // Dados da Configuração Básica (usando snake_case para compatibilidade com suas views)
     public string $nome_escola = '';
     public int $aulas_por_dia = 5;
     public int $dias_semana = 5;
@@ -34,12 +33,18 @@ class Configurar extends Component {
     public bool $agrupar_disciplinas = true;
     public int $max_aulas_seguidas = 3;
 
-    // Novas propriedades para Configuração do Algoritmo Genético
+    public int $populacao = 100;
+    public int $geracoes = 500;
+    public float $taxa_mutacao = 0.3;
+    public float $taxa_crossover = 0.7;
+    public float $taxa_elitismo = 0.05;
+    public float $taxa_mutacao_min = 0.01;
+    public float $taxa_mutacao_max = 0.6;
+    public int $limite_estagnacao = 10;
     public int $elitism_count = 10;
     public float $target_fitness = 95.0;
     public int $max_generations_without_improvement = 50;
 
-    // Propriedades para evitar PropertyNotFoundException (mantidas como no seu código)
     public $editandoId = null;
     public $professor_id = '';
     public $disciplina_id = '';
@@ -54,7 +59,8 @@ class Configurar extends Component {
     public $tempos_preferidos = [];
     public $observacoes = '';
 
-    public function mount(Horario $horario) {
+    public function mount(Horario $horario): void
+    {
         $this->horario = $horario;
 
         $configuracaoHorario = ConfiguracaoHorario::where('horario_id', $horario->id)->first();
@@ -72,25 +78,43 @@ class Configurar extends Component {
             $this->permitir_janelas = $configuracaoHorario->permitir_janelas;
             $this->agrupar_disciplinas = $configuracaoHorario->agrupar_disciplinas;
             $this->max_aulas_seguidas = $configuracaoHorario->max_aulas_seguidas;
-            $this->elitism_count = $configuracaoHorario->elitism_count ?? 10;
             $this->target_fitness = $configuracaoHorario->target_fitness ?? 95.0;
             $this->max_generations_without_improvement = $configuracaoHorario->max_generations_without_improvement ?? 50;
         }
+
+        $configuracaoAlgoritmo = $horario->configuracao ?? [];
+
+        $this->populacao = (int) ($configuracaoAlgoritmo['populacao'] ?? $this->populacao);
+        $this->geracoes = (int) ($configuracaoAlgoritmo['geracoes'] ?? $this->geracoes);
+        $this->taxa_mutacao = (float) ($configuracaoAlgoritmo['taxa_mutacao'] ?? $this->taxa_mutacao);
+        $this->taxa_crossover = (float) ($configuracaoAlgoritmo['taxa_crossover'] ?? $this->taxa_crossover);
+        $this->taxa_elitismo = (float) ($configuracaoAlgoritmo['taxa_elitismo'] ?? $this->taxa_elitismo);
+        $this->taxa_mutacao_min = (float) ($configuracaoAlgoritmo['taxa_mutacao_min'] ?? $this->taxa_mutacao_min);
+        $this->taxa_mutacao_max = (float) ($configuracaoAlgoritmo['taxa_mutacao_max'] ?? $this->taxa_mutacao_max);
+        $this->limite_estagnacao = (int) ($configuracaoAlgoritmo['limite_estagnacao'] ?? $this->limite_estagnacao);
+        $this->target_fitness = (float) ($configuracaoAlgoritmo['target_fitness'] ?? $this->target_fitness);
+        $this->max_generations_without_improvement = (int) ($configuracaoAlgoritmo['geracoes_sem_melhoria'] ?? $this->max_generations_without_improvement);
+        $this->recalculateElitismCount();
     }
 
-    public function render() {
-        Log::info("Renderizando view livewire.horarios.configurar via app\Livewire\Horarios\Configurar.php");
+    public function render()
+    {
+        Log::info('Renderizando view livewire.horarios.configurar via app\\Livewire\\Horarios\\Configurar.php');
+
         return view('livewire.horarios.configurar');
     }
 
-    public function proximaEtapa() {
+    public function proximaEtapa(): void
+    {
         if ($this->etapaAtual === 1) {
             $this->salvarConfiguracaoBasica();
+
             if ($this->getErrorBag()->isNotEmpty()) {
                 return;
             }
-        } elseif ($this->etapaAtual === 4) { // Etapa de Configuração do AG
+        } elseif ($this->etapaAtual === 4) {
             $this->salvarConfiguracaoAlgoritmoGenetico();
+
             if ($this->getErrorBag()->isNotEmpty()) {
                 return;
             }
@@ -101,26 +125,37 @@ class Configurar extends Component {
         }
     }
 
-    public function etapaAnterior() {
+    public function etapaAnterior(): void
+    {
         if ($this->etapaAtual > 1) {
             $this->etapaAtual--;
         }
     }
 
-    public function irParaEtapa(int $etapa) {
-        if ($etapa > 1) {
-            if (!$this->horario->configuracaoHorario()->exists()) {
-                session()->flash('error', 'Por favor, salve a Configuração Básica (Etapa 1) antes de prosseguir.');
-                $this->etapaAtual = 1;
-                return;
-            }
+    public function irParaEtapa(int $etapa): void
+    {
+        if ($etapa > 1 && ! $this->horario->configuracaoHorario()->exists()) {
+            session()->flash('error', 'Por favor, salve a Configuracao Basica (Etapa 1) antes de prosseguir.');
+            $this->etapaAtual = 1;
+
+            return;
         }
+
         $this->etapaAtual = $etapa;
     }
 
-    public function salvarConfiguracaoBasica() {
-        // ✅ REMOVIDO: As variáveis $horarioInicioParaValidacao e $horarioFimParaValidacao
-        // A validação e o salvamento agora operam diretamente nas propriedades do componente.
+    public function updatedTaxaElitismo(): void
+    {
+        $this->recalculateElitismCount();
+    }
+
+    public function updatedPopulacao(): void
+    {
+        $this->recalculateElitismCount();
+    }
+
+    public function salvarConfiguracaoBasica(): void
+    {
         $this->validate([
             'nome_escola' => 'required|string|max:255',
             'aulas_por_dia' => 'required|integer|min:1|max:10',
@@ -131,9 +166,9 @@ class Configurar extends Component {
             'duracao_intervalo_minutos' => 'required|integer|min:0|max:60',
             'max_aulas_seguidas' => 'required|integer|min:1|max:5',
         ], [
-            'horario_inicio.date_format' => 'O formato do Horário de Início deve ser HH:MM.',
-            'horario_fim.date_format' => 'O formato do Horário de Fim deve ser HH:MM.',
-            'horario_fim.after' => 'O Horário de Fim deve ser posterior ao Horário de Início.',
+            'horario_inicio.date_format' => 'O formato do Horario de Inicio deve ser HH:MM.',
+            'horario_fim.date_format' => 'O formato do Horario de Fim deve ser HH:MM.',
+            'horario_fim.after' => 'O Horario de Fim deve ser posterior ao Horario de Inicio.',
         ]);
 
         $configuracaoHorario = ConfiguracaoHorario::firstOrNew(['horario_id' => $this->horario->id]);
@@ -141,8 +176,8 @@ class Configurar extends Component {
             'nome_escola' => $this->nome_escola,
             'aulas_por_dia' => $this->aulas_por_dia,
             'dias_semana' => $this->dias_semana,
-            'horario_inicio' => $this->horario_inicio, // ✅ USANDO DIRETAMENTE A PROPRIEDADE
-            'horario_fim' => $this->horario_fim,       // ✅ USANDO DIRETAMENTE A PROPRIEDADE
+            'horario_inicio' => $this->horario_inicio,
+            'horario_fim' => $this->horario_fim,
             'duracao_aula_minutos' => $this->duracao_aula_minutos,
             'duracao_intervalo_minutos' => $this->duracao_intervalo_minutos,
             'horarios_intervalos' => $this->horarios_intervalos,
@@ -154,15 +189,25 @@ class Configurar extends Component {
 
         $this->horario->load('configuracaoHorario');
 
-        session()->flash('success', 'Configuração básica salva com sucesso!');
+        session()->flash('success', 'Configuracao basica salva com sucesso!');
     }
 
-    public function salvarConfiguracaoAlgoritmoGenetico() {
+    public function salvarConfiguracaoAlgoritmoGenetico(): void
+    {
         $this->validate([
-            'elitism_count' => 'required|integer|min:0',
+            'populacao' => 'required|integer|min:20|max:1000',
+            'geracoes' => 'required|integer|min:10|max:5000',
+            'taxa_mutacao' => 'required|numeric|min:0|max:1',
+            'taxa_crossover' => 'required|numeric|min:0|max:1',
+            'taxa_elitismo' => 'required|numeric|min:0|max:1',
+            'taxa_mutacao_min' => 'required|numeric|min:0|max:1',
+            'taxa_mutacao_max' => 'required|numeric|min:0|max:1|gte:taxa_mutacao_min',
+            'limite_estagnacao' => 'required|integer|min:0|max:1000',
             'target_fitness' => 'required|numeric|min:0|max:100',
             'max_generations_without_improvement' => 'required|integer|min:0',
         ]);
+
+        $this->recalculateElitismCount();
 
         $configuracaoHorario = ConfiguracaoHorario::firstOrNew(['horario_id' => $this->horario->id]);
         $configuracaoHorario->fill([
@@ -171,25 +216,47 @@ class Configurar extends Component {
             'max_generations_without_improvement' => $this->max_generations_without_improvement,
         ])->save();
 
+        $this->horario->configuracao = [
+            ...($this->horario->configuracao ?? []),
+            'populacao' => $this->populacao,
+            'geracoes' => $this->geracoes,
+            'taxa_mutacao' => $this->taxa_mutacao,
+            'taxa_crossover' => $this->taxa_crossover,
+            'taxa_elitismo' => $this->taxa_elitismo,
+            'taxa_mutacao_min' => $this->taxa_mutacao_min,
+            'taxa_mutacao_max' => $this->taxa_mutacao_max,
+            'limite_estagnacao' => $this->limite_estagnacao,
+            'target_fitness' => $this->target_fitness,
+            'geracoes_sem_melhoria' => $this->max_generations_without_improvement,
+        ];
+        $this->horario->save();
+
         $this->horario->load('configuracaoHorario');
 
-        session()->flash('success', 'Configurações do Algoritmo Genético salvas com sucesso!');
+        session()->flash('success', 'Configuracoes do Algoritmo Genetico salvas com sucesso!');
     }
 
-    public function addIntervalo() {
+    public function addIntervalo(): void
+    {
         $this->horarios_intervalos[] = count($this->horarios_intervalos) + 1;
         $this->duracoes_intervalos[] = $this->duracao_intervalo_minutos;
     }
 
-    public function removeIntervalo(int $index) {
+    public function removeIntervalo(int $index): void
+    {
         unset($this->horarios_intervalos[$index]);
         unset($this->duracoes_intervalos[$index]);
+
         $this->horarios_intervalos = array_values($this->horarios_intervalos);
         $this->duracoes_intervalos = array_values($this->duracoes_intervalos);
     }
 
-    public function fecharModal() {
-        // Este método pode ser vazio ou apenas logar um aviso,
-        // pois o modal de aula não deveria ser aberto por este componente.
+    public function fecharModal(): void
+    {
+    }
+
+    private function recalculateElitismCount(): void
+    {
+        $this->elitism_count = max(1, (int) round($this->populacao * $this->taxa_elitismo));
     }
 }

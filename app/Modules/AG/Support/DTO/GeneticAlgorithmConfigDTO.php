@@ -6,7 +6,8 @@ use App\Models\Horario;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
-final class GeneticAlgorithmConfigDTO {
+final class GeneticAlgorithmConfigDTO
+{
     /*
     |--------------------------------------------------------------------------
     | PARÂMETROS DO GA
@@ -62,32 +63,8 @@ final class GeneticAlgorithmConfigDTO {
     /** @var array<int, array{dia:int, tempo:int}> */
     public array $horariosDisponiveis;
 
-    private function __construct(
-        int $tamanhoPopulacao,
-        int $numeroGeracoes,
-        float $taxaMutacao,
-        float $taxaCrossover,
-        float $taxaElitismo,
-        float $taxaMutacaoMin,
-        float $taxaMutacaoMax,
-        int $limiteEstagnacao,
-        float $targetFitness,
-        int $maxGenerationsWithoutImprovement,
-        int $horarioId,
-        string $nomeEscola,
-        int $aulasPorDia,
-        int $diasSemana,
-        string $horarioInicio,
-        string $horarioFim,
-        int $duracaoAulaMinutos,
-        int $duracaoIntervaloMinutos,
-        array $horariosIntervalos,
-        array $duracoesIntervalos,
-        bool $permitirJanelas,
-        bool $agruparDisciplinas,
-        int $maxAulasSeguidas,
-        array $horariosDisponiveis
-    ) {
+    private function __construct(int $tamanhoPopulacao, int $numeroGeracoes, float $taxaMutacao, float $taxaCrossover, float $taxaElitismo, float $taxaMutacaoMin, float $taxaMutacaoMax, int $limiteEstagnacao, float $targetFitness, int $maxGenerationsWithoutImprovement, int $horarioId, string $nomeEscola, int $aulasPorDia, int $diasSemana, string $horarioInicio, string $horarioFim, int $duracaoAulaMinutos, int $duracaoIntervaloMinutos, array $horariosIntervalos, array $duracoesIntervalos, bool $permitirJanelas, bool $agruparDisciplinas, int $maxAulasSeguidas, array $horariosDisponiveis)
+    {
         self::assertPositive($tamanhoPopulacao, 'tamanhoPopulacao');
         self::assertPositive($numeroGeracoes, 'numeroGeracoes');
         self::assertRange($taxaMutacao, 0.0, 1.0, 'taxaMutacao');
@@ -137,18 +114,17 @@ final class GeneticAlgorithmConfigDTO {
     |--------------------------------------------------------------------------
     */
 
-    public static function fromModels(Horario $horario): self {
+    public static function fromModels(Horario $horario): self
+    {
         $configAG = $horario->configuracao ?? [];
         $config = $horario->configuracaoHorario;
 
         if (!$config) {
-            throw new InvalidArgumentException(
-                "Configuração do horário não encontrada para Horário ID {$horario->id}"
-            );
+            throw new InvalidArgumentException("Configuração do horário não encontrada para Horário ID {$horario->id}");
         }
 
         $tamanhoPopulacao = (int) ($configAG['populacao'] ?? 100);
-        $numeroGeracoes = (int) ($configAG['geracoes'] ?? 500);
+        $numeroGeracoes = (int) ($configAG['geracoes'] ?? 50);
 
         $taxaMutacao = (float) ($configAG['taxa_mutacao'] ?? 0.1);
         $taxaCrossover = (float) ($configAG['taxa_crossover'] ?? 0.7);
@@ -166,19 +142,13 @@ final class GeneticAlgorithmConfigDTO {
         $aulasPorDia = (int) $config->aulas_por_dia;
         $diasSemana = (int) $config->dias_semana;
 
-        $horariosIntervalos = array_map(
-            'intval',
-            is_array($config->horarios_intervalos)
+        $horariosIntervalos = array_map('intval', is_array($config->horarios_intervalos)
                 ? $config->horarios_intervalos
-                : (json_decode($config->horarios_intervalos ?? '[]', true) ?? [])
-        );
+                : (json_decode($config->horarios_intervalos ?? '[]', true) ?? []));
 
-        $duracoesIntervalos = array_map(
-            'intval',
-            is_array($config->duracoes_intervalos)
+        $duracoesIntervalos = array_map('intval', is_array($config->duracoes_intervalos)
                 ? $config->duracoes_intervalos
-                : (json_decode($config->duracoes_intervalos ?? '[]', true) ?? [])
-        );
+                : (json_decode($config->duracoes_intervalos ?? '[]', true) ?? []));
 
         $horariosDisponiveis = [];
 
@@ -191,32 +161,7 @@ final class GeneticAlgorithmConfigDTO {
             }
         }
 
-        return new self(
-            $tamanhoPopulacao,
-            $numeroGeracoes,
-            $taxaMutacao,
-            $taxaCrossover,
-            $taxaElitismo,
-            $taxaMutacaoMin,
-            $taxaMutacaoMax,
-            $limiteEstagnacao,
-            $targetFitness,
-            $maxGenerationsWithoutImprovement,
-            (int) $horario->id,
-            (string) $config->nome_escola,
-            $aulasPorDia,
-            $diasSemana,
-            CarbonImmutable::parse($config->horario_inicio)->format('H:i'),
-            CarbonImmutable::parse($config->horario_fim)->format('H:i'),
-            (int) $config->duracao_aula_minutos,
-            (int) $config->duracao_intervalo_minutos,
-            $horariosIntervalos,
-            $duracoesIntervalos,
-            (bool) $config->permitir_janelas,
-            (bool) $config->agrupar_disciplinas,
-            (int) $config->max_aulas_seguidas,
-            $horariosDisponiveis
-        );
+        return new self($tamanhoPopulacao, $numeroGeracoes, $taxaMutacao, $taxaCrossover, $taxaElitismo, $taxaMutacaoMin, $taxaMutacaoMax, $limiteEstagnacao, $targetFitness, $maxGenerationsWithoutImprovement, (int) $horario->id, (string) $config->nome_escola, $aulasPorDia, $diasSemana, CarbonImmutable::parse($config->horario_inicio)->format('H:i'), CarbonImmutable::parse($config->horario_fim)->format('H:i'), (int) $config->duracao_aula_minutos, (int) $config->duracao_intervalo_minutos, $horariosIntervalos, $duracoesIntervalos, (bool) $config->permitir_janelas, (bool) $config->agrupar_disciplinas, (int) $config->max_aulas_seguidas, $horariosDisponiveis);
     }
 
     /*
@@ -225,17 +170,20 @@ final class GeneticAlgorithmConfigDTO {
     |--------------------------------------------------------------------------
     */
 
-    public function eliteCount(): int {
+    public function eliteCount(): int
+    {
         return max(1, (int) floor($this->tamanhoPopulacao * $this->taxaElitismo));
     }
 
-    private static function assertPositive(int $value, string $field): void {
+    private static function assertPositive(int $value, string $field): void
+    {
         if ($value <= 0) {
             throw new InvalidArgumentException("$field must be > 0");
         }
     }
 
-    private static function assertRange(float $value, float $min, float $max, string $field): void {
+    private static function assertRange(float $value, float $min, float $max, string $field): void
+    {
         if ($value < $min || $value > $max) {
             throw new InvalidArgumentException("$field must be between $min and $max");
         }

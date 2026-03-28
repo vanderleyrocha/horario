@@ -52,6 +52,17 @@ final class CacheProgressReporter implements ProgressReporterInterface {
         );
     }
 
+    public function reportCancelled(): void {
+        Cache::put(
+            $this->cacheKey,
+            [
+                'status' => 'cancelled',
+                'timestamp' => now()->toDateTimeString(),
+            ],
+            now()->addMinutes($this->ttlMinutes)
+        );
+    }
+
     public function clear(): void {
         Cache::forget($this->cacheKey);
     }

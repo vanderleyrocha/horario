@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\AG\Application;
 
 use App\Helpers\DateTimeHelper;
+use App\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
@@ -23,6 +24,8 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Application\Progress\EvolutionProgress;
+use App\Models\ScheduleExecution;
+use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use Illuminate\Support\Facades\Log;
 
 final class GeneticAlgorithmEngine
@@ -30,18 +33,20 @@ final class GeneticAlgorithmEngine
     private array $mutationPool;
     private array $lastEvolutionTelemetry = [];
 
-    public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly PopulationFitnessEvaluator $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
+    public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
     {
         $this->mutationPool = [$this->mutation];
     }
 
     public function run(int $populationSize): Cromossomo
     {
+        $this->assertNotCancelled();
         $population = $this->initializePopulation($populationSize);
 
         $generation = 0;
 
         while (!$this->termination->shouldTerminate($generation, $population)) {
+            $this->assertNotCancelled();
 
             $operatorRewards = [];
             $operatorUsed = null;
@@ -67,6 +72,7 @@ final class GeneticAlgorithmEngine
             }
 
             while (count($newPopulation) < $populationSize) {
+                $this->assertNotCancelled();
 
                 $parentA = $this->selection->select($population);
                 $parentB = $this->selection->select($population);
@@ -209,6 +215,8 @@ final class GeneticAlgorithmEngine
             }
 
             $metrics->landscapeState = $landscapeState;
+            $metrics->operatorUsed = $operatorUsed;
+            $metrics->operatorReward = $operatorReward;
 
             if ($this->executionMetrics !== null) {
                 $this->executionMetrics->recordGeneration($metrics);
@@ -294,6 +302,7 @@ final class GeneticAlgorithmEngine
         $population = [];
 
         for ($i = 0; $i < $size; $i++) {
+            $this->assertNotCancelled();
 
 
             Log::info("Criando indivíduo {$i}");
@@ -334,6 +343,7 @@ final class GeneticAlgorithmEngine
 
     public function evolveGeneration(array $population, int $populationSize): array
     {
+        $this->assertNotCancelled();
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
 
@@ -356,6 +366,7 @@ final class GeneticAlgorithmEngine
         /* EVOLUÇÃO */
 
         while (count($newPopulation) < $populationSize) {
+            $this->assertNotCancelled();
 
             $parentA = $this->selection->select($population);
             $parentB = $this->selection->select($population);
@@ -438,5 +449,22 @@ final class GeneticAlgorithmEngine
 
 
         return $newPopulation;
+    }
+
+    private function assertNotCancelled(): void
+    {
+        if ($this->executionMetrics === null || ! $this->executionMetrics->hasExecutionId()) {
+            return;
+        }
+
+        $executionId = $this->executionMetrics->getExecutionId();
+
+        $status = ScheduleExecution::query()
+            ->whereKey($executionId)
+            ->value('status');
+
+        if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
+            throw ExecutionCancelledException::forExecution($executionId);
+        }
     }
 }

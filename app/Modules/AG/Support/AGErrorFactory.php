@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Support;
 
-use App\Modules\AG\Domain\Analysis\DTO\FeasibilityReport;
+use App\Modules\Horarios\Domain\Analysis\DTO\FeasibilityReport;
 
 final class AGErrorFactory {
     /* ============================================================

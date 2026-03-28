@@ -7,6 +7,7 @@ use App\Modules\AG\Infrastructure\Logging\GATelemetryLogger;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
 use App\Modules\AG\Infrastructure\Progress\CacheProgressReporter;
+use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use App\Modules\Horarios\Application\GenerateScheduleAction;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -87,6 +88,11 @@ class GerarHorarioJob implements ShouldQueue
             );
 
             Log::info("Job de geracao de horario finalizado com sucesso [ID: {$this->horario->id}]");
+        } catch (ExecutionCancelledException $e) {
+            $dbRecorder->cancelExecution();
+            $cacheReporter->reportCancelled();
+
+            Log::warning("Execucao cancelada [ID: {$this->horario->id}]");
         } catch (\Throwable $e) {
             $dbRecorder->failExecution();
 

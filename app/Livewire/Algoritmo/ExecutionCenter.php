@@ -2,25 +2,29 @@
 
 namespace App\Livewire\Algoritmo;
 
+use App\Jobs\GerarHorarioJob;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
-use App\Jobs\GerarHorarioJob;
-use Livewire\Component;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Solver Center'])]
 class ExecutionCenter extends Component
 {
     public Horario $horario;
 
-    public array $config = [
-        'population' => 120,
-        'generations' => 500
-    ];
+    public array $config = [];
 
     public function mount(Horario $horario)
     {
         $this->horario = $horario;
+
+        $savedConfig = $this->horario->configuracao ?? [];
+
+        $this->config = [
+            'population' => (int) ($savedConfig['populacao'] ?? 120),
+            'generations' => (int) ($savedConfig['geracoes'] ?? 500),
+        ];
     }
 
     public function runSolver()
@@ -40,6 +44,22 @@ class ExecutionCenter extends Component
         return redirect()->route('algoritmo.execution', $execution);
     }
 
+    public function cancelExecution(int $executionId): void
+    {
+        $execution = ScheduleExecution::query()
+            ->where('id', $executionId)
+            ->where('horario_id', $this->horario->id)
+            ->first();
+
+        if (! $execution || ! in_array($execution->status, ['running', 'cancel_requested'], true)) {
+            return;
+        }
+
+        $execution->update([
+            'status' => 'cancel_requested',
+        ]);
+    }
+
     public function getExecutionsProperty()
     {
         return ScheduleExecution::where('horario_id', $this->horario->id)
@@ -51,7 +71,7 @@ class ExecutionCenter extends Component
     public function render()
     {
         return view('livewire.algoritmo.execution-center', [
-            'executions' => $this->executions
+            'executions' => $this->executions,
         ]);
     }
 }

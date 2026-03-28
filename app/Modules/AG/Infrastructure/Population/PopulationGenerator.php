@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Infrastructure\Population;
 
-use App\Modules\AG\Domain\Analysis\DTO\FeasibilityReport;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
-use App\Modules\AG\Domain\Analysis\ScheduleFeasibilityAnalyzer;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Support\AGErrorFactory;
 use App\Modules\AG\Support\Exceptions\InviableScheduleException;
+use App\Modules\Horarios\Domain\Analysis\DTO\FeasibilityReport;
+use App\Modules\Horarios\Domain\Analysis\ScheduleFeasibilityAnalyzer;
 
 final class PopulationGenerator {
     private int $expectedGeneCount;

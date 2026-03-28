@@ -4,3 +4,8 @@ php artisan view:clear
 php artisan config:clear
 php artisan route:clear
 
+php artisan queue:flush
+php artisan queue:clear
+
+php artisan queue:restart
+

@@ -3,6 +3,7 @@
 namespace App\Modules\Horarios\UI\Livewire;
 
 use App\Models\Alocacao;
+use App\Models\Aula;
 use App\Models\Horario;
 use App\Models\Professor;
 use App\Models\Turma;
@@ -41,14 +42,19 @@ class Show extends Component
     {
         $this->horario = $horario;
 
-        if (! $this->entidadeId) {
-            $this->entidadeId = $this->view === 'professores' ? Professor::ativo()->value('id') : Turma::ativa()->value('id');
+        if (! $this->entidadeId || ! $this->entidades->pluck('id')->contains((int) $this->entidadeId)) {
+            $this->entidadeId = $this->resolveDefaultEntidadeId();
         }
+    }
+
+    public function getExecutionIdProperty(): ?int
+    {
+        return $this->horario->lastExecution?->id;
     }
 
     public function getAllocationsProperty(): Collection
     {
-        $executionId = $this->horario->lastExecution?->id;
+        $executionId = $this->executionId;
 
         if (! $executionId) {
             return collect();
@@ -85,7 +91,179 @@ class Show extends Component
 
     public function updatedView()
     {
-        $this->entidadeId = $this->view === 'professores' ? Professor::ativo()->value('id') : Turma::ativa()->value('id');
+        unset($this->entidades);
+        $this->entidadeId = $this->resolveDefaultEntidadeId();
+        unset($this->grade);
+        unset($this->unallocatedAulas);
+    }
+
+    public function updatedEntidadeId($value): void
+    {
+        if (! $this->entidades->pluck('id')->contains((int) $value)) {
+            $this->entidadeId = $this->resolveDefaultEntidadeId();
+        }
+    }
+
+    public function getEntidadesProperty(): Collection
+    {
+        if ($this->view === 'professores') {
+            $ids = Aula::query()
+                ->ativas()
+                ->where('horario_id', $this->horario->id)
+                ->pluck('professor_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($ids->isNotEmpty()) {
+                return Professor::ativo()
+                    ->whereIn('id', $ids)
+                    ->orderBy('nome')
+                    ->get();
+            }
+
+            $fromAllocations = $this->allocations
+                ->pluck('professor_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($fromAllocations->isNotEmpty()) {
+                return Professor::ativo()
+                    ->whereIn('id', $fromAllocations)
+                    ->orderBy('nome')
+                    ->get();
+            }
+
+            return Professor::ativo()->orderBy('nome')->get();
+        }
+
+        $ids = Aula::query()
+            ->ativas()
+            ->where('horario_id', $this->horario->id)
+            ->pluck('turma_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isNotEmpty()) {
+            return Turma::ativa()
+                ->whereIn('id', $ids)
+                ->orderBy('nome')
+                ->get();
+        }
+
+        $fromAllocations = $this->allocations
+            ->pluck('turma_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($fromAllocations->isNotEmpty()) {
+            return Turma::ativa()
+                ->whereIn('id', $fromAllocations)
+                ->orderBy('nome')
+                ->get();
+        }
+
+        return Turma::ativa()->orderBy('nome')->get();
+    }
+
+    private function resolveDefaultEntidadeId(): ?int
+    {
+        if ($this->view === 'professores') {
+            $fromAulas = Aula::query()
+                ->ativas()
+                ->where('horario_id', $this->horario->id)
+                ->whereNotNull('professor_id')
+                ->orderBy('id')
+                ->value('professor_id');
+
+            if ($fromAulas) {
+                return (int) $fromAulas;
+            }
+
+            $fromAllocations = $this->allocations
+                ->pluck('professor_id')
+                ->filter()
+                ->unique()
+                ->first();
+
+            return $fromAllocations
+                ? (int) $fromAllocations
+                : Professor::ativo()->value('id');
+        }
+
+        $fromAulas = Aula::query()
+            ->ativas()
+            ->where('horario_id', $this->horario->id)
+            ->whereNotNull('turma_id')
+            ->orderBy('id')
+            ->value('turma_id');
+
+        if ($fromAulas) {
+            return (int) $fromAulas;
+        }
+
+        $fromAllocations = $this->allocations
+            ->pluck('turma_id')
+            ->filter()
+            ->unique()
+            ->first();
+
+        return $fromAllocations
+            ? (int) $fromAllocations
+            : Turma::ativa()->value('id');
+    }
+
+    public function getUnallocatedAulasProperty(): Collection
+    {
+        $executionId = $this->executionId;
+
+        $query = Aula::query()
+            ->ativas()
+            ->where('horario_id', $this->horario->id)
+            ->with([
+                'disciplina:id,nome,codigo',
+                'professor:id,nome,nome_abreviado',
+                'turma:id,nome',
+            ])
+            ->withCount([
+                'alocacoes as alocadas_count' => function ($q) use ($executionId) {
+                    if ($executionId) {
+                        $q->where('execution_id', $executionId);
+                    } else {
+                        $q->whereRaw('1=0');
+                    }
+                },
+            ]);
+
+        if ($this->view === 'professores' && $this->entidadeId) {
+            $query->where('professor_id', $this->entidadeId);
+        }
+
+        if ($this->view === 'turmas' && $this->entidadeId) {
+            $query->where('turma_id', $this->entidadeId);
+        }
+
+        return $query
+            ->get()
+            ->map(function (Aula $aula) {
+                $faltantes = max(0, (int) $aula->aulas_semana - (int) $aula->alocadas_count);
+
+                return [
+                    'aula_id' => $aula->id,
+                    'disciplina_codigo' => $aula->disciplina?->codigo ?? '---',
+                    'disciplina_nome' => $aula->disciplina?->nome ?? 'Disciplina',
+                    'professor' => $aula->professor?->nome_abreviado ?? $aula->professor?->nome ?? 'Professor',
+                    'turma' => $aula->turma?->nome ?? 'Turma',
+                    'aulas_semana' => (int) $aula->aulas_semana,
+                    'alocadas' => (int) $aula->alocadas_count,
+                    'faltantes' => $faltantes,
+                ];
+            })
+            ->filter(fn (array $item) => $item['faltantes'] > 0)
+            ->values();
     }
 
     public function getGradeProperty(): array
@@ -178,7 +356,15 @@ class Show extends Component
 
     public function handleDrop(int $allocationId, string $day, string $time): void
     {
-        $allocation = Alocacao::find($allocationId);
+        $query = Alocacao::query()
+            ->where('id', $allocationId)
+            ->where('horario_id', $this->horario->id);
+
+        if ($this->executionId) {
+            $query->where('execution_id', $this->executionId);
+        }
+
+        $allocation = $query->first();
 
         if (! $allocation) {
             return;
@@ -200,6 +386,35 @@ class Show extends Component
 
         unset($this->grade);
         unset($this->allocations);
+        unset($this->unallocatedAulas);
+    }
+
+    public function moveToUnallocated(int $allocationId): void
+    {
+        $query = Alocacao::query()
+            ->where('id', $allocationId)
+            ->where('horario_id', $this->horario->id);
+
+        if ($this->executionId) {
+            $query->where('execution_id', $this->executionId);
+        }
+
+        $allocation = $query->first();
+
+        if (! $allocation) {
+            return;
+        }
+
+        $allocation->delete();
+
+        unset($this->grade);
+        unset($this->allocations);
+        unset($this->unallocatedAulas);
+        unset($this->entidades);
+
+        if (! $this->entidadeId || ! $this->entidades->pluck('id')->contains((int) $this->entidadeId)) {
+            $this->entidadeId = $this->resolveDefaultEntidadeId();
+        }
     }
 
     public function render()

@@ -11,7 +11,7 @@ class ExecutionMetricsRecorder
 
     private array $buffer = [];
 
-    private int $batchSize = 25;
+    private int $batchSize = 1;
 
     public function startExecution(
         int $horarioId,
@@ -60,6 +60,8 @@ class ExecutionMetricsRecorder
             'entropy' => $metrics->entropy,
             'mutation_rate' => $metrics->mutationRate,
             'stagnation' => $metrics->stagnation,
+            'operator_used' => $metrics->operatorUsed,
+            'operator_reward' => $metrics->operatorReward,
             'landscape_state' => $metrics->landscapeState,
             'created_at' => now(),
         ];
@@ -110,6 +112,23 @@ class ExecutionMetricsRecorder
             ->where('id', $this->executionId)
             ->update([
                 'status' => 'failed',
+                'end_time' => now(),
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function cancelExecution(): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        $this->flush();
+
+        DB::table('schedule_executions')
+            ->where('id', $this->executionId)
+            ->update([
+                'status' => 'cancelled',
                 'end_time' => now(),
                 'updated_at' => now(),
             ]);

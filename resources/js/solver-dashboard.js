@@ -7,6 +7,9 @@ if (window.__solverDashboardRegistered) {
 
 const chartState = {
     root: null,
+    executionId: null,
+    seenGenerations: new Set(),
+    operatorUsage: new Map(),
     fitnessChart: null,
     diversityChart: null,
     entropyChart: null,
@@ -29,6 +32,9 @@ function destroyCharts() {
     chartState.mutationChart = null
     chartState.operatorChart = null
     chartState.landscapeChart = null
+    chartState.seenGenerations = new Set()
+    chartState.operatorUsage = new Map()
+    chartState.executionId = null
 }
 
 function createLineChart(element, label) {
@@ -94,12 +100,17 @@ function createBarChart(element, label) {
 
 function createBubbleChart(element, label) {
     return new Chart(element, {
-        type: "bubble",
+        type: "line",
         data: {
+            labels: [],
             datasets: [
                 {
                     label,
                     data: [],
+                    stepped: true,
+                    borderColor: "#7c3aed",
+                    backgroundColor: "rgba(124, 58, 237, 0.18)",
+                    pointRadius: 3,
                 },
             ],
         },
@@ -108,32 +119,123 @@ function createBubbleChart(element, label) {
             animation: false,
             maintainAspectRatio: false,
             resizeDelay: 100,
+            scales: {
+                y: {
+                    min: 0,
+                    ticks: {
+                        callback(value) {
+                            return landscapeLabel(Number(value))
+                        },
+                    },
+                },
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            return landscapeLabel(Number(context.parsed.y))
+                        },
+                    },
+                },
+            },
         },
     })
 }
 
-function normalizeHeatmap(heatmap) {
-    if (!Array.isArray(heatmap)) {
-        return []
+const LANDSCAPE_STATE_SCALE = {
+    unknown: 0,
+    exploracao: 1,
+    exploration: 1,
+    "exploracao_intensiva": 2,
+    "exploracao intensiva": 2,
+    "exploracao_controlada": 3,
+    "exploracao controlada": 3,
+    equilibrado: 4,
+    balanced: 4,
+    "estagnacao_leve": 5,
+    "estagnacao leve": 5,
+    "estagnacao_moderada": 6,
+    "estagnacao moderada": 6,
+    "estagnacao_severa": 7,
+    "estagnacao severa": 7,
+    stagnation: 7,
+    convergence: 8,
+    convergencia: 8,
+}
+
+const LANDSCAPE_LABELS = {
+    0: "Unknown",
+    1: "Exploration",
+    2: "Exploration+",
+    3: "Controlled",
+    4: "Balanced",
+    5: "Stagnation I",
+    6: "Stagnation II",
+    7: "Stagnation III",
+    8: "Convergence",
+}
+
+function normalizeLandscapeState(state) {
+    if (typeof state !== "string" || state.trim() === "") {
+        return 0
     }
 
-    const dataset = []
+    const key = state.trim().toLowerCase()
 
-    for (let x = 0; x < heatmap.length; x += 1) {
-        if (!Array.isArray(heatmap[x])) {
-            continue
-        }
+    return LANDSCAPE_STATE_SCALE[key] ?? 0
+}
 
-        for (let y = 0; y < heatmap[x].length; y += 1) {
-            dataset.push({
-                x,
-                y,
-                r: Number(heatmap[x][y] ?? 0) * 2,
-            })
-        }
+function landscapeLabel(value) {
+    return LANDSCAPE_LABELS[value] ?? `State ${value}`
+}
+
+function normalizeMetricEvent(detail) {
+    if (!detail) {
+        return null
     }
 
-    return dataset
+    if (Array.isArray(detail)) {
+        return detail.at(-1) ?? null
+    }
+
+    if (Array.isArray(detail.metric)) {
+        return detail.metric.at(-1) ?? null
+    }
+
+    if (detail.metric && typeof detail.metric === "object") {
+        return detail.metric
+    }
+
+    return typeof detail === "object" ? detail : null
+}
+
+function syncOperatorChart() {
+    if (!chartState.operatorChart) {
+        return
+    }
+
+    const entries = [...chartState.operatorUsage.entries()]
+
+    chartState.operatorChart.data.labels = entries.map(([label]) => label)
+    chartState.operatorChart.data.datasets[0].data = entries.map(([, stats]) => {
+        if ((stats.count ?? 0) === 0) {
+            return 0
+        }
+
+        return Number(stats.rewardTotal ?? 0) / stats.count
+    })
+}
+
+function appendLandscapeMetric(generation, landscapeState) {
+    if (!chartState.landscapeChart) {
+        return
+    }
+
+    chartState.landscapeChart.data.labels.push(generation)
+    chartState.landscapeChart.data.datasets[0].data.push({
+        x: generation,
+        y: normalizeLandscapeState(landscapeState),
+    })
 }
 
 function appendMetric(metric) {
@@ -142,6 +244,12 @@ function appendMetric(metric) {
     }
 
     const generation = metric.generation ?? chartState.fitnessChart.data.labels.length + 1
+
+    if (chartState.seenGenerations.has(generation)) {
+        return
+    }
+
+    chartState.seenGenerations.add(generation)
 
     chartState.fitnessChart.data.labels.push(generation)
     chartState.fitnessChart.data.datasets[0].data.push(Number(metric.best_fitness ?? metric.bestFitness ?? 0))
@@ -159,16 +267,19 @@ function appendMetric(metric) {
     const operatorUsed = metric.operator_used ?? metric.operatorUsed
     const operatorReward = metric.operator_reward ?? metric.operatorReward
 
-    if (operatorUsed !== undefined && operatorReward !== undefined) {
-        chartState.operatorChart.data.labels = [String(operatorUsed)]
-        chartState.operatorChart.data.datasets[0].data = [Number(operatorReward)]
+    if (operatorUsed) {
+        const currentStats = chartState.operatorUsage.get(String(operatorUsed)) ?? {
+            count: 0,
+            rewardTotal: 0,
+        }
+
+        currentStats.count += 1
+        currentStats.rewardTotal += Number(operatorReward ?? 0)
+        chartState.operatorUsage.set(String(operatorUsed), currentStats)
+        syncOperatorChart()
     }
 
-    const heatmap = metric.landscape_heatmap ?? metric.landscapeHeatmap
-
-    if (heatmap !== undefined) {
-        chartState.landscapeChart.data.datasets[0].data = normalizeHeatmap(heatmap)
-    }
+    appendLandscapeMetric(generation, metric.landscape_state ?? metric.landscapeState ?? "unknown")
 }
 
 function updateAllCharts() {
@@ -217,16 +328,41 @@ function initializeDashboard() {
     destroyCharts()
 
     chartState.root = root
+    chartState.executionId = window.executionId ?? null
     chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Best Fitness", "Average Fitness"])
     chartState.diversityChart = createLineChart(diversityCanvas, "Diversity")
     chartState.entropyChart = createLineChart(entropyCanvas, "Entropy")
     chartState.mutationChart = createLineChart(mutationCanvas, "Mutation Rate")
-    chartState.operatorChart = createBarChart(operatorCanvas, "Operator Reward")
-    chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Search Landscape")
+    chartState.operatorChart = createBarChart(operatorCanvas, "Average Operator Reward")
+    chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Landscape State")
 
     loadInitialMetrics()
 }
 
+function handleMetricEvent(event) {
+    const metric = normalizeMetricEvent(event?.detail)
+
+    if (!metric) {
+        return
+    }
+
+    const metricExecutionId = metric.execution_id ?? metric.executionId ?? null
+
+    if (
+        chartState.executionId !== null &&
+        metricExecutionId !== null &&
+        Number(metricExecutionId) !== Number(chartState.executionId)
+    ) {
+        return
+    }
+
+    initializeDashboard()
+    appendMetric(metric)
+    updateAllCharts()
+}
+
 document.addEventListener("DOMContentLoaded", initializeDashboard)
 document.addEventListener("livewire:navigated", initializeDashboard)
+window.addEventListener("metrics-update", handleMetricEvent)
+document.addEventListener("metrics-update", handleMetricEvent)
 }

@@ -30,6 +30,7 @@ use App\Modules\AG\Domain\Landscape\LandscapeResponseStrategy;
 use App\Modules\AG\Domain\Metrics\GeneticDistance;
 use App\Modules\AG\Domain\Metrics\HashDiversityCalculator;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
+use App\Modules\AG\Domain\Metrics\PopulationStatistics;
 use App\Modules\AG\Domain\Metrics\PopulationEntropyCalculator;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\ConflictGraphCrossoverOperator;
@@ -45,22 +46,30 @@ use App\Modules\AG\Domain\Operators\Selection\FitnessSharing\FitnessSharingCalcu
 use App\Modules\AG\Domain\Operators\Selection\FitnessSharing\SharingFunction;
 use App\Modules\AG\Domain\Operators\Selection\TournamentSelection;
 use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
-use App\Modules\AG\Domain\Termination\MaxGenerationsOrFitnessCriterion;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Termination\VarianceBasedTerminationCriterion;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator;
 use App\Modules\AG\Infrastructure\Progress\NullProgressReporter;
 use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\TeacherConflictRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\WorkloadExceededRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\ConsecutiveLessonRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\DistributionRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\MaxLessonsPerDayRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\PreferredTimeRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule;
 use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 final class RunGeneticAlgorithm
 {
-    public function execute(
-        Horario $horario,
-        ?ProgressReporterInterface $progress = null,
-        ?ExecutionMetricsRecorder $executionMetrics = null
-    ): array
+    public function execute(Horario $horario, ?ProgressReporterInterface $progress = null, ?ExecutionMetricsRecorder $executionMetrics = null): array
     {
         Log::info("RunGeneticAlgorithm::execute() iniciado");
 
@@ -70,34 +79,39 @@ final class RunGeneticAlgorithm
         if ($executionMetrics->hasExecutionId()) {
             $executionId = $executionMetrics->getExecutionId();
         } else {
-            $executionId = $executionMetrics->startExecution(
-                horarioId: $horario->id,
-                populationSize: $config->tamanhoPopulacao,
-                generations: $config->numeroGeracoes,
-                parameters: [
+            $executionId = $executionMetrics->startExecution(horarioId: $horario->id, populationSize: $config->tamanhoPopulacao, generations: $config->numeroGeracoes, parameters: [
                     'mutation_rate' => $config->taxaMutacao,
                     'elite_count' => $config->eliteCount(),
                     'islands' => 2,
-                ]
-            );
+                ]);
         }
 
         $progress = $progress ?? new NullProgressReporter();
 
         $scheduleData = (new ScheduleDataBuilder())->build($horario);
 
-        $fitnessEvaluator = new FitnessEvaluator(weights: FitnessWeights::default(), rules: []);
+        $maxLessonsPerDay = (int) ($horario->configuracaoHorario?->aulas_por_dia ?? 7);
+
+        $fitnessRules = [
+            new TeacherConflictRule(),
+            new ClassConflictRule(),
+            new WorkloadExceededRule(),
+            new MandatoryBlockViolationRule(),
+            new WindowPenaltyRule(),
+            new DistributionRule(),
+            new MaxLessonsPerDayRule($maxLessonsPerDay),
+            new ConsecutiveLessonRule(),
+            new PreferredTimeRule(),
+        ];
+
+        $fitnessEvaluator = new FitnessEvaluator(
+            weights: FitnessWeights::default(),
+            rules: $fitnessRules
+        );
 
         $repairOperator = new GreedyRepairOperator();
 
-        $problem = new ScheduleProblem(
-            data: $scheduleData,
-            contextBuilder: new EvaluationContextBuilder(),
-            fitnessEvaluator: $fitnessEvaluator,
-            repairOperator: $repairOperator,
-            progress: $progress,
-            executionId: $executionId
-        );
+        $problem = new ScheduleProblem(data: $scheduleData, contextBuilder: new EvaluationContextBuilder(), fitnessEvaluator: $fitnessEvaluator, repairOperator: $repairOperator, progress: $progress, executionId: $executionId);
 
         $distance = new GeneticDistance();
 
@@ -111,7 +125,20 @@ final class RunGeneticAlgorithm
 
         $elitism = new TopEliteStrategy(max(1, $config->eliteCount()));
 
-        $termination = new MaxGenerationsOrFitnessCriterion(maxGenerations: $config->numeroGeracoes, targetFitness: $config->targetFitness, maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement);
+        $termination = new VarianceBasedTerminationCriterion(
+            maxGenerations: $config->numeroGeracoes,
+            populationStatistics: new PopulationStatistics(
+                new HashDiversityCalculator(),
+                new PopulationEntropyCalculator()
+            ),
+            targetFitness: $config->targetFitness,
+            maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement,
+            varianceThreshold: (float) config('ag.termination_variance_threshold', 0.0005),
+            varianceWindowSize: (int) config('ag.termination_variance_window', 8),
+            minGenerationsBeforeVarianceCheck: (int) config('ag.termination_min_generations_before_variance', 20),
+            minDiversity: (float) config('ag.termination_min_diversity', 0.08),
+            minEntropy: (float) config('ag.termination_min_entropy', 0.10)
+        );
 
         $islandEngine = new IslandModelEngine(migrationPolicy: new BestIndividualsMigration(2), migrationInterval: 25);
 
@@ -146,7 +173,12 @@ final class RunGeneticAlgorithm
 
             $adaptiveMutation = new AdaptiveMutationController(baseRate: 0.02, amplification: 0.25, maxRate: 0.35);
 
-            $populationEvaluator = new PopulationFitnessEvaluator(problem: $problem, concurrency: config('ag.max_workers', 8));
+            $parallelEvaluation = (bool) config('ag.parallel_evaluation', true);
+            $maxWorkers = (int) config('ag.max_workers', 8);
+
+            $populationEvaluator = $parallelEvaluation
+                ? new AsyncFitnessEvaluator(problem: $problem, concurrency: $maxWorkers)
+                : new PopulationFitnessEvaluator(problem: $problem, concurrency: $maxWorkers);
 
             $replacement = new AdaptiveNichingReplacement(new GeneticDistance());
 
@@ -169,13 +201,46 @@ final class RunGeneticAlgorithm
         }
 
         $islandEngine->setTelemetry($metricsGlobal[0], $progress, $config->taxaMutacao);
+        $islandEngine->setExecutionId($executionId);
 
         $best = $islandEngine->run($config->numeroGeracoes);
+        $best = $this->finalizeBestSolution($best, $problem);
 
         return [
             'best' => $best,
             'best_fitness' => $best->fitness(),
             'generation_metrics' => array_map(fn ($m) => $m->generationData(), $metricsGlobal)
         ];
+    }
+
+    private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem): Cromossomo
+    {
+        $candidate = $best->copy();
+        $attempts = 3;
+        $lastHardPenalty = INF;
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            $candidate = $problem->repair($candidate);
+            $result = $problem->evaluate($candidate);
+            $lastHardPenalty = $result->hardPenalty();
+
+            if ($result->hardPenalty() <= 0.0 && $problem->isFeasible($candidate)) {
+                return $candidate;
+            }
+
+            Log::warning('solver.final_repair_attempt_failed', [
+                'attempt' => $attempt,
+                'hard_penalty' => $result->hardPenalty(),
+                'soft_penalty' => $result->softPenalty(),
+                'score' => $result->score(),
+            ]);
+        }
+
+        throw new RuntimeException(
+            sprintf(
+                'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
+                $lastHardPenalty
+            )
+        );
     }
 }

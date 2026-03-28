@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Validation\ValidationException;
 
 class Alocacao extends Model
 {
@@ -36,6 +37,35 @@ class Alocacao extends Model
         'eh_manual' => 'boolean',
         'bloqueada' => 'boolean'
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $alocacao): void {
+            if (is_null($alocacao->execution_id)) {
+                return;
+            }
+
+            if ($alocacao->exists && ! $alocacao->isDirty(['execution_id', 'horario_id'])) {
+                return;
+            }
+
+            $execution = ScheduleExecution::query()
+                ->select(['id', 'horario_id'])
+                ->find($alocacao->execution_id);
+
+            if (! $execution) {
+                throw ValidationException::withMessages([
+                    'execution_id' => 'A execução informada para a alocação não existe.',
+                ]);
+            }
+
+            if ((int) $execution->horario_id !== (int) $alocacao->horario_id) {
+                throw ValidationException::withMessages([
+                    'execution_id' => 'A execução informada pertence a outro horário.',
+                ]);
+            }
+        });
+    }
 
     public function horario(): BelongsTo
     {

@@ -73,8 +73,7 @@ final class FitnessEvaluator
         }
 
         $totalPenalty = $hardPenalty + $softPenalty;
-
-        $score = max(0.0, 100.0 - $totalPenalty);
+        $score = $this->computeLexicographicScore($hardPenalty, $softPenalty);
 
         $cromossomo->setFitness($score);
 
@@ -131,5 +130,22 @@ final class FitnessEvaluator
     public function clearCache(): void
     {
         $this->cache = [];
+    }
+
+    private function computeLexicographicScore(float $hardPenalty, float $softPenalty): float
+    {
+        /*
+         * Objetivo lexicográfico:
+         * - Soluções sem conflito hard sempre ficam na faixa [50, 100].
+         * - Soluções com conflito hard sempre ficam na faixa [0, 50).
+         * Assim, qualquer solução viável domina qualquer inviável.
+         */
+        if ($hardPenalty > 0.0) {
+            $infeasiblePenalty = min(49.999, $hardPenalty + $softPenalty);
+
+            return max(0.0, 49.999 - $infeasiblePenalty);
+        }
+
+        return 50.0 + max(0.0, 50.0 - $softPenalty);
     }
 }

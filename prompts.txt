@@ -1,0 +1,3 @@
+Otimize esta query Laravel para milhões de registros, usando índices, chunking e evitando full scan.
+Transforme este código em um Job Laravel assíncrono com controle de falhas e retries.
+Identifique gargalos de performance neste código Laravel e proponha melhorias escaláveis.

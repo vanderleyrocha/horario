@@ -82,5 +82,9 @@
         <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
             A execucao falhou antes de concluir todas as etapas. Se nao houver metricas suficientes, os graficos podem ficar vazios.
         </div>
+    @elseif ($execution->status === 'cancelled')
+        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-100 p-4 text-sm text-slate-800">
+            A execucao foi cancelada pelo usuario.
+        </div>
     @endif
 </div>

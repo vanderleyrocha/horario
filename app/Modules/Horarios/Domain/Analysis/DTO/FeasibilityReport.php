@@ -2,64 +2,21 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\AG\Domain\Analysis\DTO;
+namespace App\Modules\Horarios\Domain\Analysis\DTO;
 
-final class FeasibilityReport {
+use App\Modules\Horarios\Domain\Risk\RiskClassification;
+
+final class FeasibilityReport
+{
     private bool $isFeasible;
-
-    /**
-     * Percentual de ocupação global (0 – 200+)
-     */
     private float $globalSaturation;
-
-    /**
-     * [
-     *   turmaId => [
-     *      'carga_total' => int,
-     *      'capacidade_maxima' => int,
-     *      'excedente' => int,
-     *      'percentual' => float
-     *   ]
-     * ]
-     */
     private array $turmaOverloads;
-
-    /**
-     * [
-     *   professorId => [
-     *      'carga_total' => int,
-     *      'capacidade_maxima' => int,
-     *      'excedente' => int,
-     *      'percentual' => float
-     *   ]
-     * ]
-     */
     private array $professorOverloads;
-
-    /**
-     * [
-     *   aulaId => [
-     *      'duracao' => int,
-     *      'blocos_disponiveis' => int
-     *   ]
-     * ]
-     */
     private array $doubleBlockIssues;
-
-    /**
-     * Gargalos estruturais adicionais
-     */
     private array $structuralBottlenecks;
-
-    /**
-     * Sugestões automáticas
-     */
     private array $suggestions;
-
-    /**
-     * Índice matemático de risco (0–100)
-     */
     private int $riskIndex;
+    private float $structuralEntropy;
 
     public function __construct(
         bool $isFeasible,
@@ -69,7 +26,8 @@ final class FeasibilityReport {
         array $doubleBlockIssues = [],
         array $structuralBottlenecks = [],
         array $suggestions = [],
-        int $riskIndex = 0
+        int $riskIndex = 0,
+        float $structuralEntropy = 0.0
     ) {
         $this->isFeasible = $isFeasible;
         $this->globalSaturation = $globalSaturation;
@@ -79,68 +37,67 @@ final class FeasibilityReport {
         $this->structuralBottlenecks = $structuralBottlenecks;
         $this->suggestions = $suggestions;
         $this->riskIndex = max(0, min(100, $riskIndex));
+        $this->structuralEntropy = max(0.0, min(100.0, $structuralEntropy));
     }
 
-    /* ============================================================
-     |  GETTERS
-     ============================================================ */
-
-    public function isFeasible(): bool {
+    public function isFeasible(): bool
+    {
         return $this->isFeasible;
     }
 
-    public function globalSaturation(): float {
+    public function globalSaturation(): float
+    {
         return $this->globalSaturation;
     }
 
-    public function turmaOverloads(): array {
+    public function turmaOverloads(): array
+    {
         return $this->turmaOverloads;
     }
 
-    public function professorOverloads(): array {
+    public function professorOverloads(): array
+    {
         return $this->professorOverloads;
     }
 
-    public function doubleBlockIssues(): array {
+    public function doubleBlockIssues(): array
+    {
         return $this->doubleBlockIssues;
     }
 
-    public function structuralBottlenecks(): array {
+    public function structuralBottlenecks(): array
+    {
         return $this->structuralBottlenecks;
     }
 
-    public function suggestions(): array {
+    public function suggestions(): array
+    {
         return $this->suggestions;
     }
 
-    public function riskIndex(): int {
+    public function riskIndex(): int
+    {
         return $this->riskIndex;
     }
 
-    /* ============================================================
-     |  CLASSIFICAÇÃO DE RISCO
-     ============================================================ */
-
-    public function riskLevel(): string {
-        return match (true) {
-            $this->riskIndex >= 80 => 'CRITICO',
-            $this->riskIndex >= 60 => 'ALTO',
-            $this->riskIndex >= 40 => 'MODERADO',
-            $this->riskIndex >= 20 => 'BAIXO',
-            default => 'MINIMO',
-        };
+    public function structuralEntropy(): float
+    {
+        return $this->structuralEntropy;
     }
 
-    /* ============================================================
-     |  SERIALIZAÇÃO (para cache / banco / frontend)
-     ============================================================ */
+    public function riskLevel(): string
+    {
+        return (new RiskClassification())->classify($this->riskIndex);
+    }
 
-    public function toArray(): array {
+    public function toArray(): array
+    {
         return [
             'is_feasible' => $this->isFeasible,
             'global_saturation' => round($this->globalSaturation, 2),
             'risk_index' => $this->riskIndex,
             'risk_level' => $this->riskLevel(),
+            'structural_entropy' => round($this->structuralEntropy, 2),
             'turmas_criticas' => $this->turmaOverloads,
             'professores_criticos' => $this->professorOverloads,
             'aulas_duplas_problema' => $this->doubleBlockIssues,

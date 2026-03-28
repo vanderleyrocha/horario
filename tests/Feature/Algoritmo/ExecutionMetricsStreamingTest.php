@@ -1,0 +1,62 @@
+<?php
+
+use App\Models\Horario;
+use App\Modules\AG\Infrastructure\Logging\GATelemetryLogger;
+use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
+use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
+use App\Modules\AG\Infrastructure\Progress\CacheProgressReporter;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+
+it('flushes generation metrics immediately and publishes the current metric to cache', function () {
+    $horario = Horario::factory()->create();
+
+    $recorder = new ExecutionMetricsRecorder();
+    $executionId = $recorder->startExecution(
+        horarioId: $horario->id,
+        populationSize: 120,
+        generations: 500,
+        parameters: ['populacao' => 120, 'geracoes' => 500]
+    );
+
+    $reporter = new CacheAndDbProgressReporter(
+        new CacheProgressReporter($horario->id),
+        $recorder,
+        app(GATelemetryLogger::class),
+        $horario->id
+    );
+
+    $reporter->report([
+        'phase' => 'evolving',
+        'generation' => 5,
+        'best_fitness' => 91.25,
+        'avg_fitness' => 84.10,
+        'variance' => 1.4,
+        'diversity' => 0.66,
+        'entropy' => 0.72,
+        'mutation_rate' => 0.14,
+        'stagnation' => 2,
+        'landscape_state' => 'equilibrado',
+        'operator_used' => 'StructuredSwapMutation',
+        'operator_reward' => 0.18,
+    ]);
+
+    $storedMetric = DB::table('schedule_generation_metrics')
+        ->where('execution_id', $executionId)
+        ->where('generation', 5)
+        ->first();
+
+    $cachedMetric = Cache::get("ga_execution_metrics_{$executionId}");
+
+    expect($storedMetric)->not->toBeNull()
+        ->and((int) $storedMetric->generation)->toBe(5)
+        ->and((float) $storedMetric->best_fitness)->toBe(91.25)
+        ->and($cachedMetric)->toMatchArray([
+            'execution_id' => $executionId,
+            'generation' => 5,
+            'best_fitness' => 91.25,
+            'avg_fitness' => 84.10,
+            'operator_used' => 'StructuredSwapMutation',
+            'landscape_state' => 'equilibrado',
+        ]);
+});

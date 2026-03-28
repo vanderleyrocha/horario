@@ -7,7 +7,8 @@
             <p class="text-gray-600 mt-1">Gerencie e visualize os horários gerados</p>
         </div>
 
-        <a href="{{ route('horarios.create') }}" wire:navigate class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <a href="{{ route('horarios.create') }}" wire:navigate
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             Novo Horário
         </a>
     </div>
@@ -21,7 +22,7 @@
 
                     <div>
                         <h3 class="text-lg font-bold text-gray-900">
-                            {{ $horario->nome }}
+                            {{ $horario->id . '- ' . $horario->nome }}
                         </h3>
                         <p class="text-sm text-gray-500">
                             {{ $horario->ano }}/{{ $horario->semestre }}
@@ -60,16 +61,19 @@
                 {{-- AÇÕES RÁPIDAS --}}
                 <div class="grid grid-cols-4 gap-2 mb-2">
 
-                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
+                    <a href="{{ route('horarios.manage', $horario) }}" wire:navigate
+                        class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg text-center">
                         Configurar
                     </a>
 
-                    <a href="{{ route('algoritmo.center', $horario) }}" wire:navigate class="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg text-center">
+                    <a href="{{ route('algoritmo.center', $horario) }}" wire:navigate
+                        class="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg text-center">
                         Executar Solver
                     </a>
 
                     @if ($horario->lastExecution)
-                        <a href="{{ route('algoritmo.execution', $horario->lastExecution->id) }}" wire:navigate class="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg text-center">
+                        <a href="{{ route('algoritmo.execution', $horario->lastExecution->id) }}" wire:navigate
+                            class="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg text-center">
                             Dashboard
                         </a>
                     @else
@@ -78,7 +82,8 @@
                         </div>
                     @endif
 
-                    <a href="{{ route('horarios.show', $horario) }}" wire:navigate class="px-3 py-2 bg-gray-700 text-white text-sm rounded-lg text-center">
+                    <a href="{{ route('horarios.show', $horario) }}" wire:navigate
+                        class="px-3 py-2 bg-gray-700 text-white text-sm rounded-lg text-center">
                         Visualizar
                     </a>
 

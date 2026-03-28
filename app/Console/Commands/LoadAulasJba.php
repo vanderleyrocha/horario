@@ -16,7 +16,11 @@ class LoadAulasJba extends Command
      *
      * @var string
      */
-    protected $signature = 'aulas:load-jba';
+    protected $signature = 'aulas:load-jba
+        {horario_id : ID do horário a ser referenciado pelas aulas}
+        {escola_id : ID da escola}
+        {ano : Ano}
+        ';
 
     /**
      * The console command description.
@@ -30,19 +34,24 @@ class LoadAulasJba extends Command
      */
     public function handle()
     {
+        $horario_id = $this->argument('horario_id');
+        $escola_id = $this->argument('escola_id');
+        $ano = $this->argument('ano');
+
+
         $turno = [1 => "Manhã", 2 => "Tarde", 3 => "Noite", 4 => "Integral"];
 
         $turmas_r = DB::connection('jba')
             ->table('turmas')
-            ->where([['escola_id', 12011517], ['ano', 2026]])
+            ->where([['escola_id', $escola_id], ['ano', $ano]])
             ->get()
             ->keyBy('id')
         ;
 
         $data = DB::connection('jba')
             ->table('disciplina_serie')
-            ->select('disciplina_id', 'serie_id', 'ch_semanal')
-            ->where([['escola_id', 12011517], ['ano', 2026]])
+            ->select(['disciplina_id', 'serie_id', 'ch_semanal'])
+            ->where([['escola_id', $escola_id], ['ano', $ano]])
             ->get()
         ;
 
@@ -55,8 +64,8 @@ class LoadAulasJba extends Command
         $professor = DB::connection('jba')
             ->table('disciplina_professor AS dp')
             ->join("servidores AS s", "s.id", "=", "dp.professor_id")
-            ->select('s.id', 's.nome', 's.nome_abreviado', 's.email')
-            ->where([['dp.escola_id', 12011517], ['dp.ano', 2026]])
+            ->select(['s.id', 's.nome', 's.nome_abreviado', 's.email'])
+            ->where([['dp.escola_id', $escola_id], ['dp.ano', $ano]])
             ->get()
             ->keyBy('id')
         ;
@@ -64,8 +73,8 @@ class LoadAulasJba extends Command
         $disciplina = DB::connection('jba')
             ->table('disciplina_professor AS dp')
             ->join("disciplinas AS d", "d.id", "=", "dp.disciplina_id")
-            ->select('d.id', 'd.nome', 'd.nome_abreviado')
-            ->where([['dp.escola_id', 12011517], ['dp.ano', 2026]])
+            ->select(['d.id', 'd.nome', 'd.nome_abreviado'])
+            ->where([['dp.escola_id', $escola_id], ['dp.ano', $ano]])
             ->get()
             ->keyBy('id')
         ;
@@ -75,7 +84,7 @@ class LoadAulasJba extends Command
             ->join("disciplinas AS d", "d.id", "=", "ds.disciplina_id")
             ->join("turmas AS t", "t.serie_id", "=", "ds.serie_id")
             ->select('t.id')
-            ->where([['ds.escola_id', 12011517], ['ds.ano', 2026], ['t.escola_id', 12011517], ['t.ano', 2026], ['d.tipo', 'Eletiva']])
+            ->where([['ds.escola_id', $escola_id], ['ds.ano', $ano], ['t.escola_id', $escola_id], ['t.ano', $ano], ['d.tipo', 'Eletiva']])
             ->pluck("id")
         ;
 
@@ -124,8 +133,8 @@ class LoadAulasJba extends Command
         $pt = DB::connection('jba')
             ->table('disciplina_professor AS dp')
             ->join("professor_turma AS pt", "pt.disciplina_professor_id", "=", "dp.id")
-            ->select('dp.disciplina_id', 'dp.professor_id', 'pt.turma_id', 'pt.eletiva_professor_id')
-            ->where([['escola_id', 12011517], ['ano', 2026]])
+            ->select(['dp.disciplina_id', 'dp.professor_id', 'pt.turma_id', 'pt.eletiva_professor_id'])
+            ->where([['escola_id', $escola_id], ['ano', $ano]])
             ->get()
         ;
 
@@ -138,12 +147,12 @@ class LoadAulasJba extends Command
                 $turma_id = array_shift($tel);
             }
             Aula::updateOrCreate([
-                    "horario_id" => 3,
+                    "horario_id" => $horario_id,
                     "professor_id" => $t->professor_id,
                     "disciplina_id" => $t->disciplina_id,
                     "turma_id" => $turma_id,
                 ], [
-                    "horario_id" => 3,
+                    "horario_id" => $horario_id,
                     "professor_id" => $t->professor_id,
                     "disciplina_id" => $t->disciplina_id,
                     "turma_id" => $turma_id,

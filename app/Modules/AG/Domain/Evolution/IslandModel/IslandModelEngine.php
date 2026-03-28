@@ -7,6 +7,8 @@ namespace App\Modules\AG\Domain\Evolution\IslandModel;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Models\ScheduleExecution;
+use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use Illuminate\Support\Facades\Log;
 
 final class IslandModelEngine
@@ -17,6 +19,7 @@ final class IslandModelEngine
     private ?MetricsRecorder $globalMetrics = null;
     private ?ProgressReporterInterface $progress = null;
     private float $telemetryMutationRate = 0.05;
+    private ?int $executionId = null;
 
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
@@ -39,8 +42,15 @@ final class IslandModelEngine
         $this->telemetryMutationRate = $mutationRate;
     }
 
+    public function setExecutionId(int $executionId): void
+    {
+        $this->executionId = $executionId;
+    }
+
     public function run(int $generations): Cromossomo
     {
+        $this->assertNotCancelled();
+
         foreach ($this->islands as $island) {
             $island->initialize();
         }
@@ -49,6 +59,7 @@ final class IslandModelEngine
         Log::info('Iniciando o motor de orquestracao sincronica das ilhas.');
 
         for ($generation = 1; $generation <= $generations; $generation++) {
+            $this->assertNotCancelled();
             $globalPopulation = [];
             $telemetrySnapshots = [];
 
@@ -110,5 +121,20 @@ final class IslandModelEngine
         }
 
         return $globalBest;
+    }
+
+    private function assertNotCancelled(): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        $status = ScheduleExecution::query()
+            ->whereKey($this->executionId)
+            ->value('status');
+
+        if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
+            throw ExecutionCancelledException::forExecution($this->executionId);
+        }
     }
 }

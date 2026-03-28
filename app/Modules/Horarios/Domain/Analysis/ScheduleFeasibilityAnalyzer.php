@@ -1,141 +1,106 @@
 <?php
 
-namespace App\Modules\AG\Domain\Analysis;
+declare(strict_types=1);
 
-use App\Modules\AG\Domain\Analysis\DTO\FeasibilityReport;
+namespace App\Modules\Horarios\Domain\Analysis;
 
-final class ScheduleFeasibilityAnalyzer {
+use App\Modules\Horarios\Domain\Analysis\DTO\FeasibilityReport;
+use App\Modules\Horarios\Domain\Risk\RiskIndexCalculator;
+use App\Modules\Horarios\Domain\Risk\SaturationCalculator;
+use App\Modules\Horarios\Domain\Risk\StructuralEntropyCalculator;
 
-    public function analisar(array $aulas, int $dias, int $temposPorDia): FeasibilityReport {
-        if (empty($aulas)) {
+final class ScheduleFeasibilityAnalyzer
+{
+    public function __construct(
+        private readonly ?SaturationCalculator $saturationCalculator = null,
+        private readonly ?StructuralEntropyCalculator $structuralEntropyCalculator = null,
+        private readonly ?RiskIndexCalculator $riskIndexCalculator = null
+    ) {
+    }
+
+    public function analisar(array $aulas, int $dias, int $temposPorDia): FeasibilityReport
+    {
+        if ($aulas === []) {
             return new FeasibilityReport(isFeasible: true, globalSaturation: 0.0);
         }
 
-        $capacidadePorTurma = $dias * $temposPorDia;
+        $saturationCalculator = $this->saturationCalculator ?? new SaturationCalculator();
+        $structuralEntropyCalculator = $this->structuralEntropyCalculator ?? new StructuralEntropyCalculator();
+        $riskIndexCalculator = $this->riskIndexCalculator ?? new RiskIndexCalculator();
 
-        $cargaGlobal = 0;
-        $cargaPorTurma = [];
-        $cargaPorProfessor = [];
-        $blocosNecessarios = 0;
+        $capacityPerEntity = $dias * $temposPorDia;
+        $globalLoad = 0;
+        $loadsByClass = [];
+        $loadsByProfessor = [];
+        $requiredBlocks = 0;
 
         foreach ($aulas as $aula) {
-
-            $duracao = match ($aula->tipo) {
+            $duration = match ($aula->tipo) {
                 'simples' => 1,
                 'dupla' => 2,
                 'tripla' => 3,
                 default => 1,
             };
 
-            $carga = $aula->aulas_semana * $duracao;
+            $load = $aula->aulas_semana * $duration;
+            $globalLoad += $load;
 
-            $cargaGlobal += $carga;
+            $loadsByClass[$aula->turma->id] = ($loadsByClass[$aula->turma->id] ?? 0) + $load;
+            $loadsByProfessor[$aula->professor->id] = ($loadsByProfessor[$aula->professor->id] ?? 0) + $load;
 
-            $cargaPorTurma[$aula->turma->id] =
-                ($cargaPorTurma[$aula->turma->id] ?? 0) + $carga;
-
-            $cargaPorProfessor[$aula->professor->id] =
-                ($cargaPorProfessor[$aula->professor->id] ?? 0) + $carga;
-
-            if ($duracao > 1) {
-                $blocosNecessarios += $aula->aulas_semana;
+            if ($duration > 1) {
+                $requiredBlocks += $aula->aulas_semana;
             }
         }
 
-        $totalTurmas = count(array_unique(
-            array_map(fn($a) => $a->turma->id, $aulas)
-        ));
+        $totalClasses = count($loadsByClass);
 
-        if ($totalTurmas === 0) {
+        if ($totalClasses === 0) {
             return new FeasibilityReport(isFeasible: true, globalSaturation: 0.0);
         }
 
-        $capacidadeGlobal = $totalTurmas * $capacidadePorTurma;
+        $globalSaturation = $saturationCalculator->global($globalLoad, $totalClasses, $dias, $temposPorDia);
+        $turmaOverloads = $saturationCalculator->overloads($loadsByClass, $capacityPerEntity);
+        $professorOverloads = $saturationCalculator->overloads($loadsByProfessor, $capacityPerEntity);
 
-        $globalSaturation = $capacidadeGlobal > 0 ? ($cargaGlobal / $capacidadeGlobal) * 100 : 0.0;
-
-        /* ============================================================
-         | TURMAS
-         ============================================================ */
-
-        $turmaOverloads = [];
-
-        foreach ($cargaPorTurma as $turmaId => $carga) {
-
-            if ($carga > $capacidadePorTurma) {
-
-                $excedente = $carga - $capacidadePorTurma;
-
-                $turmaOverloads[$turmaId] = [
-                    'carga_total' => $carga,
-                    'capacidade_maxima' => $capacidadePorTurma,
-                    'excedente' => $excedente,
-                    'percentual' =>
-                    round(($carga / $capacidadePorTurma) * 100, 2),
-                ];
-            }
-        }
-
-        /* ============================================================
-         | PROFESSORES (somente indicador de risco)
-         ============================================================ */
-
-        $professorOverloads = [];
-
-        $capacidadeProfessor = $dias * $temposPorDia;
-
-        foreach ($cargaPorProfessor as $professorId => $carga) {
-
-            if ($carga > $capacidadeProfessor) {
-
-                $excedente = $carga - $capacidadeProfessor;
-
-                $professorOverloads[$professorId] = [
-                    'carga_total' => $carga,
-                    'capacidade_maxima' => $capacidadeProfessor,
-                    'excedente' => $excedente,
-                    'percentual' =>
-                    round(($carga / $capacidadeProfessor) * 100, 2),
-                ];
-            }
-        }
-
-        /* ============================================================
-         | BLOCOS CONTÍNUOS
-         ============================================================ */
-
-        $blocosPossiveis = $totalTurmas * $dias * max($temposPorDia - 1, 0);
-
+        $availableBlocks = $totalClasses * $dias * max($temposPorDia - 1, 0);
         $doubleBlockIssues = [];
 
-        if ($blocosNecessarios > $blocosPossiveis) {
-
+        if ($requiredBlocks > $availableBlocks) {
             $doubleBlockIssues[] = [
                 'duracao' => 'dupla_ou_maior',
-                'blocos_disponiveis' => $blocosPossiveis,
-                'necessarios' => $blocosNecessarios,
-                'deficit' =>
-                $blocosNecessarios - $blocosPossiveis,
+                'blocos_disponiveis' => $availableBlocks,
+                'necessarios' => $requiredBlocks,
+                'deficit' => $requiredBlocks - $availableBlocks,
             ];
         }
 
-        /* ============================================================
-         | DETERMINAR VIABILIDADE
-         ============================================================ */
+        $structuralEntropy = $structuralEntropyCalculator->calculate(array_merge(
+            array_values($loadsByClass),
+            array_values($loadsByProfessor)
+        ));
 
-        $isFeasible = empty($turmaOverloads) && empty($doubleBlockIssues) && $globalSaturation <= 100;
+        $structuralBottlenecks = $this->buildStructuralBottlenecks(
+            $globalSaturation,
+            $turmaOverloads,
+            $professorOverloads,
+            $doubleBlockIssues,
+            $structuralEntropy
+        );
 
-        /* ============================================================
-         | SUGESTÕES
-         ============================================================ */
+        $isFeasible = empty($turmaOverloads)
+            && empty($doubleBlockIssues)
+            && $globalSaturation <= 100;
 
-        $suggestions = $this->gerarSugestoes($globalSaturation, $turmaOverloads, $professorOverloads, $doubleBlockIssues);
+        $suggestions = $this->gerarSugestoes($globalSaturation, $turmaOverloads, $professorOverloads, $doubleBlockIssues, $structuralEntropy);
 
-        /* ============================================================
-         | RISK INDEX
-         ============================================================ */
-
-        $riskIndex = $this->calcularIndiceRisco($globalSaturation, $turmaOverloads, $professorOverloads, $doubleBlockIssues);
+        $riskIndex = $riskIndexCalculator->calculate(
+            $globalSaturation,
+            $turmaOverloads,
+            $professorOverloads,
+            $doubleBlockIssues,
+            $structuralEntropy
+        );
 
         return new FeasibilityReport(
             isFeasible: $isFeasible,
@@ -143,51 +108,92 @@ final class ScheduleFeasibilityAnalyzer {
             turmaOverloads: $turmaOverloads,
             professorOverloads: $professorOverloads,
             doubleBlockIssues: $doubleBlockIssues,
-            structuralBottlenecks: [],
+            structuralBottlenecks: $structuralBottlenecks,
             suggestions: $suggestions,
-            riskIndex: $riskIndex
+            riskIndex: $riskIndex,
+            structuralEntropy: $structuralEntropy
         );
     }
 
-    /* ============================================================
-     | SUGESTÕES
-     ============================================================ */
-
-    private function gerarSugestoes(float $saturacao, array $turmas, array $professores, array $blocos): array {
-
+    private function gerarSugestoes(
+        float $saturacao,
+        array $turmas,
+        array $professores,
+        array $blocos,
+        float $entropiaEstrutural
+    ): array {
         $sugestoes = [];
 
         if ($saturacao > 100) {
-            $sugestoes[] =
-                "Aumentar períodos por dia ou reduzir carga global.";
+            $sugestoes[] = 'Aumentar periodos por dia ou reduzir carga global.';
         }
 
         foreach ($turmas as $id => $dados) {
-            $sugestoes[] =
-                "Reduzir carga da turma {$id} em {$dados['excedente']} tempos.";
+            $sugestoes[] = "Reduzir carga da turma {$id} em {$dados['excedente']} tempos.";
         }
 
         foreach ($professores as $id => $dados) {
-            $sugestoes[] =
-                "Redistribuir {$dados['excedente']} tempos do professor {$id}.";
+            $sugestoes[] = "Redistribuir {$dados['excedente']} tempos do professor {$id}.";
         }
 
-        if (!empty($blocos)) {
-            $sugestoes[] =
-                "Reduzir aulas duplas/triplas ou permitir janelas.";
+        if ($blocos !== []) {
+            $sugestoes[] = 'Reduzir aulas duplas/triplas ou permitir janelas.';
+        }
+
+        if ($entropiaEstrutural < 45) {
+            $sugestoes[] = 'Rebalancear a distribuicao estrutural da carga entre turmas e professores.';
         }
 
         return $sugestoes;
     }
 
-    /* ============================================================
-     | RISCO
-     ============================================================ */
+    private function buildStructuralBottlenecks(
+        float $globalSaturation,
+        array $turmaOverloads,
+        array $professorOverloads,
+        array $doubleBlockIssues,
+        float $structuralEntropy
+    ): array {
+        $bottlenecks = [];
 
-    private function calcularIndiceRisco(float $saturacao, array $turmas, array $professores, array $blocos): int {
+        if ($globalSaturation > 100) {
+            $bottlenecks[] = [
+                'tipo' => 'saturacao_global',
+                'valor' => round($globalSaturation, 2),
+            ];
+        }
 
-        $risco = ($saturacao * 0.5) + (count($turmas) * 5) + (count($professores) * 4) + (count($blocos) * 6);
+        if ($turmaOverloads !== []) {
+            $bottlenecks[] = [
+                'tipo' => 'excesso_turmas',
+                'valor' => count($turmaOverloads),
+            ];
+        }
 
-        return (int) min(100, round($risco));
+        if ($professorOverloads !== []) {
+            $bottlenecks[] = [
+                'tipo' => 'excesso_professores',
+                'valor' => count($professorOverloads),
+            ];
+        }
+
+        if ($doubleBlockIssues !== []) {
+            $bottlenecks[] = [
+                'tipo' => 'deficit_blocos',
+                'valor' => array_sum(array_map(
+                    static fn (array $issue): int => (int) ($issue['deficit'] ?? 0),
+                    $doubleBlockIssues
+                )),
+            ];
+        }
+
+        if ($structuralEntropy < 45) {
+            $bottlenecks[] = [
+                'tipo' => 'entropia_estrutural_baixa',
+                'valor' => round($structuralEntropy, 2),
+            ];
+        }
+
+        return $bottlenecks;
     }
 }

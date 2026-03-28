@@ -22,7 +22,23 @@ class GenerationMetrics
 
     public ?string $landscapeState;
 
-    public function __construct(int $generation, float $bestFitness, float $avgFitness, float $variance, float $diversity, float $entropy, float $mutationRate, int $stagnation, ?string $landscapeState = null)
+    public ?string $operatorUsed;
+
+    public ?float $operatorReward;
+
+    public function __construct(
+        int $generation,
+        float $bestFitness,
+        float $avgFitness,
+        float $variance,
+        float $diversity,
+        float $entropy,
+        float $mutationRate,
+        int $stagnation,
+        ?string $landscapeState = null,
+        ?string $operatorUsed = null,
+        ?float $operatorReward = null
+    )
     {
         $this->generation = $generation;
         $this->bestFitness = $bestFitness;
@@ -33,5 +49,7 @@ class GenerationMetrics
         $this->mutationRate = $mutationRate;
         $this->stagnation = $stagnation;
         $this->landscapeState = $landscapeState;
+        $this->operatorUsed = $operatorUsed;
+        $this->operatorReward = $operatorReward;
     }
 }

@@ -124,7 +124,7 @@ class Index extends Component
                 $query->where('status', $this->filterStatus))
             ->when($this->filterAno, fn ($query) =>
                 $query->where('ano', $this->filterAno))
-            ->orderBy('created_at', 'desc')
+            ->orderBy('id')
             ->paginate(10);
 
         return view('livewire.horarios.index', [

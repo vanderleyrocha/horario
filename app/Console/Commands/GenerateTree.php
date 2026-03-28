@@ -5,8 +5,9 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use DirectoryIterator;
 
-class GenerateTree extends Command {
-    protected $signature = 'tree:generate 
+class GenerateTree extends Command
+{
+    protected $signature = 'tree:generate
         {path : Caminho da pasta base}
         {--output=tree.txt : Arquivo de saída}
         {--exclude=* : Nomes de subpastas a excluir da listagem (pode ser usado múltiplas vezes)}';
@@ -15,7 +16,8 @@ class GenerateTree extends Command {
 
     private array $excludedDirs = [];
 
-    public function handle(): int {
+    public function handle(): int
+    {
         $basePath = realpath($this->argument('path'));
 
         if (!$basePath || !is_dir($basePath)) {
@@ -25,7 +27,7 @@ class GenerateTree extends Command {
 
         $this->excludedDirs = $this->option('exclude') ?? [];
 
-        $lines   = [];
+        $lines = [];
         $lines[] = basename($basePath);
 
         $this->renderDirectory($basePath, $lines);
@@ -46,9 +48,10 @@ class GenerateTree extends Command {
      * - ordem alfabética
      * - exclusão de pastas configuradas em $excludedDirs
      */
-    private function renderDirectory(string $path, array &$lines, string $prefix = ''): void {
+    private function renderDirectory(string $path, array &$lines, string $prefix = ''): void
+    {
         $directories = [];
-        $files       = [];
+        $files = [];
 
         foreach (new DirectoryIterator($path) as $item) {
             if ($item->isDot()) {
@@ -71,10 +74,7 @@ class GenerateTree extends Command {
         sort($directories, SORT_NATURAL | SORT_FLAG_CASE);
         sort($files, SORT_NATURAL | SORT_FLAG_CASE);
 
-        $entries = array_merge(
-            array_map(fn($d) => ['type' => 'dir', 'name' => $d], $directories),
-            array_map(fn($f) => ['type' => 'file', 'name' => $f], $files)
-        );
+        $entries = array_merge(array_map(fn ($d) => ['type' => 'dir', 'name' => $d], $directories), array_map(fn ($f) => ['type' => 'file', 'name' => $f], $files));
 
         $total = count($entries);
 
@@ -82,14 +82,10 @@ class GenerateTree extends Command {
             $isLast = $index === $total - 1;
 
             $connector = $isLast ? '└── ' : '├── ';
-            $lines[]   = $prefix . $connector . $entry['name'];
+            $lines[] = $prefix . $connector . $entry['name'];
 
             if ($entry['type'] === 'dir') {
-                $this->renderDirectory(
-                    $path . DIRECTORY_SEPARATOR . $entry['name'],
-                    $lines,
-                    $prefix . ($isLast ? '    ' : '│   ')
-                );
+                $this->renderDirectory($path . DIRECTORY_SEPARATOR . $entry['name'], $lines, $prefix . ($isLast ? '    ' : '│   '));
             }
         }
     }

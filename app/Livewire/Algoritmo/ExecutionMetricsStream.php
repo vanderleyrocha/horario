@@ -24,7 +24,15 @@ class ExecutionMetricsStream extends Component
             return;
         }
 
-        $this->dispatch('metrics-update', $metrics);
+        $payload = is_array($metrics) && array_is_list($metrics)
+            ? end($metrics)
+            : $metrics;
+
+        if (!is_array($payload)) {
+            return;
+        }
+
+        $this->dispatch('metrics-update', metric: $payload);
     }
 
     public function render()

@@ -14,6 +14,7 @@ class TurmaFactory extends Factory
         return [
             'nome' => 'Turma ' . $this->faker->unique()->bothify('##?'),
             'codigo' => strtoupper($this->faker->unique()->bothify('TUR-###')),
+            'serie' => $this->faker->numberBetween(1, 9),
             'turno' => $this->faker->randomElement(['matutino', 'vespertino', 'noturno', 'integral']),
             'numero_alunos' => $this->faker->numberBetween(20, 50),
             'ano' => $this->faker->year(),
