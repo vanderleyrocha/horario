@@ -24,6 +24,13 @@ final class LandscapeMemory
 
     private int $maxPoints = 5000;
 
+    /**
+     * @var LandscapeTrajectorySnapshot[]
+     */
+    private array $trajectory = [];
+
+    private int $maxTrajectory = 120;
+
     /*
     ---------------------------------------------------------
     Registrar estado detectado
@@ -63,6 +70,34 @@ final class LandscapeMemory
     public function points(): array
     {
         return $this->points;
+    }
+
+    public function recordTrajectory(LandscapeTrajectorySnapshot $snapshot): void
+    {
+        $this->trajectory[] = $snapshot;
+
+        if (count($this->trajectory) > $this->maxTrajectory) {
+            array_shift($this->trajectory);
+        }
+    }
+
+    public function lastTrajectory(): ?LandscapeTrajectorySnapshot
+    {
+        if ($this->trajectory === []) {
+            return null;
+        }
+
+        return $this->trajectory[array_key_last($this->trajectory)];
+    }
+
+    public function bestDeltaWindow(int $window = 5): float
+    {
+        return $this->windowedDelta('bestFitness', $window);
+    }
+
+    public function avgDeltaWindow(int $window = 5): float
+    {
+        return $this->windowedDelta('avgFitness', $window);
     }
 
     public function lastFitnessDelta(): float
@@ -176,5 +211,33 @@ final class LandscapeMemory
     {
         $this->history = [];
         $this->points = [];
+        $this->trajectory = [];
+    }
+
+    /**
+     * @param  'bestFitness'|'avgFitness'  $metric
+     */
+    private function windowedDelta(string $metric, int $window): float
+    {
+        $snapshots = array_slice($this->trajectory, -max(2, $window));
+        $count = count($snapshots);
+
+        if ($count < 2) {
+            return 0.0;
+        }
+
+        $deltas = [];
+
+        for ($index = 1; $index < $count; $index++) {
+            $previous = $snapshots[$index - 1];
+            $current = $snapshots[$index];
+            $deltas[] = $current->{$metric} - $previous->{$metric};
+        }
+
+        if ($deltas === []) {
+            return 0.0;
+        }
+
+        return array_sum($deltas) / count($deltas);
     }
 }

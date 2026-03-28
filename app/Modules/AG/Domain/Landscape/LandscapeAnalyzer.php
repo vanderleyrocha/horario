@@ -11,6 +11,8 @@ final class LandscapeAnalyzer
     ): LandscapeObservation {
         $fitnessGap = max(0.0, $metrics->bestFitness - $metrics->avgFitness);
         $bestDelta = $memory->lastFitnessDelta();
+        $bestDeltaWindow = $memory->bestDeltaWindow(6);
+        $avgDeltaWindow = $memory->avgDeltaWindow(6);
         $plateauDuration = $memory->plateauDuration();
         $convergenceTrend = $memory->convergenceTrend();
         $stagnationScore = $this->normalize($metrics->stagnation, 20.0);
@@ -18,13 +20,18 @@ final class LandscapeAnalyzer
         $lowDiversityScore = 1.0 - min(1.0, $metrics->diversity);
         $lowEntropyScore = 1.0 - min(1.0, $metrics->entropy);
         $flatSlopeScore = 1.0 - min(1.0, abs($memory->recentFitnessSlope(6)));
+        $lowAcceptanceScore = 1.0 - min(1.0, $metrics->improvementAcceptanceRate);
+        $turnoverStallScore = 1.0 - min(1.0, $metrics->populationTurnover);
         $depthScore = min(1.0, (
-            ($stagnationScore * 0.25) +
-            ($plateauScore * 0.20) +
-            ($lowDiversityScore * 0.20) +
-            ($lowEntropyScore * 0.20) +
-            ($convergenceTrend * 0.10) +
-            ($flatSlopeScore * 0.05)
+            ($stagnationScore * 0.22) +
+            ($plateauScore * 0.16) +
+            ($lowDiversityScore * 0.14) +
+            ($lowEntropyScore * 0.14) +
+            ($convergenceTrend * 0.08) +
+            ($flatSlopeScore * 0.06) +
+            ($lowAcceptanceScore * 0.10) +
+            ($turnoverStallScore * 0.06) +
+            ((1.0 - min(1.0, abs($bestDeltaWindow))) * 0.04)
         ));
 
         $phenomenon = LandscapePhenomenon::Neutral;
@@ -34,7 +41,9 @@ final class LandscapeAnalyzer
             $metrics->stagnation >= 14 &&
             $plateauDuration >= 8 &&
             $metrics->diversity <= 0.18 &&
-            $metrics->entropy <= 0.22
+            $metrics->entropy <= 0.22 &&
+            $metrics->populationTurnover <= 0.25 &&
+            $metrics->eliteSimilarity >= 0.75
         ) {
             $phenomenon = LandscapePhenomenon::DeepValley;
             $confidence = max(0.70, $depthScore);
@@ -42,7 +51,8 @@ final class LandscapeAnalyzer
             $metrics->stagnation >= 8 &&
             $metrics->diversity <= 0.25 &&
             $metrics->entropy <= 0.30 &&
-            abs($bestDelta) <= 0.001
+            abs($bestDeltaWindow) <= 0.01 &&
+            $metrics->bestSignatureChanged === false
         ) {
             $phenomenon = LandscapePhenomenon::LocalMinimum;
             $confidence = max(0.55, $depthScore * 0.85);
@@ -60,6 +70,13 @@ final class LandscapeAnalyzer
             plateauDuration: $plateauDuration,
             convergenceTrend: round($convergenceTrend, 6),
             depthScore: round($depthScore, 6),
+            bestDeltaWindow: round($bestDeltaWindow, 6),
+            avgDeltaWindow: round($avgDeltaWindow, 6),
+            improvementAcceptanceRate: round($metrics->improvementAcceptanceRate, 6),
+            worseningAcceptanceRate: round($metrics->worseningAcceptanceRate, 6),
+            populationTurnover: round($metrics->populationTurnover, 6),
+            bestSignatureChanged: $metrics->bestSignatureChanged,
+            eliteSimilarity: round($metrics->eliteSimilarity, 6),
             diversity: round($metrics->diversity, 6),
             entropy: round($metrics->entropy, 6)
         );

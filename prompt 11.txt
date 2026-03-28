@@ -10,3 +10,56 @@ Para esse SLAE ficar sério, eu recomendaria a próxima intervenção em duas et
     Trocar o enum simples de LandscapeState.php por fenômenos mais ricos, como local_minimum, plateau, deep_valley, deceptive_region, attraction_basin_lock, e fazer LandscapeEngine responder com mudanças radicais de busca quando detectar aprisionamento real: restart parcial de ilhas, mutação forte temporária, ALNS intensivo, diversificação forçada e redução de pressão seletiva.
 
 Próximo passo: começar esse SLAE pela telemetria mínima necessária, sem ainda mudar a estratégia. na prática, implementar primeiro um LandscapeObservation/LandscapePhenomenon com persistência e streaming para frontend, para o solver aprender a “ver” local minima e deep valley antes de reagir a eles.
+
+Sim. O próximo passo com melhor custo-benefício é sair de “observação por estado” para “observação por trajetória”.
+
+Hoje a SLAE já enxerga sinais agregados como stagnation, diversity, entropy, plateau_duration e depth_score. Isso já ajuda a sugerir local_minimum e deep_valley, mas ainda não distingue bem:
+
+vale profundo de estagnação comum
+bacia de atração de simples convergência
+deception de falta temporária de progresso
+Minha ordem sugerida seria esta:
+
+1. Adicionar sinais de trajetória por geração.
+    Persistir e streamar:
+    best_delta_window
+    avg_delta_window
+    improvement_acceptance_rate
+    worsening_acceptance_rate
+    population_turnover
+    best_signature_changed
+    elite_similarity
+    Isso é o que mais aumenta a “visão” da SLAE sem mudar a estratégia ainda.
+
+2. Detectar basin_of_attraction_lock.
+    Heurística prática:
+    melhor fitness quase não muda
+    assinatura do melhor fica estável por muitas gerações
+    diversidade cai
+    turnover real da população cai
+    Esse fenômeno costuma ser mais útil operacionalmente que “deep valley” isolado.
+
+3. Introduzir memória de episódios.
+    Em vez de só classificar a geração atual, registrar blocos como:
+    início do fenômeno
+    duração
+    intensidade máxima
+    como terminou
+    Isso melhora muito a leitura no frontend e depois facilita decisões adaptativas.
+
+4. Separar observation de response.
+    Criar um pipeline claro:
+    LandscapeObservation
+    LandscapePhenomenon
+    LandscapeEpisode
+    SearchResponsePolicy
+    Assim a SLAE evolui sem acoplar diagnóstico e reação cedo demais.
+
+5.Só depois ligar reação automática.
+Quando a observação estiver confiável, aí faz sentido reagir de forma forte:
+restart parcial de ilhas
+choque de mutação
+ALNS intensivo temporário
+troca de operador dominante
+redução de pressão seletiva
+

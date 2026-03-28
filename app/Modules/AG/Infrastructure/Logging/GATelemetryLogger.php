@@ -49,6 +49,27 @@ final class GATelemetryLogger
             'landscape_depth_score' => isset($metrics['landscape_observation']['depth_score'])
                 ? round((float) $metrics['landscape_observation']['depth_score'], 6)
                 : null,
+            'landscape_best_delta_window' => isset($metrics['landscape_observation']['best_delta_window'])
+                ? round((float) $metrics['landscape_observation']['best_delta_window'], 6)
+                : null,
+            'landscape_avg_delta_window' => isset($metrics['landscape_observation']['avg_delta_window'])
+                ? round((float) $metrics['landscape_observation']['avg_delta_window'], 6)
+                : null,
+            'landscape_improvement_acceptance_rate' => isset($metrics['landscape_observation']['improvement_acceptance_rate'])
+                ? round((float) $metrics['landscape_observation']['improvement_acceptance_rate'], 6)
+                : null,
+            'landscape_worsening_acceptance_rate' => isset($metrics['landscape_observation']['worsening_acceptance_rate'])
+                ? round((float) $metrics['landscape_observation']['worsening_acceptance_rate'], 6)
+                : null,
+            'landscape_population_turnover' => isset($metrics['landscape_observation']['population_turnover'])
+                ? round((float) $metrics['landscape_observation']['population_turnover'], 6)
+                : null,
+            'landscape_best_signature_changed' => isset($metrics['landscape_observation']['best_signature_changed'])
+                ? (bool) $metrics['landscape_observation']['best_signature_changed']
+                : null,
+            'landscape_elite_similarity' => isset($metrics['landscape_observation']['elite_similarity'])
+                ? round((float) $metrics['landscape_observation']['elite_similarity'], 6)
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

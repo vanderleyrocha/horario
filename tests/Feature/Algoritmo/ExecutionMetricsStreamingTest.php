@@ -43,6 +43,13 @@ it('flushes generation metrics immediately and publishes the current metric to c
             'confidence' => 0.81,
             'depth_score' => 0.74,
             'best_delta' => 0.0,
+            'best_delta_window' => -0.015,
+            'avg_delta_window' => -0.008,
+            'improvement_acceptance_rate' => 0.12,
+            'worsening_acceptance_rate' => 0.58,
+            'population_turnover' => 0.18,
+            'best_signature_changed' => false,
+            'elite_similarity' => 0.82,
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -78,5 +85,14 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ]);
 
     expect($cachedMetric['landscape_observation'] ?? null)->toBeArray()
-        ->and($cachedMetric['landscape_observation']['confidence'] ?? null)->toBe(0.81);
+        ->and($cachedMetric['landscape_observation']['confidence'] ?? null)->toBe(0.81)
+        ->and($cachedMetric['landscape_observation']['population_turnover'] ?? null)->toBe(0.18)
+        ->and($cachedMetric['landscape_observation']['elite_similarity'] ?? null)->toBe(0.82)
+        ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse();
+
+    $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
+
+    expect($storedObservation)->toBeArray()
+        ->and($storedObservation['best_delta_window'] ?? null)->toBe(-0.015)
+        ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008);
 });

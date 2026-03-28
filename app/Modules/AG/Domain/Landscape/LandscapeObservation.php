@@ -15,6 +15,13 @@ final class LandscapeObservation
         public readonly int $plateauDuration,
         public readonly float $convergenceTrend,
         public readonly float $depthScore,
+        public readonly float $bestDeltaWindow,
+        public readonly float $avgDeltaWindow,
+        public readonly float $improvementAcceptanceRate,
+        public readonly float $worseningAcceptanceRate,
+        public readonly float $populationTurnover,
+        public readonly bool $bestSignatureChanged,
+        public readonly float $eliteSimilarity,
         public readonly float $diversity,
         public readonly float $entropy
     ) {}
@@ -30,6 +37,13 @@ final class LandscapeObservation
             'plateau_duration' => $this->plateauDuration,
             'convergence_trend' => $this->convergenceTrend,
             'depth_score' => $this->depthScore,
+            'best_delta_window' => $this->bestDeltaWindow,
+            'avg_delta_window' => $this->avgDeltaWindow,
+            'improvement_acceptance_rate' => $this->improvementAcceptanceRate,
+            'worsening_acceptance_rate' => $this->worseningAcceptanceRate,
+            'population_turnover' => $this->populationTurnover,
+            'best_signature_changed' => $this->bestSignatureChanged,
+            'elite_similarity' => $this->eliteSimilarity,
             'diversity' => $this->diversity,
             'entropy' => $this->entropy,
         ];

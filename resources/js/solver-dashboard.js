@@ -335,13 +335,15 @@ function updateLandscapeObservation(phenomenon, observation) {
     const normalizedObservation = observation && typeof observation === "object" ? observation : {}
     const confidence = Number(normalizedObservation.confidence ?? 0)
     const depthScore = Number(normalizedObservation.depth_score ?? 0)
-    const bestDelta = Number(normalizedObservation.best_delta ?? 0)
-    const plateauDuration = Number(normalizedObservation.plateau_duration ?? 0)
+    const bestDeltaWindow = Number(normalizedObservation.best_delta_window ?? 0)
+    const populationTurnover = Number(normalizedObservation.population_turnover ?? 0)
+    const eliteSimilarity = Number(normalizedObservation.elite_similarity ?? 0)
+    const bestSignatureChanged = Boolean(normalizedObservation.best_signature_changed ?? false)
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `Δbest ${bestDelta.toFixed(3)} | plateau ${plateauDuration}`
+    summaryElement.textContent = `dBestWin ${bestDeltaWindow.toFixed(3)} | turnover ${(populationTurnover * 100).toFixed(0)}% | elite ${eliteSimilarity.toFixed(2)}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateAllCharts() {

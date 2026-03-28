@@ -77,7 +77,8 @@ final class GeneticAlgorithmEngine
                 mutationRate: $generationStep['mutation_rate'],
                 stagnation: $stagnation,
                 operatorUsed: $generationStep['operator_used'],
-                operatorReward: $generationStep['operator_reward']
+                operatorReward: $generationStep['operator_reward'],
+                populationTrajectory: $generationStep
             );
             $metrics = $postProcess['metrics'];
 
@@ -173,7 +174,7 @@ final class GeneticAlgorithmEngine
             populationSize: $populationSize
         );
         $newPopulation = $generationStep['population'];
-        $alnsTelemetry = [];
+        $telemetry = [];
         $stagnation = $this->termination->getGenerationsWithoutImprovement();
 
         if ($this->landscapeEngine !== null) {
@@ -191,12 +192,18 @@ final class GeneticAlgorithmEngine
                 variance: $localMetrics->variance,
                 diversity: $localMetrics->diversity,
                 entropy: $localMetrics->entropy,
-                stagnation: $stagnation
+                stagnation: $stagnation,
+                improvementAcceptanceRate: $generationStep['improvement_acceptance_rate'],
+                worseningAcceptanceRate: $generationStep['worsening_acceptance_rate'],
+                populationTurnover: $generationStep['population_turnover'],
+                bestSignatureChanged: $generationStep['best_signature_changed'],
+                eliteSimilarity: $generationStep['elite_similarity'],
+                bestSignature: $generationStep['best_signature']
             ));
 
-            $alnsTelemetry['landscape_state'] = $this->landscapeEngine->state()?->value;
-            $alnsTelemetry['landscape_phenomenon'] = $observation->phenomenon->value;
-            $alnsTelemetry['landscape_observation'] = $observation->toArray();
+            $telemetry['landscape_state'] = $this->landscapeEngine->state()?->value;
+            $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
+            $telemetry['landscape_observation'] = $observation->toArray();
         }
 
         if (
@@ -204,7 +211,7 @@ final class GeneticAlgorithmEngine
             $currentGeneration > 0 &&
             $currentGeneration % $this->lnsFrequency === 0
         ) {
-            $alnsTelemetry = $this->applyLns($newPopulation);
+            $telemetry += $this->applyLns($newPopulation);
         }
 
         $this->lastEvolutionTelemetry = [
@@ -213,7 +220,14 @@ final class GeneticAlgorithmEngine
             'operator_reward' => $generationStep['operator_reward'],
             'diversity' => $generationStep['diversity'],
             'entropy' => $generationStep['entropy'],
-        ] + $alnsTelemetry;
+            'best_delta_window' => $telemetry['landscape_observation']['best_delta_window'] ?? null,
+            'avg_delta_window' => $telemetry['landscape_observation']['avg_delta_window'] ?? null,
+            'improvement_acceptance_rate' => $generationStep['improvement_acceptance_rate'],
+            'worsening_acceptance_rate' => $generationStep['worsening_acceptance_rate'],
+            'population_turnover' => $generationStep['population_turnover'],
+            'best_signature_changed' => $generationStep['best_signature_changed'],
+            'elite_similarity' => $generationStep['elite_similarity'],
+        ] + $telemetry;
 
         $this->evolutionGeneration++;
 
@@ -268,22 +282,29 @@ final class GeneticAlgorithmEngine
         float $mutationRate,
         int $stagnation,
         string $operatorUsed,
-        float $operatorReward
+        float $operatorReward,
+        array $populationTrajectory
     ): array {
         $landscapeState = null;
         $heatmap = [];
         $activateDynamicLNS = false;
-        $alnsTelemetry = [];
+        $telemetry = [];
 
         if ($this->landscapeEngine !== null) {
             $landscapeMetrics = new LandscapeMetrics(
-                $generation,
-                $metrics->bestFitness,
-                $metrics->avgFitness,
-                $metrics->variance,
-                $metrics->diversity,
-                $metrics->entropy,
-                $stagnation
+                generation: $generation,
+                bestFitness: $metrics->bestFitness,
+                avgFitness: $metrics->avgFitness,
+                variance: $metrics->variance,
+                diversity: $metrics->diversity,
+                entropy: $metrics->entropy,
+                stagnation: $stagnation,
+                improvementAcceptanceRate: (float) ($populationTrajectory['improvement_acceptance_rate'] ?? 0.0),
+                worseningAcceptanceRate: (float) ($populationTrajectory['worsening_acceptance_rate'] ?? 0.0),
+                populationTurnover: (float) ($populationTrajectory['population_turnover'] ?? 0.0),
+                bestSignatureChanged: (bool) ($populationTrajectory['best_signature_changed'] ?? false),
+                eliteSimilarity: (float) ($populationTrajectory['elite_similarity'] ?? 0.0),
+                bestSignature: (string) ($populationTrajectory['best_signature'] ?? '')
             );
 
             $response = $this->landscapeEngine->evaluate($landscapeMetrics);
@@ -297,6 +318,11 @@ final class GeneticAlgorithmEngine
             $mutationRate *= $response->mutationMultiplier;
             $mutationRate = max(0.001, min($mutationRate, 0.9));
             $activateDynamicLNS = $response->activateALNS;
+
+            if ($observation = $this->landscapeEngine->observation()) {
+                $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
+                $telemetry['landscape_observation'] = $observation->toArray();
+            }
         }
 
         if (
@@ -304,7 +330,7 @@ final class GeneticAlgorithmEngine
             $generation > 0 &&
             ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
         ) {
-            $alnsTelemetry = $this->applyLns($population);
+            $telemetry += $this->applyLns($population);
 
             $metrics = $this->metrics->recordExtended(
                 generation: $generation,
@@ -319,18 +345,18 @@ final class GeneticAlgorithmEngine
         $metrics->landscapeState = $landscapeState;
         $metrics->operatorUsed = $operatorUsed;
         $metrics->operatorReward = $operatorReward;
-        $metrics->alnsDestroyOperator = $alnsTelemetry['alns_destroy_operator'] ?? null;
-        $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
-        $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
-        $metrics->landscapePhenomenon = $alnsTelemetry['landscape_phenomenon'] ?? null;
-        $metrics->landscapeObservation = $alnsTelemetry['landscape_observation'] ?? null;
+        $metrics->alnsDestroyOperator = $telemetry['alns_destroy_operator'] ?? null;
+        $metrics->alnsRepairOperator = $telemetry['alns_repair_operator'] ?? null;
+        $metrics->alnsImprovement = $telemetry['alns_improvement'] ?? null;
+        $metrics->landscapePhenomenon = $telemetry['landscape_phenomenon'] ?? null;
+        $metrics->landscapeObservation = $telemetry['landscape_observation'] ?? null;
 
         return [
             'metrics' => $metrics,
             'mutation_rate' => $mutationRate,
             'landscape_state' => $landscapeState,
             'heatmap' => $heatmap,
-            'alns_telemetry' => $alnsTelemetry,
+            'alns_telemetry' => $telemetry,
         ];
     }
 
@@ -382,7 +408,13 @@ final class GeneticAlgorithmEngine
      *     operator_used: string,
      *     operator_reward: float,
      *     diversity: float,
-     *     entropy: float
+     *     entropy: float,
+     *     improvement_acceptance_rate: float,
+     *     worsening_acceptance_rate: float,
+     *     population_turnover: float,
+     *     best_signature_changed: bool,
+     *     elite_similarity: float,
+     *     best_signature: string
      * }
      */
     private function executeGenerationStep(array $population, int $populationSize): array
@@ -396,7 +428,7 @@ final class GeneticAlgorithmEngine
         }
 
         $newPopulation = [];
-        $operatorRewards = [];
+        $allRewards = [];
         $operatorUsed = null;
 
         foreach ($this->elitism->selectElites($population) as $elite) {
@@ -418,14 +450,15 @@ final class GeneticAlgorithmEngine
             $childB = $childBResult['child'];
 
             if ($childAResult['operator_name'] !== null) {
-                $operatorRewards[] = $childAResult['reward'];
                 $operatorUsed = $childAResult['operator_name'];
             }
 
             if ($childBResult['operator_name'] !== null) {
-                $operatorRewards[] = $childBResult['reward'];
                 $operatorUsed = $childBResult['operator_name'];
             }
+
+            $allRewards[] = $childAResult['reward'];
+            $allRewards[] = $childBResult['reward'];
 
             $newPopulation[] = $childA;
 
@@ -435,15 +468,20 @@ final class GeneticAlgorithmEngine
         }
 
         $this->populationEvaluator->evaluate($newPopulation);
+        $trajectorySignals = $this->calculateTrajectorySignals(
+            previousPopulation: $population,
+            newPopulation: $newPopulation,
+            rewards: $allRewards
+        );
 
         return [
             'population' => $newPopulation,
             'mutation_rate' => $mutationRate,
             'operator_used' => $operatorUsed ?? 'none',
-            'operator_reward' => $this->summarizeOperatorReward($operatorRewards),
+            'operator_reward' => $this->summarizeOperatorReward($allRewards),
             'diversity' => $diversity,
             'entropy' => $entropy,
-        ];
+        ] + $trajectorySignals;
     }
 
     /**
@@ -507,6 +545,104 @@ final class GeneticAlgorithmEngine
         }
 
         return array_sum($operatorRewards) / count($operatorRewards);
+    }
+
+    /**
+     * @param  Cromossomo[]  $previousPopulation
+     * @param  Cromossomo[]  $newPopulation
+     * @param  float[]  $rewards
+     * @return array{
+     *     improvement_acceptance_rate: float,
+     *     worsening_acceptance_rate: float,
+     *     population_turnover: float,
+     *     best_signature_changed: bool,
+     *     elite_similarity: float,
+     *     best_signature: string
+     * }
+     */
+    private function calculateTrajectorySignals(array $previousPopulation, array $newPopulation, array $rewards): array
+    {
+        $rewardCount = count($rewards);
+        $improvements = count(array_filter($rewards, static fn (float $reward): bool => $reward > 0.0));
+        $worsenings = count(array_filter($rewards, static fn (float $reward): bool => $reward < 0.0));
+        $previousSignatureSet = $this->signatureSet($previousPopulation);
+        $newSignatureSet = $this->signatureSet($newPopulation);
+        $newSignatureCount = max(1, count($newPopulation));
+        $newBestSignature = $this->getBest($newPopulation)->signature();
+        $previousBestSignature = $previousPopulation === []
+            ? ''
+            : $this->getBest($previousPopulation)->signature();
+
+        $turnoverCount = 0;
+
+        foreach ($newPopulation as $individual) {
+            if (! isset($previousSignatureSet[$individual->signature()])) {
+                $turnoverCount++;
+            }
+        }
+
+        return [
+            'improvement_acceptance_rate' => $rewardCount === 0 ? 0.0 : $improvements / $rewardCount,
+            'worsening_acceptance_rate' => $rewardCount === 0 ? 0.0 : $worsenings / $rewardCount,
+            'population_turnover' => $turnoverCount / $newSignatureCount,
+            'best_signature_changed' => $previousBestSignature !== '' && $previousBestSignature !== $newBestSignature,
+            'elite_similarity' => $this->eliteSimilarity($previousPopulation, $newPopulation),
+            'best_signature' => $newBestSignature,
+        ];
+    }
+
+    /**
+     * @param  Cromossomo[]  $population
+     * @return array<string, true>
+     */
+    private function signatureSet(array $population): array
+    {
+        $signatures = [];
+
+        foreach ($population as $individual) {
+            $signatures[$individual->signature()] = true;
+        }
+
+        return $signatures;
+    }
+
+    /**
+     * @param  Cromossomo[]  $previousPopulation
+     * @param  Cromossomo[]  $newPopulation
+     */
+    private function eliteSimilarity(array $previousPopulation, array $newPopulation): float
+    {
+        $eliteSize = max(1, min(5, min(count($previousPopulation), count($newPopulation))));
+
+        if ($eliteSize <= 0) {
+            return 0.0;
+        }
+
+        $previousElite = $this->topSignatures($previousPopulation, $eliteSize);
+        $newElite = $this->topSignatures($newPopulation, $eliteSize);
+        $union = array_unique(array_merge($previousElite, $newElite));
+
+        if ($union === []) {
+            return 0.0;
+        }
+
+        $intersection = array_intersect($previousElite, $newElite);
+
+        return count($intersection) / count($union);
+    }
+
+    /**
+     * @param  Cromossomo[]  $population
+     * @return string[]
+     */
+    private function topSignatures(array $population, int $limit): array
+    {
+        usort($population, static fn (Cromossomo $left, Cromossomo $right): int => $right->fitness() <=> $left->fitness());
+
+        return array_map(
+            static fn (Cromossomo $individual): string => $individual->signature(),
+            array_slice($population, 0, $limit)
+        );
     }
 
     private function assertNotCancelled(): void

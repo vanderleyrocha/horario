@@ -58,6 +58,13 @@ final class LandscapeEngine
                 plateauDuration: 0,
                 convergenceTrend: 0.0,
                 depthScore: 0.0,
+                bestDeltaWindow: 0.0,
+                avgDeltaWindow: 0.0,
+                improvementAcceptanceRate: 0.0,
+                worseningAcceptanceRate: 0.0,
+                populationTurnover: 0.0,
+                bestSignatureChanged: false,
+                eliteSimilarity: 0.0,
                 diversity: $metrics->diversity,
                 entropy: $metrics->entropy
             );
@@ -96,6 +103,17 @@ final class LandscapeEngine
         ));
 
         $this->memory->record($state);
+        $this->memory->recordTrajectory(new LandscapeTrajectorySnapshot(
+            generation: $metrics->generation,
+            bestFitness: $metrics->bestFitness,
+            avgFitness: $metrics->avgFitness,
+            bestSignature: $metrics->bestSignature,
+            improvementAcceptanceRate: $metrics->improvementAcceptanceRate,
+            worseningAcceptanceRate: $metrics->worseningAcceptanceRate,
+            populationTurnover: $metrics->populationTurnover,
+            bestSignatureChanged: $metrics->bestSignatureChanged,
+            eliteSimilarity: $metrics->eliteSimilarity
+        ));
 
         $this->lastState = $state;
         $this->lastObservation = $this->analyzer->analyze($metrics, $this->memory, $state);
