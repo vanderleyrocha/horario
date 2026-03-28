@@ -109,12 +109,26 @@ final class IslandModelEngine
                     ->pluck('alns_repair_operator')
                     ->first(fn ($operator) => $operator !== null);
 
+                $landscapeState = collect($telemetrySnapshots)
+                    ->pluck('landscape_state')
+                    ->first(fn ($state) => $state !== null);
+
+                $landscapePhenomenon = collect($telemetrySnapshots)
+                    ->pluck('landscape_phenomenon')
+                    ->first(fn ($phenomenon) => $phenomenon !== null);
+
+                $landscapeObservation = collect($telemetrySnapshots)
+                    ->pluck('landscape_observation')
+                    ->filter(fn ($observation) => is_array($observation))
+                    ->sortByDesc(fn (array $observation) => (float) ($observation['confidence'] ?? 0.0))
+                    ->first();
+
                 $metricsDto = $this->globalMetrics->recordExtended(
                     $generation,
                     $globalPopulation,
                     empty($mutationRates) ? $this->telemetryMutationRate : array_sum($mutationRates) / count($mutationRates),
                     0,
-                    'Exploracao Intensiva'
+                    $landscapeState ?? 'Exploracao Intensiva'
                 );
 
                 $this->progress->report([
@@ -129,6 +143,8 @@ final class IslandModelEngine
                     'mutation_rate' => $metricsDto->mutationRate,
                     'stagnation' => $metricsDto->stagnation,
                     'landscape_state' => $metricsDto->landscapeState,
+                    'landscape_phenomenon' => $landscapePhenomenon,
+                    'landscape_observation' => $landscapeObservation,
                     'operator_used' => $operatorUsed,
                     'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
                     'alns_destroy_operator' => $alnsDestroyOperator,

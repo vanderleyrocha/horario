@@ -65,6 +65,33 @@ final class LandscapeMemory
         return $this->points;
     }
 
+    public function lastFitnessDelta(): float
+    {
+        $count = count($this->points);
+
+        if ($count < 2) {
+            return 0.0;
+        }
+
+        return $this->points[$count - 1]->fitness - $this->points[$count - 2]->fitness;
+    }
+
+    public function recentFitnessSlope(int $window = 5): float
+    {
+        $points = array_slice($this->points, -max(2, $window));
+        $count = count($points);
+
+        if ($count < 2) {
+            return 0.0;
+        }
+
+        $first = $points[0];
+        $last = $points[$count - 1];
+        $generationSpan = max(1, $last->generation - $first->generation);
+
+        return ($last->fitness - $first->fitness) / $generationSpan;
+    }
+
     /*
     ---------------------------------------------------------
     Duração de plateau

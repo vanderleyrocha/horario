@@ -42,6 +42,13 @@ final class GATelemetryLogger
             'alns_improvement' => isset($metrics['alns_improvement'])
                 ? round((float) $metrics['alns_improvement'], 6)
                 : null,
+            'landscape_phenomenon' => $metrics['landscape_phenomenon'] ?? null,
+            'landscape_confidence' => isset($metrics['landscape_observation']['confidence'])
+                ? round((float) $metrics['landscape_observation']['confidence'], 6)
+                : null,
+            'landscape_depth_score' => isset($metrics['landscape_observation']['depth_score'])
+                ? round((float) $metrics['landscape_observation']['depth_score'], 6)
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

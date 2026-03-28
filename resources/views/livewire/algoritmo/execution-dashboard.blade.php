@@ -78,6 +78,28 @@
 
     <div class="grid grid-cols-2 gap-6">
 
+        <div class="bg-white shadow rounded p-4 col-span-2">
+            <h3 class="font-semibold mb-2">Landscape Observation</h3>
+            <div class="grid grid-cols-4 gap-4 text-sm">
+                <div>
+                    <p class="text-gray-500">Phenomenon</p>
+                    <p class="font-semibold" data-landscape-phenomenon>Neutral</p>
+                </div>
+                <div>
+                    <p class="text-gray-500">Confidence</p>
+                    <p class="font-semibold" data-landscape-confidence>0.00</p>
+                </div>
+                <div>
+                    <p class="text-gray-500">Depth Score</p>
+                    <p class="font-semibold" data-landscape-depth-score>0.00</p>
+                </div>
+                <div>
+                    <p class="text-gray-500">Summary</p>
+                    <p class="font-semibold" data-landscape-summary>No observation yet</p>
+                </div>
+            </div>
+        </div>
+
         <div class="bg-white shadow rounded p-4">
             <h3 class="font-semibold mb-2">Fitness Curve</h3>
             <div class="relative h-72">

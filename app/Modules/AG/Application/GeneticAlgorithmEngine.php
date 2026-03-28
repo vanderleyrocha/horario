@@ -53,11 +53,6 @@ final class GeneticAlgorithmEngine
         while (! $this->termination->shouldTerminate($generation, $population)) {
             $this->assertNotCancelled();
 
-            $landscapeState = null;
-            $activateDynamicLNS = false;
-            $diversificationBoost = 0.0;
-            $alnsTelemetry = [];
-            $heatmap = [];
             $generationStep = $this->executeGenerationStep(
                 population: $population,
                 populationSize: $populationSize
@@ -75,64 +70,25 @@ final class GeneticAlgorithmEngine
 
             Log::info("Generation {$generation} | best={$metrics->bestFitness} | avg={$metrics->avgFitness} | div={$metrics->diversity}");
 
-            /* LANDSCAPE */
-
-            if ($this->landscapeEngine !== null) {
-
-                $landscapeMetrics = new LandscapeMetrics($generation, $metrics->bestFitness, $metrics->avgFitness, $metrics->variance, $metrics->diversity, $metrics->entropy, $stagnation);
-
-                $response = $this->landscapeEngine->evaluate($landscapeMetrics);
-
-                if ($this->hyperHeuristic) {
-                    $this->hyperHeuristic->updateLandscapeState($response->state);
-                }
-
-                $heatmap = $this->landscapeEngine->heatmap();
-
-                $landscapeState = $response->state->value;
-
-                $generationStep['mutation_rate'] *= $response->mutationMultiplier;
-
-                $generationStep['mutation_rate'] = max(0.001, min($generationStep['mutation_rate'], 0.9));
-
-                $activateDynamicLNS = $response->activateALNS;
-                $diversificationBoost = $response->diversificationBoost;
-            }
-
-            /* LNS */
-
-            if (
-                $this->lns !== null &&
-                $generation > 0 &&
-                ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
-            ) {
-                $alnsTelemetry = $this->applyLns($population);
-
-                $metrics = $this->metrics->recordExtended(
-                    generation: $generation,
-                    population: $population,
-                    mutationRate: $generationStep['mutation_rate'],
-                    stagnation: $stagnation,
-                    landscapeState: $landscapeState,
-                    forceRefreshStatistics: true
-                );
-            }
-
-            $metrics->landscapeState = $landscapeState;
-            $metrics->operatorUsed = $generationStep['operator_used'];
-            $metrics->operatorReward = $generationStep['operator_reward'];
-            $metrics->alnsDestroyOperator = $alnsTelemetry['alns_destroy_operator'] ?? null;
-            $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
-            $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
+            $postProcess = $this->postProcessGeneration(
+                generation: $generation,
+                population: $population,
+                metrics: $metrics,
+                mutationRate: $generationStep['mutation_rate'],
+                stagnation: $stagnation,
+                operatorUsed: $generationStep['operator_used'],
+                operatorReward: $generationStep['operator_reward']
+            );
+            $metrics = $postProcess['metrics'];
 
             $this->publishGenerationState(
                 generation: $generation,
                 metrics: $metrics,
-                mutationRate: $generationStep['mutation_rate'],
+                mutationRate: $postProcess['mutation_rate'],
                 stagnation: $stagnation,
-                landscapeState: $landscapeState,
-                heatmap: $heatmap,
-                alnsTelemetry: $alnsTelemetry
+                landscapeState: $postProcess['landscape_state'],
+                heatmap: $postProcess['heatmap'],
+                alnsTelemetry: $postProcess['alns_telemetry']
             );
 
             $generation++;
@@ -218,6 +174,30 @@ final class GeneticAlgorithmEngine
         );
         $newPopulation = $generationStep['population'];
         $alnsTelemetry = [];
+        $stagnation = $this->termination->getGenerationsWithoutImprovement();
+
+        if ($this->landscapeEngine !== null) {
+            $localMetrics = $this->metrics->recordExtended(
+                generation: $currentGeneration,
+                population: $newPopulation,
+                mutationRate: $generationStep['mutation_rate'],
+                stagnation: $stagnation
+            );
+
+            $observation = $this->landscapeEngine->observe(new LandscapeMetrics(
+                generation: $currentGeneration,
+                bestFitness: $localMetrics->bestFitness,
+                avgFitness: $localMetrics->avgFitness,
+                variance: $localMetrics->variance,
+                diversity: $localMetrics->diversity,
+                entropy: $localMetrics->entropy,
+                stagnation: $stagnation
+            ));
+
+            $alnsTelemetry['landscape_state'] = $this->landscapeEngine->state()?->value;
+            $alnsTelemetry['landscape_phenomenon'] = $observation->phenomenon->value;
+            $alnsTelemetry['landscape_observation'] = $observation->toArray();
+        }
 
         if (
             $this->lns !== null &&
@@ -269,6 +249,89 @@ final class GeneticAlgorithmEngine
         }
 
         return $telemetry;
+    }
+
+    /**
+     * @param  Cromossomo[]  $population
+     * @return array{
+     *     metrics: GenerationMetrics,
+     *     mutation_rate: float,
+     *     landscape_state: string|null,
+     *     heatmap: array,
+     *     alns_telemetry: array<string, mixed>
+     * }
+     */
+    private function postProcessGeneration(
+        int $generation,
+        array &$population,
+        GenerationMetrics $metrics,
+        float $mutationRate,
+        int $stagnation,
+        string $operatorUsed,
+        float $operatorReward
+    ): array {
+        $landscapeState = null;
+        $heatmap = [];
+        $activateDynamicLNS = false;
+        $alnsTelemetry = [];
+
+        if ($this->landscapeEngine !== null) {
+            $landscapeMetrics = new LandscapeMetrics(
+                $generation,
+                $metrics->bestFitness,
+                $metrics->avgFitness,
+                $metrics->variance,
+                $metrics->diversity,
+                $metrics->entropy,
+                $stagnation
+            );
+
+            $response = $this->landscapeEngine->evaluate($landscapeMetrics);
+
+            if ($this->hyperHeuristic) {
+                $this->hyperHeuristic->updateLandscapeState($response->state);
+            }
+
+            $heatmap = $this->landscapeEngine->heatmap();
+            $landscapeState = $response->state->value;
+            $mutationRate *= $response->mutationMultiplier;
+            $mutationRate = max(0.001, min($mutationRate, 0.9));
+            $activateDynamicLNS = $response->activateALNS;
+        }
+
+        if (
+            $this->lns !== null &&
+            $generation > 0 &&
+            ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
+        ) {
+            $alnsTelemetry = $this->applyLns($population);
+
+            $metrics = $this->metrics->recordExtended(
+                generation: $generation,
+                population: $population,
+                mutationRate: $mutationRate,
+                stagnation: $stagnation,
+                landscapeState: $landscapeState,
+                forceRefreshStatistics: true
+            );
+        }
+
+        $metrics->landscapeState = $landscapeState;
+        $metrics->operatorUsed = $operatorUsed;
+        $metrics->operatorReward = $operatorReward;
+        $metrics->alnsDestroyOperator = $alnsTelemetry['alns_destroy_operator'] ?? null;
+        $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
+        $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
+        $metrics->landscapePhenomenon = $alnsTelemetry['landscape_phenomenon'] ?? null;
+        $metrics->landscapeObservation = $alnsTelemetry['landscape_observation'] ?? null;
+
+        return [
+            'metrics' => $metrics,
+            'mutation_rate' => $mutationRate,
+            'landscape_state' => $landscapeState,
+            'heatmap' => $heatmap,
+            'alns_telemetry' => $alnsTelemetry,
+        ];
     }
 
     private function publishGenerationState(

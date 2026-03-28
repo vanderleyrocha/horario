@@ -6,32 +6,18 @@ final class LandscapeEngine
 {
     private LandscapeHeatmapBuilder $heatmapBuilder;
 
+    private ?LandscapeObservation $lastObservation = null;
+
+    private ?LandscapeState $lastState = null;
+
     public function __construct(private LandscapeAnalyzer $analyzer, private LandscapeDetector $detector, private LandscapeResponseStrategy $strategy, private LandscapeMemory $memory)
     {
-        $this->heatmapBuilder = new LandscapeHeatmapBuilder();
+        $this->heatmapBuilder = new LandscapeHeatmapBuilder;
     }
 
     public function evaluate(LandscapeMetrics $metrics): LandscapeResponse
     {
-        $analysis = $this->analyzer->analyze($metrics);
-
-        $state = $this->detector->detect($metrics);
-
-        /*
-        ----------------------------------------------------
-        Registrar ponto no landscape
-        ----------------------------------------------------
-        */
-
-        $this->memory->recordPoint(new LandscapePoint(generation: $metrics->generation, fitness: $metrics->bestFitness, diversity: $metrics->diversity, entropy: $metrics->entropy));
-
-        /*
-        ----------------------------------------------------
-        Registrar estado
-        ----------------------------------------------------
-        */
-
-        $this->memory->record($state);
+        $state = $this->captureObservation($metrics);
 
         /*
         ----------------------------------------------------
@@ -58,6 +44,35 @@ final class LandscapeEngine
         return $this->strategy->respond($state);
     }
 
+    public function observe(LandscapeMetrics $metrics): LandscapeObservation
+    {
+        $this->captureObservation($metrics);
+
+        return $this->lastObservation
+            ?? new LandscapeObservation(
+                phenomenon: LandscapePhenomenon::Neutral,
+                confidence: 0.0,
+                bestDelta: 0.0,
+                fitnessGap: 0.0,
+                stagnation: $metrics->stagnation,
+                plateauDuration: 0,
+                convergenceTrend: 0.0,
+                depthScore: 0.0,
+                diversity: $metrics->diversity,
+                entropy: $metrics->entropy
+            );
+    }
+
+    public function observation(): ?LandscapeObservation
+    {
+        return $this->lastObservation;
+    }
+
+    public function state(): ?LandscapeState
+    {
+        return $this->lastState;
+    }
+
     /*
     ----------------------------------------------------
     Heatmap para dashboard
@@ -67,5 +82,24 @@ final class LandscapeEngine
     public function heatmap(): array
     {
         return $this->heatmapBuilder->build($this->memory->points());
+    }
+
+    private function captureObservation(LandscapeMetrics $metrics): LandscapeState
+    {
+        $state = $this->detector->detect($metrics);
+
+        $this->memory->recordPoint(new LandscapePoint(
+            generation: $metrics->generation,
+            fitness: $metrics->bestFitness,
+            diversity: $metrics->diversity,
+            entropy: $metrics->entropy
+        ));
+
+        $this->memory->record($state);
+
+        $this->lastState = $state;
+        $this->lastObservation = $this->analyzer->analyze($metrics, $this->memory, $state);
+
+        return $state;
     }
 }

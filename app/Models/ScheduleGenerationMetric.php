@@ -25,6 +25,8 @@ class ScheduleGenerationMetric extends Model
         'alns_repair_operator',
         'alns_improvement',
         'landscape_state',
+        'landscape_phenomenon',
+        'landscape_observation',
         'stagnation',
     ];
 
@@ -39,6 +41,7 @@ class ScheduleGenerationMetric extends Model
         'crossover_rate' => 'float',
         'operator_reward' => 'float',
         'alns_improvement' => 'float',
+        'landscape_observation' => 'array',
         'stagnation' => 'integer',
     ];
 

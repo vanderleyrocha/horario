@@ -175,6 +175,13 @@ const LANDSCAPE_LABELS = {
     8: "Convergence",
 }
 
+const LANDSCAPE_PHENOMENON_LABELS = {
+    neutral: "Neutral",
+    plateau: "Plateau",
+    local_minimum: "Local Minimum",
+    deep_valley: "Deep Valley",
+}
+
 function normalizeLandscapeState(state) {
     if (typeof state !== "string" || state.trim() === "") {
         return 0
@@ -187,6 +194,14 @@ function normalizeLandscapeState(state) {
 
 function landscapeLabel(value) {
     return LANDSCAPE_LABELS[value] ?? `State ${value}`
+}
+
+function landscapePhenomenonLabel(value) {
+    if (typeof value !== "string" || value.trim() === "") {
+        return "Neutral"
+    }
+
+    return LANDSCAPE_PHENOMENON_LABELS[value.trim().toLowerCase()] ?? value
 }
 
 function normalizeMetricEvent(detail) {
@@ -269,6 +284,8 @@ function appendMetric(metric) {
     const alnsDestroyOperator = metric.alns_destroy_operator ?? metric.alnsDestroyOperator
     const alnsRepairOperator = metric.alns_repair_operator ?? metric.alnsRepairOperator
     const alnsImprovement = metric.alns_improvement ?? metric.alnsImprovement
+    const landscapePhenomenon = metric.landscape_phenomenon ?? metric.landscapePhenomenon
+    const landscapeObservation = metric.landscape_observation ?? metric.landscapeObservation
 
     if (operatorUsed) {
         const currentStats = chartState.operatorUsage.get(String(operatorUsed)) ?? {
@@ -296,6 +313,35 @@ function appendMetric(metric) {
     }
 
     appendLandscapeMetric(generation, metric.landscape_state ?? metric.landscapeState ?? "unknown")
+    updateLandscapeObservation(landscapePhenomenon, landscapeObservation)
+}
+
+function updateLandscapeObservation(phenomenon, observation) {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const phenomenonElement = root.querySelector("[data-landscape-phenomenon]")
+    const confidenceElement = root.querySelector("[data-landscape-confidence]")
+    const depthScoreElement = root.querySelector("[data-landscape-depth-score]")
+    const summaryElement = root.querySelector("[data-landscape-summary]")
+
+    if (!phenomenonElement || !confidenceElement || !depthScoreElement || !summaryElement) {
+        return
+    }
+
+    const normalizedObservation = observation && typeof observation === "object" ? observation : {}
+    const confidence = Number(normalizedObservation.confidence ?? 0)
+    const depthScore = Number(normalizedObservation.depth_score ?? 0)
+    const bestDelta = Number(normalizedObservation.best_delta ?? 0)
+    const plateauDuration = Number(normalizedObservation.plateau_duration ?? 0)
+
+    phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
+    confidenceElement.textContent = confidence.toFixed(2)
+    depthScoreElement.textContent = depthScore.toFixed(2)
+    summaryElement.textContent = `Δbest ${bestDelta.toFixed(3)} | plateau ${plateauDuration}`
 }
 
 function updateAllCharts() {

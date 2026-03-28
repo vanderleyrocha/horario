@@ -50,7 +50,13 @@ class ExecutionMetricsRecorder
 
     public function recordGeneration(GenerationMetrics $metrics): void
     {
-        $this->buffer[] = $metrics->toArray() + [
+        $payload = $metrics->toArray();
+
+        if (is_array($payload['landscape_observation'] ?? null)) {
+            $payload['landscape_observation'] = json_encode($payload['landscape_observation']);
+        }
+
+        $this->buffer[] = $payload + [
             'execution_id' => $this->executionId,
             'created_at' => now(),
         ];

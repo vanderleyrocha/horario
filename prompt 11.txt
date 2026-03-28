@@ -1,2 +1,12 @@
 Self-Adaptive Parameter Control Engine,
 usado por alguns solvers campeões do ITC, que aprende automaticamente todos os parâmetros do algoritmo durante a execução (mutation rate, destroy size, tabu tenure, etc.).
+
+Para esse SLAE ficar sério, eu recomendaria a próxima intervenção em duas etapas:
+
+1. Enriquecer a telemetria de landscape.
+    Adicionar ao histórico por geração coisas como best_delta, avg_delta, taxa de aceitação de filhos melhores, distância genética percorrida, taxa de escape após ALNS e uma assinatura do melhor indivíduo. Sem isso, o solver não consegue distinguir “plateau raso” de “vale profundo”.
+
+2. Evoluir o modelo de estado.
+    Trocar o enum simples de LandscapeState.php por fenômenos mais ricos, como local_minimum, plateau, deep_valley, deceptive_region, attraction_basin_lock, e fazer LandscapeEngine responder com mudanças radicais de busca quando detectar aprisionamento real: restart parcial de ilhas, mutação forte temporária, ALNS intensivo, diversificação forçada e redução de pressão seletiva.
+
+Próximo passo: começar esse SLAE pela telemetria mínima necessária, sem ainda mudar a estratégia. na prática, implementar primeiro um LandscapeObservation/LandscapePhenomenon com persistência e streaming para frontend, para o solver aprender a “ver” local minima e deep valley antes de reagir a eles.

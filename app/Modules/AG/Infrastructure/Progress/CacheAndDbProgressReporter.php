@@ -44,7 +44,11 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
             operatorReward: isset($data['operator_reward']) ? (float) $data['operator_reward'] : null,
             alnsDestroyOperator: $data['alns_destroy_operator'] ?? null,
             alnsRepairOperator: $data['alns_repair_operator'] ?? null,
-            alnsImprovement: isset($data['alns_improvement']) ? (float) $data['alns_improvement'] : null
+            alnsImprovement: isset($data['alns_improvement']) ? (float) $data['alns_improvement'] : null,
+            landscapePhenomenon: $data['landscape_phenomenon'] ?? null,
+            landscapeObservation: isset($data['landscape_observation']) && is_array($data['landscape_observation'])
+                ? $data['landscape_observation']
+                : null
         );
 
         $this->dbRecorder->recordGeneration($metrics);

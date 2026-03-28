@@ -37,6 +37,13 @@ it('flushes generation metrics immediately and publishes the current metric to c
         'mutation_rate' => 0.14,
         'stagnation' => 2,
         'landscape_state' => 'equilibrado',
+        'landscape_phenomenon' => 'local_minimum',
+        'landscape_observation' => [
+            'phenomenon' => 'local_minimum',
+            'confidence' => 0.81,
+            'depth_score' => 0.74,
+            'best_delta' => 0.0,
+        ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
         'alns_destroy_operator' => 'ConflictDestroy',
@@ -54,6 +61,7 @@ it('flushes generation metrics immediately and publishes the current metric to c
     expect($storedMetric)->not->toBeNull()
         ->and((int) $storedMetric->generation)->toBe(5)
         ->and((float) $storedMetric->best_fitness)->toBe(91.25)
+        ->and($storedMetric->landscape_phenomenon)->toBe('local_minimum')
         ->and($storedMetric->alns_destroy_operator)->toBe('ConflictDestroy')
         ->and($storedMetric->alns_repair_operator)->toBe('RegretInsertion')
         ->and((float) $storedMetric->alns_improvement)->toBe(0.42)
@@ -64,7 +72,11 @@ it('flushes generation metrics immediately and publishes the current metric to c
             'avg_fitness' => 84.10,
             'operator_used' => 'StructuredSwapMutation',
             'landscape_state' => 'equilibrado',
+            'landscape_phenomenon' => 'local_minimum',
             'alns_destroy_operator' => 'ConflictDestroy',
             'alns_repair_operator' => 'RegretInsertion',
         ]);
+
+    expect($cachedMetric['landscape_observation'] ?? null)->toBeArray()
+        ->and($cachedMetric['landscape_observation']['confidence'] ?? null)->toBe(0.81);
 });

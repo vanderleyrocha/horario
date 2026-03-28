@@ -34,6 +34,10 @@ class GenerationMetrics
 
     public ?float $alnsImprovement;
 
+    public ?string $landscapePhenomenon;
+
+    public ?array $landscapeObservation;
+
     public function __construct(
         int $generation,
         float $bestFitness,
@@ -48,7 +52,9 @@ class GenerationMetrics
         ?float $operatorReward = null,
         ?string $alnsDestroyOperator = null,
         ?string $alnsRepairOperator = null,
-        ?float $alnsImprovement = null
+        ?float $alnsImprovement = null,
+        ?string $landscapePhenomenon = null,
+        ?array $landscapeObservation = null
     ) {
         $this->generation = $generation;
         $this->bestFitness = $bestFitness;
@@ -64,6 +70,8 @@ class GenerationMetrics
         $this->alnsDestroyOperator = $alnsDestroyOperator;
         $this->alnsRepairOperator = $alnsRepairOperator;
         $this->alnsImprovement = $alnsImprovement;
+        $this->landscapePhenomenon = $landscapePhenomenon;
+        $this->landscapeObservation = $landscapeObservation;
     }
 
     public function toArray(): array
@@ -83,6 +91,8 @@ class GenerationMetrics
             'alns_destroy_operator' => $this->alnsDestroyOperator,
             'alns_repair_operator' => $this->alnsRepairOperator,
             'alns_improvement' => $this->alnsImprovement,
+            'landscape_phenomenon' => $this->landscapePhenomenon,
+            'landscape_observation' => $this->landscapeObservation,
         ];
     }
 }
