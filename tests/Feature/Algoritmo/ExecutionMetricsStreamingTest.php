@@ -155,6 +155,25 @@ it('flushes generation metrics immediately and publishes the current metric to c
                     ],
                 ],
             ],
+            'search_response_activation_gate' => [
+                'eligible_as_candidate' => true,
+                'candidate_policy' => 'basin_lock_escape',
+                'mode' => 'diagnostic_only',
+                'minimum_resolved_outcomes' => 3,
+                'minimum_success_rate' => 0.6,
+                'minimum_approach_rate' => 0.75,
+                'minimum_avg_progress_score' => 0.65,
+                'supporting_stats' => [
+                    'policy' => 'basin_lock_escape',
+                    'resolved_outcomes' => 4,
+                    'targets_satisfied_count' => 2,
+                    'approached_targets_count' => 4,
+                    'avg_progress_score' => 0.74,
+                    'success_rate' => 0.5,
+                    'approach_rate' => 1.0,
+                ],
+                'reason' => 'Policy crossed the evidence thresholds and is now a diagnostic candidate for future real activation.',
+            ],
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -200,7 +219,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['search_response_audit']['target_population_turnover'] ?? null)->toBe(0.45)
         ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
         ->and($cachedMetric['landscape_observation']['search_response_pending_audits'] ?? null)->toBe(2)
-        ->and($cachedMetric['landscape_observation']['search_response_effectiveness_report']['best_policy_by_success'] ?? null)->toBe('basin_lock_escape');
+        ->and($cachedMetric['landscape_observation']['search_response_effectiveness_report']['best_policy_by_success'] ?? null)->toBe('basin_lock_escape')
+        ->and($cachedMetric['landscape_observation']['search_response_activation_gate']['candidate_policy'] ?? null)->toBe('basin_lock_escape');
 
     $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
 
@@ -215,5 +235,6 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['search_response_outcome']['resolved_generation'] ?? null)->toBe(11)
         ->and($storedObservation['search_response_outcome']['approached_targets'] ?? null)->toBeTrue()
         ->and($storedObservation['search_response_effectiveness_report']['best_policy_by_progress'] ?? null)->toBe('deep_valley_probe')
-        ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(2);
+        ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(2)
+        ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue();
 });

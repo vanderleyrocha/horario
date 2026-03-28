@@ -16,11 +16,13 @@ final class LandscapeEngine
         private LandscapeResponseStrategy $strategy,
         private LandscapeMemory $memory,
         private ?SearchResponsePolicy $searchResponsePolicy = null,
-        private ?SearchResponseOutcomeTracker $searchResponseOutcomeTracker = null
+        private ?SearchResponseOutcomeTracker $searchResponseOutcomeTracker = null,
+        private ?SearchResponseActivationGate $searchResponseActivationGate = null
     ) {
         $this->heatmapBuilder = new LandscapeHeatmapBuilder;
         $this->searchResponsePolicy ??= new SearchResponsePolicy;
         $this->searchResponseOutcomeTracker ??= new SearchResponseOutcomeTracker;
+        $this->searchResponseActivationGate ??= new SearchResponseActivationGate;
     }
 
     public function evaluate(LandscapeMetrics $metrics): LandscapeResponse
@@ -178,12 +180,17 @@ final class LandscapeEngine
         $latestOutcome = $resolvedOutcomes === []
             ? null
             : $resolvedOutcomes[array_key_last($resolvedOutcomes)]->toArray();
-        $effectivenessReport = $this->searchResponseOutcomeTracker?->effectivenessReport()?->toArray();
+        $effectivenessReportObject = $this->searchResponseOutcomeTracker?->effectivenessReport();
+        $effectivenessReport = $effectivenessReportObject?->toArray();
+        $activationGate = $effectivenessReportObject !== null
+            ? $this->searchResponseActivationGate?->evaluate($effectivenessReportObject)?->toArray()
+            : null;
 
         $this->lastObservation = $this->lastObservation->withSearchResponseOutcome(
             searchResponseOutcome: $latestOutcome,
             searchResponsePendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0,
-            searchResponseEffectivenessReport: $effectivenessReport
+            searchResponseEffectivenessReport: $effectivenessReport,
+            searchResponseActivationGate: $activationGate
         );
 
         return $state;

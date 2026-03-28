@@ -123,6 +123,11 @@ final class GATelemetryLogger
                 : null,
             'search_response_effectiveness_best_policy_by_success' => $metrics['landscape_observation']['search_response_effectiveness_report']['best_policy_by_success'] ?? null,
             'search_response_effectiveness_best_policy_by_progress' => $metrics['landscape_observation']['search_response_effectiveness_report']['best_policy_by_progress'] ?? null,
+            'search_response_activation_candidate' => $metrics['landscape_observation']['search_response_activation_gate']['candidate_policy'] ?? null,
+            'search_response_activation_eligible' => isset($metrics['landscape_observation']['search_response_activation_gate']['eligible_as_candidate'])
+                ? (bool) $metrics['landscape_observation']['search_response_activation_gate']['eligible_as_candidate']
+                : null,
+            'search_response_activation_mode' => $metrics['landscape_observation']['search_response_activation_gate']['mode'] ?? null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }
