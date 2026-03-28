@@ -64,6 +64,36 @@ it('logs a single structured summary for the initial population instead of one e
     Log::shouldNotHaveReceived('info', ['Criando indivíduo 2']);
 });
 
+it('reuses the shared generation step in evolveGeneration without emitting mutation telemetry when nothing mutates', function (): void {
+    $problem = new StandaloneFakeProblem;
+    $mutation = new CountingMutationOperator;
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        mutation: $mutation,
+        termination: new StandaloneTerminationCriterion(maxGenerationExclusive: 1)
+    );
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+
+    $nextPopulation = $engine->evolveGeneration($population, 4);
+    $telemetry = $engine->lastEvolutionTelemetry();
+
+    expect($nextPopulation)->toHaveCount(4)
+        ->and($mutation->calls)->toBe(0)
+        ->and($telemetry)->toMatchArray([
+            'operator_used' => 'none',
+            'operator_reward' => 0.0,
+            'mutation_rate' => 0.0,
+        ]);
+});
+
 function makeStandaloneEngine(
     GeneticProblem $problem,
     CountingMutationOperator $mutation,

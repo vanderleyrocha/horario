@@ -52,90 +52,27 @@ final class GeneticAlgorithmEngine
         while (! $this->termination->shouldTerminate($generation, $population)) {
             $this->assertNotCancelled();
 
-            $operatorRewards = [];
-            $operatorUsed = null;
-            $operatorReward = 0.0;
-
             $landscapeState = null;
             $activateDynamicLNS = false;
             $diversificationBoost = 0.0;
             $alnsTelemetry = [];
             $heatmap = [];
-
-            $entropy = $this->metrics->lastEntropy();
-            $diversity = $this->metrics->lastDiversity();
-
-            $mutationRate = $this->adaptiveMutation->computeRate($entropy);
-
-            if ($this->mutation instanceof DiversityAwareMutationInterface) {
-                $this->mutation->setDiversity($diversity);
-            }
-
-            $newPopulation = [];
-
-            foreach ($this->elitism->selectElites($population) as $elite) {
-                $newPopulation[] = $elite;
-            }
-
-            while (count($newPopulation) < $populationSize) {
-                $this->assertNotCancelled();
-
-                $parentA = $this->selection->select($population);
-                $parentB = $this->selection->select($population);
-
-                [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
-
-                $childAResult = $this->evolveChild($childA, $mutationRate);
-                $childBResult = $this->evolveChild($childB, $mutationRate);
-
-                $childA = $childAResult['child'];
-                $childB = $childBResult['child'];
-
-                if ($childAResult['operator_name'] !== null) {
-                    $operatorRewards[$childAResult['operator_name']][] = $childAResult['reward'];
-                    $operatorUsed = $childAResult['operator_name'];
-                }
-
-                if ($childBResult['operator_name'] !== null) {
-                    $operatorRewards[$childBResult['operator_name']][] = $childBResult['reward'];
-                    $operatorUsed = $childBResult['operator_name'];
-                }
-
-                $newPopulation[] = $childA;
-
-                if (count($newPopulation) < $populationSize) {
-                    $newPopulation[] = $childB;
-                }
-            }
-
-            $this->populationEvaluator->evaluate($newPopulation);
-
-            $population = $newPopulation;
+            $generationStep = $this->executeGenerationStep(
+                population: $population,
+                populationSize: $populationSize
+            );
+            $population = $generationStep['population'];
 
             $stagnation = $this->termination->getGenerationsWithoutImprovement();
 
-            $metrics = $this->metrics->recordExtended($generation, $population, $mutationRate, $stagnation);
+            $metrics = $this->metrics->recordExtended(
+                $generation,
+                $population,
+                $generationStep['mutation_rate'],
+                $stagnation
+            );
 
             Log::info("Generation {$generation} | best={$metrics->bestFitness} | avg={$metrics->avgFitness} | div={$metrics->diversity}");
-
-            /* calcular reward médio */
-
-            if (! empty($operatorRewards)) {
-
-                $total = 0;
-                $count = 0;
-
-                foreach ($operatorRewards as $rewards) {
-                    foreach ($rewards as $r) {
-                        $total += $r;
-                        $count++;
-                    }
-                }
-
-                if ($count > 0) {
-                    $operatorReward = $total / $count;
-                }
-            }
 
             /* LANDSCAPE */
 
@@ -153,9 +90,9 @@ final class GeneticAlgorithmEngine
 
                 $landscapeState = $response->state->value;
 
-                $mutationRate *= $response->mutationMultiplier;
+                $generationStep['mutation_rate'] *= $response->mutationMultiplier;
 
-                $mutationRate = max(0.001, min($mutationRate, 0.9));
+                $generationStep['mutation_rate'] = max(0.001, min($generationStep['mutation_rate'], 0.9));
 
                 $activateDynamicLNS = $response->activateALNS;
                 $diversificationBoost = $response->diversificationBoost;
@@ -173,7 +110,7 @@ final class GeneticAlgorithmEngine
                 $metrics = $this->metrics->recordExtended(
                     generation: $generation,
                     population: $population,
-                    mutationRate: $mutationRate,
+                    mutationRate: $generationStep['mutation_rate'],
                     stagnation: $stagnation,
                     landscapeState: $landscapeState,
                     forceRefreshStatistics: true
@@ -181,8 +118,8 @@ final class GeneticAlgorithmEngine
             }
 
             $metrics->landscapeState = $landscapeState;
-            $metrics->operatorUsed = $operatorUsed;
-            $metrics->operatorReward = $operatorReward;
+            $metrics->operatorUsed = $generationStep['operator_used'];
+            $metrics->operatorReward = $generationStep['operator_reward'];
             $metrics->alnsDestroyOperator = $alnsTelemetry['alns_destroy_operator'] ?? null;
             $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
             $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
@@ -213,7 +150,7 @@ final class GeneticAlgorithmEngine
                 $progress->avgFitness = $metrics->avgFitness;
                 $progress->diversity = $metrics->diversity;
                 $progress->entropy = $metrics->entropy;
-                $progress->mutationRate = $mutationRate;
+                $progress->mutationRate = $generationStep['mutation_rate'];
                 $progress->stagnation = $stagnation;
                 $progress->landscapeState = $landscapeState ?? 'unknown';
 
@@ -297,60 +234,12 @@ final class GeneticAlgorithmEngine
     {
         $this->assertNotCancelled();
         $currentGeneration = $this->evolutionGeneration;
-        $entropy = $this->metrics->lastEntropy();
-        $diversity = $this->metrics->lastDiversity();
-
-        $mutationRate = $this->adaptiveMutation->computeRate($entropy);
-
-        if ($this->mutation instanceof DiversityAwareMutationInterface) {
-            $this->mutation->setDiversity($diversity);
-        }
-
-        $newPopulation = [];
-        $operatorRewards = [];
-        $operatorUsed = null;
+        $generationStep = $this->executeGenerationStep(
+            population: $population,
+            populationSize: $populationSize
+        );
+        $newPopulation = $generationStep['population'];
         $alnsTelemetry = [];
-
-        /* ELITISMO */
-
-        foreach ($this->elitism->selectElites($population) as $elite) {
-            $newPopulation[] = $elite;
-        }
-
-        /* EVOLUÇÃO */
-
-        while (count($newPopulation) < $populationSize) {
-            $this->assertNotCancelled();
-
-            $parentA = $this->selection->select($population);
-            $parentB = $this->selection->select($population);
-
-            [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
-
-            $childAResult = $this->evolveChild($childA, $mutationRate);
-            $childBResult = $this->evolveChild($childB, $mutationRate);
-
-            $childA = $childAResult['child'];
-            $childB = $childBResult['child'];
-
-            if ($childAResult['operator_name'] !== null) {
-                $operatorRewards[] = $childAResult['reward'];
-                $operatorUsed = $childAResult['operator_name'];
-            }
-
-            if ($childBResult['operator_name'] !== null) {
-                $operatorRewards[] = $childBResult['reward'];
-                $operatorUsed = $childBResult['operator_name'];
-            }
-
-            $newPopulation[] = $childA;
-
-            if (count($newPopulation) < $populationSize) {
-                $newPopulation[] = $childB;
-            }
-        }
-
-        $this->populationEvaluator->evaluate($newPopulation);
 
         if (
             $this->lns !== null &&
@@ -360,22 +249,12 @@ final class GeneticAlgorithmEngine
             $alnsTelemetry = $this->applyLns($newPopulation);
         }
 
-        /* calcular reward médio */
-
-        $operatorReward = 0.0;
-
-        if (! empty($operatorRewards)) {
-
-            $operatorReward = array_sum($operatorRewards) / count($operatorRewards);
-
-        }
-
         $this->lastEvolutionTelemetry = [
-            'mutation_rate' => $mutationRate,
-            'operator_used' => $operatorUsed ?? 'none',
-            'operator_reward' => $operatorReward,
-            'diversity' => $diversity,
-            'entropy' => $entropy,
+            'mutation_rate' => $generationStep['mutation_rate'],
+            'operator_used' => $generationStep['operator_used'],
+            'operator_reward' => $generationStep['operator_reward'],
+            'diversity' => $generationStep['diversity'],
+            'entropy' => $generationStep['entropy'],
         ] + $alnsTelemetry;
 
         $this->evolutionGeneration++;
@@ -412,6 +291,78 @@ final class GeneticAlgorithmEngine
         }
 
         return $telemetry;
+    }
+
+    /**
+     * @param  Cromossomo[]  $population
+     * @return array{
+     *     population: array<int, Cromossomo>,
+     *     mutation_rate: float,
+     *     operator_used: string,
+     *     operator_reward: float,
+     *     diversity: float,
+     *     entropy: float
+     * }
+     */
+    private function executeGenerationStep(array $population, int $populationSize): array
+    {
+        $entropy = $this->metrics->lastEntropy();
+        $diversity = $this->metrics->lastDiversity();
+        $mutationRate = $this->adaptiveMutation->computeRate($entropy);
+
+        if ($this->mutation instanceof DiversityAwareMutationInterface) {
+            $this->mutation->setDiversity($diversity);
+        }
+
+        $newPopulation = [];
+        $operatorRewards = [];
+        $operatorUsed = null;
+
+        foreach ($this->elitism->selectElites($population) as $elite) {
+            $newPopulation[] = $elite;
+        }
+
+        while (count($newPopulation) < $populationSize) {
+            $this->assertNotCancelled();
+
+            $parentA = $this->selection->select($population);
+            $parentB = $this->selection->select($population);
+
+            [$childA, $childB] = $this->crossover->crossover($parentA, $parentB);
+
+            $childAResult = $this->evolveChild($childA, $mutationRate);
+            $childBResult = $this->evolveChild($childB, $mutationRate);
+
+            $childA = $childAResult['child'];
+            $childB = $childBResult['child'];
+
+            if ($childAResult['operator_name'] !== null) {
+                $operatorRewards[] = $childAResult['reward'];
+                $operatorUsed = $childAResult['operator_name'];
+            }
+
+            if ($childBResult['operator_name'] !== null) {
+                $operatorRewards[] = $childBResult['reward'];
+                $operatorUsed = $childBResult['operator_name'];
+            }
+
+            $newPopulation[] = $childA;
+
+            if (count($newPopulation) < $populationSize) {
+                $newPopulation[] = $childB;
+            }
+        }
+
+        $this->populationEvaluator->evaluate($newPopulation);
+
+        return [
+            'population' => $newPopulation,
+            'mutation_rate' => $mutationRate,
+            'operator_used' => $operatorUsed ?? 'none',
+            'operator_reward' => $this->summarizeOperatorReward($operatorRewards),
+            'diversity' => $diversity,
+            'entropy' => $entropy,
+        ];
     }
 
     /**
@@ -463,6 +414,18 @@ final class GeneticAlgorithmEngine
         return method_exists($operator, 'getName')
             ? $operator->getName()
             : class_basename($operator);
+    }
+
+    /**
+     * @param  float[]  $operatorRewards
+     */
+    private function summarizeOperatorReward(array $operatorRewards): float
+    {
+        if ($operatorRewards === []) {
+            return 0.0;
+        }
+
+        return array_sum($operatorRewards) / count($operatorRewards);
     }
 
     private function assertNotCancelled(): void
