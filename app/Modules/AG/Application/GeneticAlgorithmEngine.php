@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Application;
 
-use App\Helpers\DateTimeHelper;
+use App\Models\ScheduleExecution;
+use App\Modules\AG\Application\Progress\EvolutionProgress;
 use App\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
@@ -23,14 +24,13 @@ use App\Modules\AG\Domain\Operators\Selection\SelectionOperatorInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
-use App\Modules\AG\Application\Progress\EvolutionProgress;
-use App\Models\ScheduleExecution;
 use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use Illuminate\Support\Facades\Log;
 
 final class GeneticAlgorithmEngine
 {
     private array $mutationPool;
+
     private array $lastEvolutionTelemetry = [];
 
     public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
@@ -45,7 +45,7 @@ final class GeneticAlgorithmEngine
 
         $generation = 0;
 
-        while (!$this->termination->shouldTerminate($generation, $population)) {
+        while (! $this->termination->shouldTerminate($generation, $population)) {
             $this->assertNotCancelled();
 
             $operatorRewards = [];
@@ -89,8 +89,8 @@ final class GeneticAlgorithmEngine
 
                         $operator = $this->hyperHeuristic->selectOperator($this->mutationPool);
 
-                        if (!$operator instanceof MutationOperatorInterface) {
-                            throw new \RuntimeException("Selected operator is not a mutation operator");
+                        if (! $operator instanceof MutationOperatorInterface) {
+                            throw new \RuntimeException('Selected operator is not a mutation operator');
                         }
 
                     } else {
@@ -127,8 +127,8 @@ final class GeneticAlgorithmEngine
 
                     $operator = $this->hyperHeuristic ? $this->hyperHeuristic->selectOperator($this->mutationPool) : $this->mutation;
 
-                    if (!$operator instanceof MutationOperatorInterface) {
-                        throw new \RuntimeException("Selected operator is not a mutation operator");
+                    if (! $operator instanceof MutationOperatorInterface) {
+                        throw new \RuntimeException('Selected operator is not a mutation operator');
                     }
 
                     $childB = $operator->mutate($childB);
@@ -168,12 +168,11 @@ final class GeneticAlgorithmEngine
 
             $metrics = $this->metrics->recordExtended($generation, $population, $mutationRate, $stagnation);
 
-
             Log::info("Generation {$generation} | best={$metrics->bestFitness} | avg={$metrics->avgFitness} | div={$metrics->diversity}");
 
             /* calcular reward médio */
 
-            if (!empty($operatorRewards)) {
+            if (! empty($operatorRewards)) {
 
                 $total = 0;
                 $count = 0;
@@ -224,26 +223,12 @@ final class GeneticAlgorithmEngine
 
             /* STREAMING DE MÉTRICAS */
 
-
-            $this->metrics->publishGenerationMetrics([
+            $this->metrics->publishGenerationMetrics($metrics->toArray() + [
                 'execution_id' => $this->executionMetrics?->getExecutionId(),
-                'generation' => $generation,
-                'best_fitness' => $metrics->bestFitness,
-                'avg_fitness' => $metrics->avgFitness,
-                'variance' => $metrics->variance,
-                'diversity' => $metrics->diversity,
-                'entropy' => $metrics->entropy,
-                'mutation_rate' => $mutationRate,
-                'stagnation' => $stagnation,
                 'landscape_state' => $landscapeState ?? 'unknown',
-                'operator_used' => $operatorUsed,
-                'operator_reward' => $operatorReward,
                 'landscape_heatmap' => $heatmap,
-                'timestamp' => microtime(true)
-            ], $this->executionMetrics?->getExecutionId() ?? 0);
-
-
-
+                'timestamp' => microtime(true),
+            ]);
 
             /* LNS */
 
@@ -270,7 +255,7 @@ final class GeneticAlgorithmEngine
 
             if ($this->progress) {
 
-                $progress = new EvolutionProgress();
+                $progress = new EvolutionProgress;
 
                 $progress->phase = 'evolution';
                 $progress->generation = $generation;
@@ -304,7 +289,6 @@ final class GeneticAlgorithmEngine
         for ($i = 0; $i < $size; $i++) {
             $this->assertNotCancelled();
 
-
             Log::info("Criando indivíduo {$i}");
 
             $individual = $this->problem->createIndividual();
@@ -322,6 +306,7 @@ final class GeneticAlgorithmEngine
     private function getBest(array $population): Cromossomo
     {
         usort($population, fn ($a, $b) => $b->fitness() <=> $a->fitness());
+
         return $population[0];
     }
 
@@ -382,8 +367,8 @@ final class GeneticAlgorithmEngine
                     ? $this->hyperHeuristic->selectOperator($this->mutationPool)
                     : $this->mutation;
 
-                if (!$operator instanceof MutationOperatorInterface) {
-                    throw new \RuntimeException("Selected operator is not a mutation operator");
+                if (! $operator instanceof MutationOperatorInterface) {
+                    throw new \RuntimeException('Selected operator is not a mutation operator');
                 }
 
                 $childA = $operator->mutate($childA);
@@ -405,8 +390,8 @@ final class GeneticAlgorithmEngine
                     ? $this->hyperHeuristic->selectOperator($this->mutationPool)
                     : $this->mutation;
 
-                if (!$operator instanceof MutationOperatorInterface) {
-                    throw new \RuntimeException("Selected operator is not a mutation operator");
+                if (! $operator instanceof MutationOperatorInterface) {
+                    throw new \RuntimeException('Selected operator is not a mutation operator');
                 }
 
                 $childB = $operator->mutate($childB);
@@ -426,14 +411,13 @@ final class GeneticAlgorithmEngine
             }
         }
 
-
         $this->populationEvaluator->evaluate($newPopulation);
 
         /* calcular reward médio */
 
         $operatorReward = 0.0;
 
-        if (!empty($operatorRewards)) {
+        if (! empty($operatorRewards)) {
 
             $operatorReward = array_sum($operatorRewards) / count($operatorRewards);
 
@@ -444,9 +428,8 @@ final class GeneticAlgorithmEngine
             'operator_used' => $operatorUsed ?? 'none',
             'operator_reward' => $operatorReward,
             'diversity' => $diversity,
-            'entropy' => $entropy
+            'entropy' => $entropy,
         ];
-
 
         return $newPopulation;
     }

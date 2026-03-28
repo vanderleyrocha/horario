@@ -50,19 +50,8 @@ class ExecutionMetricsRecorder
 
     public function recordGeneration(GenerationMetrics $metrics): void
     {
-        $this->buffer[] = [
+        $this->buffer[] = $metrics->toArray() + [
             'execution_id' => $this->executionId,
-            'generation' => $metrics->generation,
-            'best_fitness' => $metrics->bestFitness,
-            'avg_fitness' => $metrics->avgFitness,
-            'variance' => $metrics->variance,
-            'diversity' => $metrics->diversity,
-            'entropy' => $metrics->entropy,
-            'mutation_rate' => $metrics->mutationRate,
-            'stagnation' => $metrics->stagnation,
-            'operator_used' => $metrics->operatorUsed,
-            'operator_reward' => $metrics->operatorReward,
-            'landscape_state' => $metrics->landscapeState,
             'created_at' => now(),
         ];
 

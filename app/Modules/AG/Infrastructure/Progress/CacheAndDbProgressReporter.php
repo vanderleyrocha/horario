@@ -18,8 +18,7 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
         private ExecutionMetricsRecorder $dbRecorder,
         private GATelemetryLogger $telemetryLogger,
         private int $horarioId
-    ) {
-    }
+    ) {}
 
     public function report(array $data): void
     {
@@ -27,7 +26,7 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
 
         $isEvolvingPhase = isset($data['phase']) && in_array($data['phase'], ['evolving', 'alns_intensification'], true);
 
-        if (!$isEvolvingPhase || !isset($data['generation'])) {
+        if (! $isEvolvingPhase || ! isset($data['generation'])) {
             return;
         }
 
@@ -47,29 +46,21 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
 
         $this->dbRecorder->recordGeneration($metrics);
 
+        $cachePayload = $metrics->toArray() + [
+            'execution_id' => $this->dbRecorder->getExecutionId(),
+            'landscape_state' => $metrics->landscapeState ?? 'unknown',
+            'timestamp' => microtime(true),
+        ];
+
         Cache::put(
             "ga_execution_metrics_{$this->dbRecorder->getExecutionId()}",
-            [
-                'execution_id' => $this->dbRecorder->getExecutionId(),
-                'generation' => (int) $data['generation'],
-                'best_fitness' => (float) $data['best_fitness'],
-                'avg_fitness' => (float) $data['avg_fitness'],
-                'variance' => (float) ($data['variance'] ?? 0.0),
-                'diversity' => (float) $data['diversity'],
-                'entropy' => (float) $data['entropy'],
-                'mutation_rate' => (float) $data['mutation_rate'],
-                'stagnation' => (int) $data['stagnation'],
-                'landscape_state' => $data['landscape_state'] ?? 'unknown',
-                'operator_used' => $data['operator_used'] ?? null,
-                'operator_reward' => isset($data['operator_reward']) ? (float) $data['operator_reward'] : null,
-                'timestamp' => microtime(true),
-            ],
+            $cachePayload,
             now()->addMinutes(10)
         );
 
         $this->telemetryLogger->generationMetrics(
             $this->horarioId,
-            $data,
+            $cachePayload + ['phase' => $data['phase'] ?? null, 'max_generations' => $data['max_generations'] ?? 0],
             $this->dbRecorder->getExecutionId()
         );
     }

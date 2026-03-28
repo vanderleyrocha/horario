@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Modules\AG\Domain\Metrics\DTO;
 
 class GenerationMetrics
@@ -38,8 +40,7 @@ class GenerationMetrics
         ?string $landscapeState = null,
         ?string $operatorUsed = null,
         ?float $operatorReward = null
-    )
-    {
+    ) {
         $this->generation = $generation;
         $this->bestFitness = $bestFitness;
         $this->avgFitness = $avgFitness;
@@ -51,5 +52,22 @@ class GenerationMetrics
         $this->landscapeState = $landscapeState;
         $this->operatorUsed = $operatorUsed;
         $this->operatorReward = $operatorReward;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'generation' => $this->generation,
+            'best_fitness' => $this->bestFitness,
+            'avg_fitness' => $this->avgFitness,
+            'variance' => $this->variance,
+            'diversity' => $this->diversity,
+            'entropy' => $this->entropy,
+            'mutation_rate' => $this->mutationRate,
+            'stagnation' => $this->stagnation,
+            'landscape_state' => $this->landscapeState,
+            'operator_used' => $this->operatorUsed,
+            'operator_reward' => $this->operatorReward,
+        ];
     }
 }

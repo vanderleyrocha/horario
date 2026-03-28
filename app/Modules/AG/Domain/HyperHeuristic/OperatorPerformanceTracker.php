@@ -15,7 +15,7 @@ class OperatorPerformanceTracker
 
     public function __construct()
     {
-        $this->creditManager = new OperatorCreditManager();
+        $this->creditManager = new OperatorCreditManager;
     }
 
     /*
@@ -26,7 +26,7 @@ class OperatorPerformanceTracker
 
     public function registerOperator(string $operator): void
     {
-        if (!isset($this->scores[$operator])) {
+        if (! isset($this->scores[$operator])) {
 
             $this->scores[$operator] = new OperatorScore($operator);
 
@@ -87,10 +87,9 @@ class OperatorPerformanceTracker
         $stats = [];
 
         foreach ($this->scores as $operator => $score) {
-
-            $stats[$operator] = [
-                'score' => $score->score(),
-                'uses' => $score->uses()
+            $stats[$operator] = $score->toArray() + [
+                'average_reward' => $score->averageReward(),
+                'mean_reward' => $score->averageReward(),
             ];
         }
 
@@ -138,7 +137,7 @@ class OperatorPerformanceTracker
 
     private function getOrCreateScore(string $operator): OperatorScore
     {
-        if (!isset($this->scores[$operator])) {
+        if (! isset($this->scores[$operator])) {
 
             $this->scores[$operator] = new OperatorScore($operator);
 
