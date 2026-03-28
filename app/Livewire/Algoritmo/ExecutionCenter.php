@@ -5,6 +5,7 @@ namespace App\Livewire\Algoritmo;
 use App\Jobs\GerarHorarioJob;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\Domain\Landscape\SearchResponseGlobalPolicyReadinessReportBuilder;
 use App\Modules\AG\Domain\Landscape\SearchResponseHistoricalReadinessReportBuilder;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -77,11 +78,19 @@ class ExecutionCenter extends Component
             ->toArray();
     }
 
+    public function getGlobalPolicyReadinessReportProperty(): array
+    {
+        return (new SearchResponseGlobalPolicyReadinessReportBuilder)
+            ->build($this->executions)
+            ->toArray();
+    }
+
     public function render()
     {
         return view('livewire.algoritmo.execution-center', [
             'executions' => $this->executions,
             'historicalReadinessReport' => $this->historicalReadinessReport,
+            'globalPolicyReadinessReport' => $this->globalPolicyReadinessReport,
         ]);
     }
 }

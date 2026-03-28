@@ -160,6 +160,168 @@
         </div>
     </section>
 
+    <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 bg-slate-50 px-6 py-5">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Policy Readiness Global</p>
+                    <h2 class="mt-1 text-xl font-semibold text-slate-950">Readiness agregado por policy</h2>
+                    <p class="mt-2 text-sm text-slate-600">
+                        {{ $globalPolicyReadinessReport['headline'] ?? 'No executions available for global policy readiness analysis.' }}
+                    </p>
+                </div>
+
+                @php
+                    $leadingPolicyByNearGate = $globalPolicyReadinessReport['leading_policy_by_near_gate'] ?? null;
+                    $leadingPolicyByCandidateReady = $globalPolicyReadinessReport['leading_policy_by_candidate_ready'] ?? null;
+                @endphp
+
+                <div class="grid gap-3 text-sm text-slate-600 lg:min-w-[24rem] lg:grid-cols-2">
+                    <div class="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3">
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-fuchsia-700">Mais perto do gate</p>
+                        <p class="mt-2 text-sm font-semibold text-fuchsia-950">
+                            @if (is_array($leadingPolicyByNearGate))
+                                {{ $leadingPolicyByNearGate['policy'] ?? '-' }}
+                            @else
+                                Sem policy lider ainda
+                            @endif
+                        </p>
+                        <p class="mt-1 text-xs text-fuchsia-800">
+                            @if (is_array($leadingPolicyByNearGate))
+                                {{ $leadingPolicyByNearGate['near_gate_occurrences'] ?? 0 }} ocorrencias near gate
+                            @else
+                                Aguarde mais execucoes com telemetry de readiness
+                            @endif
+                        </p>
+                    </div>
+
+                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Mais pronta para ativacao</p>
+                        <p class="mt-2 text-sm font-semibold text-emerald-950">
+                            @if (is_array($leadingPolicyByCandidateReady))
+                                {{ $leadingPolicyByCandidateReady['policy'] ?? '-' }}
+                            @else
+                                Nenhuma policy pronta ainda
+                            @endif
+                        </p>
+                        <p class="mt-1 text-xs text-emerald-800">
+                            @if (is_array($leadingPolicyByCandidateReady))
+                                {{ $leadingPolicyByCandidateReady['candidate_ready_occurrences'] ?? 0 }} candidates ready
+                            @else
+                                Ainda em modo exclusivamente diagnostico
+                            @endif
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid gap-4 px-6 py-6 md:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Janela analisada</p>
+                <p class="mt-2 text-3xl font-semibold text-slate-950">{{ $globalPolicyReadinessReport['window_executions_count'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-slate-600">Ultimas execucoes usadas no agregado global.</p>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Policies consolidadas</p>
+                <p class="mt-2 text-3xl font-semibold text-slate-950">{{ $globalPolicyReadinessReport['policies_count'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-slate-600">Policies com sinais suficientes para comparacao.</p>
+            </div>
+
+            <div class="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-fuchsia-700">Status global</p>
+                <p class="mt-2 text-2xl font-semibold text-fuchsia-950">
+                    {{ str_replace('_', ' ', (string) ($globalPolicyReadinessReport['status'] ?? 'idle')) }}
+                </p>
+                <p class="mt-1 text-sm text-fuchsia-800">Resume se o agregado ja mostra sinal de near gate ou candidate ready.</p>
+            </div>
+
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Contexto dominante</p>
+                <p class="mt-2 text-sm font-semibold text-amber-950">
+                    @if (is_array($leadingPolicyByNearGate))
+                        {{ $leadingPolicyByNearGate['top_landscape_state'] ?? '-' }}
+                        @if (!empty($leadingPolicyByNearGate['top_landscape_phenomenon']))
+                            / {{ $leadingPolicyByNearGate['top_landscape_phenomenon'] }}
+                        @endif
+                    @else
+                        Sem contexto dominante ainda
+                    @endif
+                </p>
+                <p class="mt-1 text-sm text-amber-800">Paisagem mais comum quando a policy lider se aproxima do gate real.</p>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto border-t border-slate-200">
+            @if (empty($globalPolicyReadinessReport['policy_rows']))
+                <p class="px-6 py-8 text-sm text-slate-500">Nenhuma policy consolidada ainda para o painel global.</p>
+            @else
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        <tr>
+                            <th class="px-4 py-3">Policy</th>
+                            <th class="px-4 py-3">Near gate</th>
+                            <th class="px-4 py-3">Candidate ready</th>
+                            <th class="px-4 py-3">Landscape comum</th>
+                            <th class="px-4 py-3">Sinais medios</th>
+                            <th class="px-4 py-3">Bloqueio tipico</th>
+                            <th class="px-4 py-3">Amostra</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        @foreach (($globalPolicyReadinessReport['policy_rows'] ?? []) as $policyRow)
+                            <tr class="align-top">
+                                <td class="px-4 py-4">
+                                    <p class="font-semibold text-slate-950">{{ $policyRow['policy'] ?? '-' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        {{ $policyRow['executions_seen'] ?? 0 }} execucoes
+                                        · success {{ number_format(((float) ($policyRow['avg_success_rate'] ?? 0)) * 100, 1) }}%
+                                        · progress {{ number_format((float) ($policyRow['avg_progress_score'] ?? 0), 2) }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="font-medium text-slate-900">{{ $policyRow['near_gate_occurrences'] ?? 0 }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        evidence {{ number_format((float) ($policyRow['avg_near_gate_resolved_evidence'] ?? 0), 2) }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="font-medium text-emerald-800">{{ $policyRow['candidate_ready_occurrences'] ?? 0 }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        {{ $policyRow['blocked_near_gate_occurrences'] ?? 0 }} bloqueadas antes do gate
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>{{ $policyRow['top_landscape_state'] ?? '-' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">{{ $policyRow['top_landscape_phenomenon'] ?? '-' }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>bLock {{ number_format((float) ($policyRow['avg_basin_lock_confidence'] ?? 0), 2) }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        depth {{ number_format((float) ($policyRow['avg_depth_score'] ?? 0), 2) }}
+                                        · turnover {{ number_format(((float) ($policyRow['avg_population_turnover'] ?? 0)) * 100, 0) }}%
+                                        · elite {{ number_format((float) ($policyRow['avg_elite_similarity'] ?? 0), 2) }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="max-w-xs text-xs leading-5 text-slate-500">
+                                        {{ $policyRow['top_blocking_reason'] ?? 'Sem bloqueio dominante' }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="text-xs text-slate-500">
+                                        {{ collect($policyRow['sample_execution_ids'] ?? [])->map(fn ($id) => '#' . $id)->implode(', ') ?: '-' }}
+                                    </p>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </div>
+    </section>
+
     <div class="grid gap-8 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Nova Execucao</p>

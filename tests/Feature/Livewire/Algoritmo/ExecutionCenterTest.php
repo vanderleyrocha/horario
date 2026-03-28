@@ -35,8 +35,15 @@ it('exibe o readiness historico entre execucoes no execution center', function (
         'crossover_rate' => 0.8,
         'operator_used' => 'epsilon_greedy',
         'operator_reward' => 0.12,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'deep_valley',
         'stagnation' => 2,
         'landscape_observation' => [
+            'depth_score' => 0.83,
+            'population_turnover' => 0.16,
+            'elite_similarity' => 0.87,
+            'best_delta_window' => 0.02,
+            'basin_of_attraction_lock_confidence' => 0.91,
             'search_response_readiness_dashboard' => [
                 'status' => 'candidate_ready',
                 'headline' => 'Diagnostic candidate ready: basin_lock_escape',
@@ -60,6 +67,9 @@ it('exibe o readiness historico entre execucoes no execution center', function (
                 'activation_gate' => [
                     'candidate_policy' => 'basin_lock_escape',
                     'eligible_as_candidate' => true,
+                    'supporting_stats' => [
+                        'policy' => 'basin_lock_escape',
+                    ],
                     'blocking_reasons' => [],
                 ],
                 'blocking_reasons' => [],
@@ -101,8 +111,15 @@ it('exibe o readiness historico entre execucoes no execution center', function (
         'crossover_rate' => 0.78,
         'operator_used' => 'epsilon_greedy',
         'operator_reward' => 0.04,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'local_minimum',
         'stagnation' => 3,
         'landscape_observation' => [
+            'depth_score' => 0.72,
+            'population_turnover' => 0.19,
+            'elite_similarity' => 0.82,
+            'best_delta_window' => 0.03,
+            'basin_of_attraction_lock_confidence' => 0.78,
             'search_response_readiness_dashboard' => [
                 'status' => 'collecting_evidence',
                 'headline' => 'Collecting evidence before any real activation',
@@ -126,6 +143,9 @@ it('exibe o readiness historico entre execucoes no execution center', function (
                 'activation_gate' => [
                     'candidate_policy' => null,
                     'eligible_as_candidate' => false,
+                    'supporting_stats' => [
+                        'policy' => 'deep_valley_probe',
+                    ],
                     'blocking_reasons' => [
                         'Need more resolved shadow outcomes.',
                     ],
@@ -148,8 +168,13 @@ it('exibe o readiness historico entre execucoes no execution center', function (
     Livewire::test(ExecutionCenter::class, ['horario' => $horario])
         ->assertSee('Readiness Historico')
         ->assertSee('Comparacao entre execucoes')
+        ->assertSee('Policy Readiness Global')
+        ->assertSee('Readiness agregado por policy')
         ->assertSee('basin_lock_escape')
         ->assertSee('deep_valley_probe')
+        ->assertSee('Mais perto do gate')
+        ->assertSee('stagnation')
+        ->assertSee('deep_valley')
         ->assertSee('Need more resolved shadow outcomes.')
         ->assertSee('Abrir Dashboard')
         ->assertSee('Cancelar');
