@@ -3,12 +3,12 @@
     <div class="mb-6">
 
         <h2 class="text-2xl font-bold text-gray-900">
-            Execução do Solver #{{ $execution->id }}
+            Execucao do Solver #{{ $execution->id }}
         </h2>
 
         <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div class="w-full max-w-md">
-                <label for="execution-selector" class="text-sm font-medium text-slate-700">Trocar execução</label>
+                <label for="execution-selector" class="text-sm font-medium text-slate-700">Trocar execucao</label>
                 <select
                     id="execution-selector"
                     wire:model.live="selectedExecutionId"
@@ -30,7 +30,7 @@
             </div>
 
             <div class="bg-white shadow rounded p-4">
-                <p class="text-sm text-gray-500">População</p>
+                <p class="text-sm text-gray-500">Populacao</p>
                 <p class="text-lg font-bold">{{ $executionInfo['population'] }}</p>
             </div>
 
@@ -72,9 +72,9 @@
             <div class="mt-4 flex justify-end">
                 <button
                     wire:click="cancelExecution"
-                    wire:confirm="Deseja solicitar o cancelamento desta execução?"
+                    wire:confirm="Deseja solicitar o cancelamento desta execucao?"
                     class="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
-                    Cancelar execução
+                    Cancelar execucao
                 </button>
             </div>
         @endif
@@ -87,24 +87,24 @@
 
         @if ($execution->status === 'cancel_requested')
             <div class="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-                Cancelamento solicitado. O solver será interrompido assim que atingir um ponto seguro.
+                Cancelamento solicitado. O solver sera interrompido assim que atingir um ponto seguro.
             </div>
         @endif
 
         @if ($execution->status === 'cancelled')
             <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-                Execução cancelada pelo usuário.
+                Execucao cancelada pelo usuario.
             </div>
         @endif
 
         @if (in_array($execution->status, ['finished', 'completed', 'concluida', 'concluida_com_sucesso'], true))
-            <div class="mt-4 bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                <h3 class="text-lg font-semibold text-green-800">Geração concluída!</h3>
-                <p class="text-green-700 mt-2">O horário foi gerado com sucesso e a melhor solução foi salva.</p>
+            <div class="mt-4 rounded-lg border border-green-200 bg-green-50 p-6 text-center">
+                <h3 class="text-lg font-semibold text-green-800">Geracao concluida!</h3>
+                <p class="mt-2 text-green-700">O horario foi gerado com sucesso e a melhor solucao foi salva.</p>
                 <a href="{{ route('horarios.show', ['horario' => $execution->horario_id]) }}"
-                    class="mt-4 inline-block bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-transform transform hover:scale-105"
+                    class="mt-4 inline-block rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md transition-transform hover:scale-105 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
                     wire:navigate>
-                    Visualizar horário gerado ->
+                    Visualizar horario gerado ->
                 </a>
             </div>
         @endif
@@ -116,9 +116,9 @@
 
     <div class="grid grid-cols-2 gap-6">
 
-        <div class="bg-white shadow rounded p-4 col-span-2">
-            <h3 class="font-semibold mb-2">População inicial</h3>
-            <div class="grid grid-cols-4 gap-4 text-sm">
+        <div class="col-span-2 rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Populacao inicial</h3>
+            <div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2 xl:grid-cols-[0.9fr_0.55fr_0.65fr_2.9fr]">
                 <div>
                     <p class="text-gray-500">Etapa</p>
                     <p class="font-semibold" data-initial-stage>Aguardando</p>
@@ -131,22 +131,28 @@
                     <p class="text-gray-500">Preenchimento</p>
                     <p class="font-semibold" data-initial-fill-ratio>0%</p>
                 </div>
-                <div>
-                    <p class="text-gray-500">Resumo</p>
-                    <p class="font-semibold" data-initial-summary>Aguardando progresso da população inicial</p>
+                <div class="min-w-0 md:col-span-2 xl:col-span-1 xl:overflow-x-auto">
+                    <p class="text-gray-500">Resumo operacional</p>
+                    <p
+                        class="font-semibold leading-6 text-slate-800 md:text-[13px] xl:whitespace-nowrap"
+                        data-initial-summary
+                        title="Aguardando progresso da populacao inicial"
+                    >
+                        Aguardando progresso da populacao inicial
+                    </p>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4 col-span-2">
-            <h3 class="font-semibold mb-2">Observação do landscape</h3>
+        <div class="col-span-2 rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Observacao do landscape</h3>
             <div class="grid grid-cols-4 gap-4 text-sm">
                 <div>
-                    <p class="text-gray-500">Fenômeno</p>
+                    <p class="text-gray-500">Fenomeno</p>
                     <p class="font-semibold" data-landscape-phenomenon>Neutro</p>
                 </div>
                 <div>
-                    <p class="text-gray-500">Confiança</p>
+                    <p class="text-gray-500">Confianca</p>
                     <p class="font-semibold" data-landscape-confidence>0.00</p>
                 </div>
                 <div>
@@ -155,7 +161,7 @@
                 </div>
                 <div>
                     <p class="text-gray-500">Resumo</p>
-                    <p class="font-semibold" data-landscape-summary>Nenhuma observação ainda</p>
+                    <p class="font-semibold" data-landscape-summary>Nenhuma observacao ainda</p>
                 </div>
             </div>
         </div>
@@ -164,9 +170,9 @@
             <div class="border-b border-slate-200 px-6 py-4">
                 <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h3 class="text-lg font-semibold text-slate-900">Prontidão da resposta de busca</h3>
+                        <h3 class="text-lg font-semibold text-slate-900">Prontidao da resposta de busca</h3>
                         <p class="text-sm text-slate-600" data-sr-readiness-headline>
-                            Nenhuma evidência de prontidão coletada ainda
+                            Nenhuma evidencia de prontidao coletada ainda
                         </p>
                     </div>
                     <div class="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold tracking-wide text-white" data-sr-readiness-status>
@@ -177,7 +183,7 @@
 
             <div class="grid gap-4 px-6 py-5 lg:grid-cols-4">
                 <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
-                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Evidência</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Evidencia</p>
                     <p class="mt-3 text-3xl font-semibold text-slate-900" data-sr-evidence-count>0</p>
                     <p class="mt-1 text-sm text-slate-600">
                         Auditorias pendentes:
@@ -187,18 +193,18 @@
 
                 <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status do gate</p>
-                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-gate-status>Somente diagnóstico</p>
+                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-gate-status>Somente diagnostico</p>
                     <p class="mt-1 text-sm text-slate-600" data-sr-gate-candidate>Nenhuma candidata ainda</p>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Melhor resultado</p>
-                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-best-outcome>Evidência insuficiente</p>
-                    <p class="mt-1 text-sm text-slate-600" data-sr-best-progress>Progresso indisponível</p>
+                    <p class="mt-3 text-base font-semibold text-slate-900" data-sr-best-outcome>Evidencia insuficiente</p>
+                    <p class="mt-1 text-sm text-slate-600" data-sr-best-progress>Progresso indisponivel</p>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-white/80 p-4">
-                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Último resultado</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ultimo resultado</p>
                     <p class="mt-3 text-base font-semibold text-slate-900" data-sr-latest-outcome>Nenhum resultado resolvido ainda</p>
                     <p class="mt-1 text-sm text-slate-600" data-sr-latest-outcome-detail>Aguardando o primeiro horizonte expirar</p>
                 </div>
@@ -207,23 +213,23 @@
             <div class="grid gap-4 border-t border-slate-200 px-6 py-5 lg:grid-cols-[1.1fr_0.9fr]">
                 <div class="rounded-xl border border-slate-200 bg-white/90 p-4">
                     <div class="flex items-center justify-between gap-3">
-                        <h4 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Políticas</h4>
+                        <h4 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Politicas</h4>
                         <span class="text-xs text-slate-500">Efetividade em shadow mode</span>
                     </div>
                     <div class="mt-4 overflow-x-auto">
                         <table class="min-w-full text-sm">
                             <thead class="text-left text-xs uppercase tracking-[0.14em] text-slate-500">
                                 <tr>
-                                    <th class="pb-2 pr-4 font-medium">Política</th>
+                                    <th class="pb-2 pr-4 font-medium">Politica</th>
                                     <th class="pb-2 pr-4 font-medium">Resolvidas</th>
                                     <th class="pb-2 pr-4 font-medium">Sucesso</th>
-                                    <th class="pb-2 pr-4 font-medium">Aproximação</th>
+                                    <th class="pb-2 pr-4 font-medium">Aproximacao</th>
                                     <th class="pb-2 font-medium">Progresso</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100" data-sr-policy-rows>
                                 <tr>
-                                    <td colspan="5" class="py-4 text-sm text-slate-500">Nenhuma política avaliada ainda.</td>
+                                    <td colspan="5" class="py-4 text-sm text-slate-500">Nenhuma politica avaliada ainda.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -233,7 +239,7 @@
                 <div class="rounded-xl border border-slate-200 bg-white/90 p-4">
                     <div class="flex items-center justify-between gap-3">
                         <h4 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Motivos de bloqueio</h4>
-                        <span class="text-xs text-slate-500">Antes da ativação real</span>
+                        <span class="text-xs text-slate-500">Antes da ativacao real</span>
                     </div>
                     <div class="mt-4 space-y-2" data-sr-blocking-reasons>
                         <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
@@ -244,43 +250,43 @@
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4">
-            <h3 class="font-semibold mb-2">Curva de fitness</h3>
+        <div class="rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Curva de fitness</h3>
             <div class="relative h-72">
                 <canvas id="fitnessChart" class="h-full w-full"></canvas>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4">
-            <h3 class="font-semibold mb-2">Curva de diversidade</h3>
+        <div class="rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Curva de diversidade</h3>
             <div class="relative h-72">
                 <canvas id="diversityChart" class="h-full w-full"></canvas>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4">
-            <h3 class="font-semibold mb-2">Curva de entropia</h3>
+        <div class="rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Curva de entropia</h3>
             <div class="relative h-72">
                 <canvas id="entropyChart" class="h-full w-full"></canvas>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4">
-            <h3 class="font-semibold mb-2">Taxa de mutação</h3>
+        <div class="rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Taxa de mutacao</h3>
             <div class="relative h-72">
                 <canvas id="mutationChart" class="h-full w-full"></canvas>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4 col-span-2">
-            <h3 class="font-semibold mb-2">Uso de operadores</h3>
+        <div class="col-span-2 rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Uso de operadores</h3>
             <div class="relative h-80">
                 <canvas id="operatorChart" class="h-full w-full"></canvas>
             </div>
         </div>
 
-        <div class="bg-white shadow rounded p-4 col-span-2">
-            <h3 class="font-semibold mb-2">Estado do landscape</h3>
+        <div class="col-span-2 rounded bg-white p-4 shadow">
+            <h3 class="mb-2 font-semibold">Estado do landscape</h3>
             <div class="relative h-96">
                 <canvas id="landscapeChart" class="h-full w-full"></canvas>
             </div>

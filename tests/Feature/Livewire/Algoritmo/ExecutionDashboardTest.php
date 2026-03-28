@@ -9,7 +9,7 @@ use Livewire\Livewire;
 
 it('exibe o dashboard em portugues e permite trocar de execucao', function (): void {
     $horario = Horario::query()->create([
-        'nome' => 'Horário de Teste',
+        'nome' => 'Horario de Teste',
         'ano' => 2026,
         'semestre' => 1,
         'status' => 'rascunho',
@@ -30,16 +30,17 @@ it('exibe o dashboard em portugues e permite trocar de execucao', function (): v
     ]);
 
     Livewire::test(ExecutionDashboard::class, ['execution' => $currentExecution])
-        ->assertSee('Execução do Solver')
-        ->assertSee('Trocar execução')
-        ->assertSee('População inicial')
+        ->assertSee('Execucao do Solver')
+        ->assertSee('Trocar execucao')
+        ->assertSee('Populacao inicial')
+        ->assertSee('Resumo operacional')
         ->set('selectedExecutionId', $olderExecution->id)
         ->assertRedirect(route('algoritmo.execution', ['execution' => $olderExecution->id]));
 });
 
 it('usa o cache de initial_population quando ainda nao existem metricas de evolucao', function (): void {
     $horario = Horario::query()->create([
-        'nome' => 'Horário em construção',
+        'nome' => 'Horario em construcao',
         'ano' => 2026,
         'semestre' => 1,
         'status' => 'rascunho',

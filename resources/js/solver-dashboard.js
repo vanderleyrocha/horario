@@ -466,6 +466,21 @@ function ensureHeartbeatTicker() {
     }, 1000)
 }
 
+function translateRepairEvent(value) {
+    const normalized = String(value ?? "").trim().toLowerCase()
+
+    const map = {
+        pass_started: "inicio do passe",
+        pass_progress: "progresso do passe",
+        pass_finished: "fim do passe",
+        relocation_applied: "realocacao aplicada",
+        swap_applied: "troca aplicada",
+        local_rebuild_applied: "reconstrucao local",
+    }
+
+    return map[normalized] ?? normalized.replaceAll("_", " ")
+}
+
 function syncOperatorChart() {
     if (!chartState.operatorChart) {
         return
@@ -503,7 +518,7 @@ function appendMetric(metric) {
     updateDashboardHeartbeatMonitor(metric)
 
     if ((metric.phase ?? null) === "initial_population") {
-        updateInitialPopulationObservation(metric)
+        updateInitialPopulationObservationReadable(metric)
         return
     }
 
@@ -566,7 +581,7 @@ function appendMetric(metric) {
     updateSearchResponseReadiness(landscapeObservation)
 }
 
-function updateInitialPopulationObservation(progress) {
+function updateInitialPopulationObservationReadable(progress) {
     const root = chartState.root
 
     if (!root) {
@@ -767,6 +782,69 @@ function updateSearchResponseReadiness(observation) {
             </p>
         `).join("")
     }
+}
+
+function updateInitialPopulationObservation(progress) {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const stageElement = root.querySelector("[data-initial-stage]")
+    const attemptElement = root.querySelector("[data-initial-attempt]")
+    const fillRatioElement = root.querySelector("[data-initial-fill-ratio]")
+    const summaryElement = root.querySelector("[data-initial-summary]")
+
+    if (!stageElement || !attemptElement || !fillRatioElement || !summaryElement) {
+        return
+    }
+
+    const stage = String(progress.stage ?? "aguardando")
+    const attempt = Number(progress.attempt ?? 0)
+    const fillRatio = Number(progress.fill_ratio ?? progress.population_fill_ratio ?? 0)
+    const queueSize = Number(progress.queue_size ?? 0)
+    const allocations = Number(progress.allocations ?? 0)
+    const forcedAllocations = Number(progress.forced_allocations ?? 0)
+    const hardConflictAllocations = Number(progress.hard_conflict_allocations ?? 0)
+    const repairPass = Number(progress.repair_pass ?? 0)
+    const repairEvent = String(progress.repair_event ?? "")
+    const repairProcessed = Number(progress.repair_processed_invalid_genes ?? 0)
+    const repairTotal = Number(progress.repair_total_invalid_genes ?? 0)
+    const repairInvalidAfter = Number(progress.repair_invalid_genes_after ?? 0)
+    const hardPenalty = progress.hard_penalty ?? progress.repair_hard_penalty_after ?? null
+    const message = String(progress.message ?? "")
+    const summaryParts = [
+        `Alocacoes ${allocations}/${queueSize || "-"}`,
+        `Forcadas ${forcedAllocations}`,
+        `Conflitos hard ${hardConflictAllocations}`,
+    ]
+
+    if (repairEvent) {
+        summaryParts.push(`Reparo passe ${repairPass || "-"}: ${translateRepairEvent(repairEvent)}`)
+    }
+
+    if (repairTotal > 0) {
+        summaryParts.push(`Genes verificados ${repairProcessed}/${repairTotal}`)
+    }
+
+    if (repairInvalidAfter > 0) {
+        summaryParts.push(`Invalidos ${repairInvalidAfter}`)
+    }
+
+    if (hardPenalty !== null) {
+        summaryParts.push(`Penalidade hard ${Number(hardPenalty).toFixed(2)}`)
+    }
+
+    if (message) {
+        summaryParts.push(message)
+    }
+
+    stageElement.textContent = stage.replaceAll("_", " ")
+    attemptElement.textContent = attempt > 0 ? String(attempt) : "-"
+    fillRatioElement.textContent = `${(fillRatio * 100).toFixed(0)}%`
+    summaryElement.textContent = summaryParts.join(" · ")
+    summaryElement.title = summaryParts.join(" · ")
 }
 
 function updateAllCharts() {
