@@ -13,6 +13,7 @@ use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
 use App\Modules\AG\Domain\Landscape\LandscapeEngine;
 use App\Modules\AG\Domain\Landscape\LandscapeMetrics;
+use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\CrossoverOperatorInterface;
@@ -124,38 +125,15 @@ final class GeneticAlgorithmEngine
             $metrics->alnsRepairOperator = $alnsTelemetry['alns_repair_operator'] ?? null;
             $metrics->alnsImprovement = $alnsTelemetry['alns_improvement'] ?? null;
 
-            if ($this->executionMetrics !== null) {
-                $this->executionMetrics->recordGeneration($metrics);
-            }
-
-            /* STREAMING DE MÉTRICAS */
-
-            $this->metrics->publishGenerationMetrics($metrics->toArray() + [
-                'execution_id' => $this->executionMetrics?->getExecutionId(),
-                'landscape_state' => $landscapeState ?? 'unknown',
-                'landscape_heatmap' => $heatmap,
-                'timestamp' => microtime(true),
-            ]);
-
-            /* PROGRESS */
-
-            if ($this->progress) {
-
-                $progress = new EvolutionProgress;
-
-                $progress->phase = 'evolution';
-                $progress->generation = $generation;
-                $progress->maxGenerations = $this->termination->getMaxGenerations() ?? 0;
-                $progress->bestFitness = $metrics->bestFitness;
-                $progress->avgFitness = $metrics->avgFitness;
-                $progress->diversity = $metrics->diversity;
-                $progress->entropy = $metrics->entropy;
-                $progress->mutationRate = $generationStep['mutation_rate'];
-                $progress->stagnation = $stagnation;
-                $progress->landscapeState = $landscapeState ?? 'unknown';
-
-                $this->progress->report($progress->toArray() + $alnsTelemetry);
-            }
+            $this->publishGenerationState(
+                generation: $generation,
+                metrics: $metrics,
+                mutationRate: $generationStep['mutation_rate'],
+                stagnation: $stagnation,
+                landscapeState: $landscapeState,
+                heatmap: $heatmap,
+                alnsTelemetry: $alnsTelemetry
+            );
 
             $generation++;
         }
@@ -291,6 +269,46 @@ final class GeneticAlgorithmEngine
         }
 
         return $telemetry;
+    }
+
+    private function publishGenerationState(
+        int $generation,
+        GenerationMetrics $metrics,
+        float $mutationRate,
+        int $stagnation,
+        ?string $landscapeState,
+        array $heatmap,
+        array $alnsTelemetry
+    ): void {
+        if ($this->executionMetrics !== null) {
+            $this->executionMetrics->recordGeneration($metrics);
+        }
+
+        $this->metrics->publishGenerationMetrics($metrics->toArray() + [
+            'execution_id' => $this->executionMetrics?->getExecutionId(),
+            'landscape_state' => $landscapeState ?? 'unknown',
+            'landscape_heatmap' => $heatmap,
+            'timestamp' => microtime(true),
+        ]);
+
+        if ($this->progress === null) {
+            return;
+        }
+
+        $progress = new EvolutionProgress;
+
+        $progress->phase = 'evolution';
+        $progress->generation = $generation;
+        $progress->maxGenerations = $this->termination->getMaxGenerations() ?? 0;
+        $progress->bestFitness = $metrics->bestFitness;
+        $progress->avgFitness = $metrics->avgFitness;
+        $progress->diversity = $metrics->diversity;
+        $progress->entropy = $metrics->entropy;
+        $progress->mutationRate = $mutationRate;
+        $progress->stagnation = $stagnation;
+        $progress->landscapeState = $landscapeState ?? 'unknown';
+
+        $this->progress->report($progress->toArray() + $alnsTelemetry);
     }
 
     /**

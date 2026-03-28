@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\AG\Application\GeneticAlgorithmEngine;
 use App\Modules\AG\Application\PopulationFitnessEvaluator;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
+use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\FitnessResult;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
@@ -17,6 +18,7 @@ use App\Modules\AG\Domain\Operators\Selection\SelectionOperatorInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
+use App\Modules\AG\Support\AGError;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
@@ -94,10 +96,39 @@ it('reuses the shared generation step in evolveGeneration without emitting mutat
         ]);
 });
 
+it('publishes the same structured progress payload for the frontend through the dedicated generation publisher', function (): void {
+    $progress = new CollectingProgressReporter;
+    $engine = makeStandaloneEngine(
+        problem: new StandaloneFakeProblem,
+        mutation: new CountingMutationOperator,
+        termination: new StandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        progress: $progress
+    );
+
+    $engine->run(4);
+
+    expect($progress->reports)->toHaveCount(1)
+        ->and($progress->reports[0])->toMatchArray([
+            'phase' => 'evolution',
+            'generation' => 0,
+            'max_generations' => 1,
+            'mutation_rate' => 0.0,
+            'stagnation' => 0,
+            'landscape_state' => 'unknown',
+        ])
+        ->and($progress->reports[0])->toHaveKeys([
+            'best_fitness',
+            'avg_fitness',
+            'diversity',
+            'entropy',
+        ]);
+});
+
 function makeStandaloneEngine(
     GeneticProblem $problem,
     CountingMutationOperator $mutation,
-    TerminationCriterionInterface $termination
+    TerminationCriterionInterface $termination,
+    ?ProgressReporterInterface $progress = null
 ): GeneticAlgorithmEngine {
     return new GeneticAlgorithmEngine(
         problem: $problem,
@@ -111,6 +142,7 @@ function makeStandaloneEngine(
         populationEvaluator: new PopulationFitnessEvaluator($problem),
         replacement: new NoopReplacement,
         hyperHeuristic: null,
+        progress: $progress,
     );
 }
 
@@ -231,4 +263,16 @@ final class StandaloneTerminationCriterion implements TerminationCriterionInterf
     {
         return $this->maxGenerationExclusive;
     }
+}
+
+final class CollectingProgressReporter implements ProgressReporterInterface
+{
+    public array $reports = [];
+
+    public function report(array $data): void
+    {
+        $this->reports[] = $data;
+    }
+
+    public function reportError(AGError $error): void {}
 }
