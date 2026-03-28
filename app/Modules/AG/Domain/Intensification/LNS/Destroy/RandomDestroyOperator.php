@@ -5,13 +5,19 @@ namespace App\Modules\AG\Domain\Intensification\LNS\Destroy;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class RandomDestroyOperator implements DestroyOperatorInterface
+class RandomDestroyOperator implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
 {
+    private float $destroyRatio = 0.2;
+
     public function destroy(Cromossomo $solution): PartialSolution
     {
         $genes = $solution->genes();
 
-        $removeCount = (int) floor(count($genes) * 0.2);
+        if ($genes === []) {
+            return new PartialSolution([], []);
+        }
+
+        $removeCount = max(1, (int) floor(count($genes) * $this->destroyRatio));
 
         $indexes = array_rand($genes, $removeCount);
 
@@ -35,4 +41,8 @@ class RandomDestroyOperator implements DestroyOperatorInterface
         return 'RandomDestroyOperator';
     }
 
+    public function configureDestroyIntensity(float $intensity): void
+    {
+        $this->destroyRatio = max(0.10, min(0.55, 0.10 + ($intensity * 0.35)));
+    }
 }

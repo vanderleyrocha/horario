@@ -2,11 +2,11 @@
 
 namespace App\Modules\AG\Domain\Intensification\LNS\Destroy;
 
-use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
-use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Conflict\ConflictDetector;
+use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class ConflictDestroyOperator implements DestroyOperatorInterface
+class ConflictDestroyOperator implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
 {
     private ConflictDetector $detector;
 
@@ -31,7 +31,7 @@ class ConflictDestroyOperator implements DestroyOperatorInterface
 
         $genes = $solution->genes();
 
-        $targetSize = (int) floor(count($genes) * $this->destroyRatio);
+        $targetSize = max(1, (int) floor(count($genes) * $this->destroyRatio));
 
         foreach ($conflicts->all() as $conflict) {
 
@@ -39,6 +39,19 @@ class ConflictDestroyOperator implements DestroyOperatorInterface
 
             if (count($genesToRemove) >= $targetSize) {
                 break;
+            }
+        }
+
+        if (count($genesToRemove) < $targetSize && $genes !== []) {
+            $candidateIndexes = array_keys($genes);
+            shuffle($candidateIndexes);
+
+            foreach ($candidateIndexes as $index) {
+                $genesToRemove[$index] = true;
+
+                if (count($genesToRemove) >= $targetSize) {
+                    break;
+                }
             }
         }
 
@@ -55,5 +68,10 @@ class ConflictDestroyOperator implements DestroyOperatorInterface
         }
 
         return new PartialSolution($assigned, $unassigned);
+    }
+
+    public function configureDestroyIntensity(float $intensity): void
+    {
+        $this->destroyRatio = max(0.12, min(0.65, 0.12 + ($intensity * 0.43)));
     }
 }

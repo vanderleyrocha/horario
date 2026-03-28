@@ -164,22 +164,22 @@ const LANDSCAPE_STATE_SCALE = {
 }
 
 const LANDSCAPE_LABELS = {
-    0: "Unknown",
-    1: "Exploration",
-    2: "Exploration+",
-    3: "Controlled",
-    4: "Balanced",
-    5: "Stagnation I",
-    6: "Stagnation II",
-    7: "Stagnation III",
-    8: "Convergence",
+    0: "Desconhecido",
+    1: "Exploração",
+    2: "Exploração+",
+    3: "Controlado",
+    4: "Equilibrado",
+    5: "Estagnação I",
+    6: "Estagnação II",
+    7: "Estagnação III",
+    8: "Convergência",
 }
 
 const LANDSCAPE_PHENOMENON_LABELS = {
-    neutral: "Neutral",
+    neutral: "Neutro",
     plateau: "Plateau",
-    local_minimum: "Local Minimum",
-    deep_valley: "Deep Valley",
+    local_minimum: "Mínimo local",
+    deep_valley: "Vale profundo",
 }
 
 function normalizeLandscapeState(state) {
@@ -193,12 +193,12 @@ function normalizeLandscapeState(state) {
 }
 
 function landscapeLabel(value) {
-    return LANDSCAPE_LABELS[value] ?? `State ${value}`
+    return LANDSCAPE_LABELS[value] ?? `Estado ${value}`
 }
 
 function landscapePhenomenonLabel(value) {
     if (typeof value !== "string" || value.trim() === "") {
-        return "Neutral"
+        return "Neutro"
     }
 
     return LANDSCAPE_PHENOMENON_LABELS[value.trim().toLowerCase()] ?? value
@@ -255,6 +255,11 @@ function appendLandscapeMetric(generation, landscapeState) {
 
 function appendMetric(metric) {
     if (!metric || !chartState.fitnessChart) {
+        return
+    }
+
+    if ((metric.phase ?? null) === "initial_population") {
+        updateInitialPopulationObservation(metric)
         return
     }
 
@@ -317,6 +322,43 @@ function appendMetric(metric) {
     updateSearchResponseReadiness(landscapeObservation)
 }
 
+function updateInitialPopulationObservation(progress) {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const stageElement = root.querySelector("[data-initial-stage]")
+    const attemptElement = root.querySelector("[data-initial-attempt]")
+    const fillRatioElement = root.querySelector("[data-initial-fill-ratio]")
+    const summaryElement = root.querySelector("[data-initial-summary]")
+
+    if (!stageElement || !attemptElement || !fillRatioElement || !summaryElement) {
+        return
+    }
+
+    const stage = String(progress.stage ?? "aguardando")
+    const attempt = Number(progress.attempt ?? 0)
+    const fillRatio = Number(progress.fill_ratio ?? progress.population_fill_ratio ?? 0)
+    const queueSize = Number(progress.queue_size ?? 0)
+    const allocations = Number(progress.allocations ?? 0)
+    const forcedAllocations = Number(progress.forced_allocations ?? 0)
+    const hardConflictAllocations = Number(progress.hard_conflict_allocations ?? 0)
+    const repairPass = Number(progress.repair_pass ?? 0)
+    const repairEvent = String(progress.repair_event ?? "")
+    const repairProcessed = Number(progress.repair_processed_invalid_genes ?? 0)
+    const repairTotal = Number(progress.repair_total_invalid_genes ?? 0)
+    const repairInvalidAfter = Number(progress.repair_invalid_genes_after ?? 0)
+    const hardPenalty = progress.hard_penalty ?? progress.repair_hard_penalty_after ?? null
+    const message = String(progress.message ?? "")
+
+    stageElement.textContent = stage.replaceAll("_", " ")
+    attemptElement.textContent = attempt > 0 ? String(attempt) : "-"
+    fillRatioElement.textContent = `${(fillRatio * 100).toFixed(0)}%`
+    summaryElement.textContent = `aloc ${allocations}/${queueSize || "-"} | forçadas ${forcedAllocations} | hard ${hardConflictAllocations}${repairEvent ? ` | reparo p${repairPass} ${repairEvent}` : ""}${repairTotal > 0 ? ` ${repairProcessed}/${repairTotal}` : ""}${repairInvalidAfter > 0 ? ` | inválidos ${repairInvalidAfter}` : ""}${hardPenalty !== null ? ` | hp ${Number(hardPenalty).toFixed(2)}` : ""}${message ? ` | ${message}` : ""}`
+}
+
 function updateLandscapeObservation(phenomenon, observation) {
     const root = chartState.root
 
@@ -359,11 +401,18 @@ function updateLandscapeObservation(phenomenon, observation) {
     const alnsTriggered = Boolean(alnsTrigger.triggered ?? false)
     const alnsTriggerReason = String(alnsTrigger.reason ?? "")
     const alnsEffectiveFrequency = Number(alnsTrigger.effective_frequency ?? 0)
+    const alnsResponse = alnsTrigger.response ?? {}
+    const alnsAggressionLabel = String(alnsResponse.aggression_label ?? "")
+    const alnsDestroyRatio = Number(alnsResponse.destroy_ratio ?? 0)
+    const alnsRecentSuccessRate = Number(alnsResponse.recent_success_rate ?? 0)
+    const alnsRealActivation = alnsTrigger.real_activation ?? {}
+    const alnsRealActivationApplied = Boolean(alnsRealActivation.applied ?? false)
+    const alnsRealActivationPolicy = String(alnsRealActivation.policy ?? "")
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${alnsRealActivationApplied ? ` live:${alnsRealActivationPolicy || "gate"}` : ""}${alnsAggressionLabel ? ` ${alnsAggressionLabel}` : ""}${alnsDestroyRatio > 0 ? ` d${alnsDestroyRatio.toFixed(2)}` : ""}${alnsAggressionLabel ? ` s${(alnsRecentSuccessRate * 100).toFixed(0)}%` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateSearchResponseReadiness(observation) {
@@ -407,8 +456,8 @@ function updateSearchResponseReadiness(observation) {
         return
     }
 
-    const status = String(readiness.status ?? "idle")
-    const headline = String(readiness.headline ?? "No readiness evidence collected yet")
+    const status = String(readiness.status ?? "ocioso")
+    const headline = String(readiness.headline ?? "Nenhuma evidência de prontidão coletada ainda")
     const resolvedEvidenceCount = Number(readiness.resolved_evidence_count ?? 0)
     const pendingAudits = Number(readiness.pending_audits ?? 0)
     const bestBySuccess = readiness.best_policy_by_success ?? null
@@ -423,30 +472,30 @@ function updateSearchResponseReadiness(observation) {
     evidenceCountElement.textContent = String(resolvedEvidenceCount)
     pendingAuditsElement.textContent = String(pendingAudits)
     gateStatusElement.textContent = Boolean(activationGate?.eligible_as_candidate)
-        ? "Candidate ready"
-        : "Diagnostic only"
+        ? "Candidata pronta"
+        : "Somente diagnóstico"
     gateCandidateElement.textContent = activationGate?.candidate_policy
-        ? `Candidate: ${activationGate.candidate_policy}`
-        : String(activationGate?.reason ?? "No candidate yet")
+        ? `Candidata: ${activationGate.candidate_policy}`
+        : String(activationGate?.reason ?? "Nenhuma candidata ainda")
 
     bestOutcomeElement.textContent = bestBySuccess?.policy
-        ? `${bestBySuccess.policy} | success ${(Number(bestBySuccess.success_rate ?? 0) * 100).toFixed(0)}%`
-        : "Not enough evidence"
+        ? `${bestBySuccess.policy} | sucesso ${(Number(bestBySuccess.success_rate ?? 0) * 100).toFixed(0)}%`
+        : "Evidência insuficiente"
     bestProgressElement.textContent = bestByProgress?.policy
-        ? `${bestByProgress.policy} | progress ${Number(bestByProgress.avg_progress_score ?? 0).toFixed(2)}`
-        : "Progress not available"
+        ? `${bestByProgress.policy} | progresso ${Number(bestByProgress.avg_progress_score ?? 0).toFixed(2)}`
+        : "Progresso indisponível"
 
     latestOutcomeElement.textContent = latestOutcome?.policy
-        ? `${latestOutcome.policy} | ${Boolean(latestOutcome.targets_satisfied) ? "targets hit" : "targets missed"}`
-        : "No resolved outcome yet"
+        ? `${latestOutcome.policy} | ${Boolean(latestOutcome.targets_satisfied) ? "alvos atingidos" : "alvos não atingidos"}`
+        : "Nenhum resultado resolvido ainda"
     latestOutcomeDetailElement.textContent = latestOutcome?.policy
-        ? `Progress ${Number(latestOutcome.progress_score ?? 0).toFixed(2)} | resolved gen ${Number(latestOutcome.resolved_generation ?? 0)}`
-        : "Waiting for first horizon to expire"
+        ? `Progresso ${Number(latestOutcome.progress_score ?? 0).toFixed(2)} | geração resolvida ${Number(latestOutcome.resolved_generation ?? 0)}`
+        : "Aguardando o primeiro horizonte expirar"
 
     if (policyRows.length === 0) {
         policyRowsElement.innerHTML = `
             <tr>
-                <td colspan="5" class="py-4 text-sm text-slate-500">No policies evaluated yet.</td>
+                <td colspan="5" class="py-4 text-sm text-slate-500">Nenhuma política avaliada ainda.</td>
             </tr>
         `
     } else {
@@ -464,7 +513,7 @@ function updateSearchResponseReadiness(observation) {
     if (blockingReasons.length === 0) {
         blockingReasonsElement.innerHTML = `
             <p class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                No blocking reasons at the moment.
+                Nenhum motivo de bloqueio no momento.
             </p>
         `
     } else {
@@ -523,12 +572,12 @@ function initializeDashboard() {
 
     chartState.root = root
     chartState.executionId = window.executionId ?? null
-    chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Best Fitness", "Average Fitness"])
-    chartState.diversityChart = createLineChart(diversityCanvas, "Diversity")
-    chartState.entropyChart = createLineChart(entropyCanvas, "Entropy")
-    chartState.mutationChart = createLineChart(mutationCanvas, "Mutation Rate")
-    chartState.operatorChart = createBarChart(operatorCanvas, "Average Operator Reward")
-    chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Landscape State")
+    chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Melhor fitness", "Fitness médio"])
+    chartState.diversityChart = createLineChart(diversityCanvas, "Diversidade")
+    chartState.entropyChart = createLineChart(entropyCanvas, "Entropia")
+    chartState.mutationChart = createLineChart(mutationCanvas, "Taxa de mutação")
+    chartState.operatorChart = createBarChart(operatorCanvas, "Recompensa média por operador")
+    chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Estado do landscape")
 
     loadInitialMetrics()
 }

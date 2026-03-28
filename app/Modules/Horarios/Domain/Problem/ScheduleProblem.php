@@ -40,6 +40,8 @@ final class ScheduleProblem implements GeneticProblem
 
     private const INITIAL_QUALITY_GATE_CONFLICT_RATIO_MAX = 0.03;
 
+    private const INITIAL_QUALITY_GATE_FAIL_FAST_GRACE_RATIO = 0.005;
+
     private const REPAIR_TELEMETRY_SAMPLE_EVERY = 25;
 
     private string $lastBuildFailure = 'Falha ao montar individuo inicial.';
@@ -95,10 +97,50 @@ final class ScheduleProblem implements GeneticProblem
             ]);
 
             if ($this->constructWithGrasp($queue, $alpha, $assignedGenes, $teacherBusy, $classBusy, $telemetry)) {
+                $failFast = $this->evaluateInitialPopulationFailFast(
+                    attempt: $attempt,
+                    queueSize: count($queue),
+                    telemetry: $telemetry
+                );
+
+                if ($failFast['should_fail_fast']) {
+                    $this->lastBuildFailure = $failFast['message'];
+
+                    Log::warning('schedule.initial_population.quality_gate.fail_fast', [
+                        'attempt' => $attempt,
+                        'queue_size' => count($queue),
+                        'forced_allocations' => $telemetry['forced_allocations'],
+                        'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                        'max_hard_conflict_allocations' => $failFast['max_hard_conflict_allocations'],
+                        'grace_hard_conflict_allocations' => $failFast['grace_hard_conflict_allocations'],
+                    ]);
+
+                    $this->reportInitialPopulationProgress([
+                        'stage' => 'quality_gate_fail_fast',
+                        'attempt' => $attempt,
+                        'queue_size' => count($queue),
+                        'forced_allocations' => $telemetry['forced_allocations'],
+                        'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                        'max_hard_conflict_allocations' => $failFast['max_hard_conflict_allocations'],
+                        'grace_hard_conflict_allocations' => $failFast['grace_hard_conflict_allocations'],
+                        'fill_ratio' => 1,
+                        'message' => $this->lastBuildFailure,
+                    ]);
+
+                    continue;
+                }
+
                 $candidate = $this->repairWithTelemetry(
                     new Cromossomo($assignedGenes),
                     reportProgress: true,
-                    source: 'initial_population_quality_gate'
+                    source: 'initial_population_quality_gate',
+                    progressContext: [
+                        'attempt' => $attempt,
+                        'queue_size' => count($queue),
+                        'forced_allocations' => $telemetry['forced_allocations'],
+                        'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                        'fill_ratio' => 1,
+                    ]
                 );
                 $qualityGate = $this->evaluateInitialPopulationQualityGate(
                     candidate: $candidate,
@@ -227,9 +269,14 @@ final class ScheduleProblem implements GeneticProblem
         return $this->repairWithTelemetry($individual);
     }
 
-    public function repairWithTelemetry(Cromossomo $individual, bool $reportProgress = false, string $source = 'evolution'): Cromossomo
-    {
+    public function repairWithTelemetry(
+        Cromossomo $individual,
+        bool $reportProgress = false,
+        string $source = 'evolution',
+        array $progressContext = []
+    ): Cromossomo {
         $probe = null;
+        $heartbeat = null;
 
         if ($reportProgress) {
             $probe = function (Cromossomo $candidate): array {
@@ -243,10 +290,45 @@ final class ScheduleProblem implements GeneticProblem
             };
         }
 
-        $repaired = $this->repairOperator->repair($individual, $this->data, $probe);
+        if ($reportProgress && $source === 'initial_population_quality_gate') {
+            $this->reportInitialPopulationProgress($progressContext + [
+                'stage' => 'quality_gate_repair_started',
+            ]);
+
+            $heartbeat = function (array $heartbeatPayload) use ($progressContext): void {
+                $this->reportInitialPopulationProgress($progressContext + [
+                    'stage' => 'quality_gate_repairing',
+                    'repair_event' => $heartbeatPayload['event'] ?? null,
+                    'repair_pass' => $heartbeatPayload['pass'] ?? null,
+                    'repair_invalid_genes_before' => $heartbeatPayload['invalid_genes_before'] ?? null,
+                    'repair_invalid_genes_after' => $heartbeatPayload['invalid_genes_after'] ?? null,
+                    'repair_processed_invalid_genes' => $heartbeatPayload['processed_invalid_genes'] ?? null,
+                    'repair_total_invalid_genes' => $heartbeatPayload['total_invalid_genes'] ?? null,
+                    'repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
+                    'repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
+                    'repair_hard_penalty_delta' => $heartbeatPayload['hard_penalty_delta'] ?? null,
+                    'repair_relocations' => $heartbeatPayload['relocations'] ?? 0,
+                    'repair_swaps' => $heartbeatPayload['swaps'] ?? 0,
+                    'repair_local_rebuilds' => $heartbeatPayload['local_rebuilds'] ?? 0,
+                ]);
+            };
+        }
+
+        $repaired = $this->repairOperator->repair($individual, $this->data, $probe, $heartbeat);
         $this->lastRepairTelemetry = $this->repairOperator->lastTelemetry();
 
-        if ($reportProgress && $this->shouldPublishRepairTelemetry($this->lastRepairTelemetry)) {
+        if ($reportProgress && $source === 'initial_population_quality_gate') {
+            $this->reportInitialPopulationProgress($progressContext + [
+                'stage' => 'quality_gate_repair_finished',
+                'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+            ]);
+        }
+
+        if (
+            $reportProgress
+            && $source !== 'initial_population_quality_gate'
+            && $this->shouldPublishRepairTelemetry($this->lastRepairTelemetry)
+        ) {
             $this->reportRepairProgress($source, $this->lastRepairTelemetry);
         }
 
@@ -764,6 +846,57 @@ final class ScheduleProblem implements GeneticProblem
                 self::INITIAL_QUALITY_GATE_BASE_HARD_PENALTY,
                 $maxHardConflictAllocations * 6.0
             ),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $telemetry
+     * @return array<string, mixed>
+     */
+    private function evaluateInitialPopulationFailFast(int $attempt, int $queueSize, array $telemetry): array
+    {
+        $thresholds = $this->initialQualityGateThresholds($attempt, $queueSize);
+        $graceHardConflictAllocations = max(
+            1,
+            (int) ceil($queueSize * self::INITIAL_QUALITY_GATE_FAIL_FAST_GRACE_RATIO)
+        );
+        $failFastLimit = $thresholds['max_hard_conflict_allocations'] + $graceHardConflictAllocations;
+        $hardConflictAllocations = (int) ($telemetry['hard_conflict_allocations'] ?? 0);
+        $shouldFailFast = $hardConflictAllocations > $failFastLimit;
+
+        return [
+            'should_fail_fast' => $shouldFailFast,
+            'max_hard_conflict_allocations' => $thresholds['max_hard_conflict_allocations'],
+            'grace_hard_conflict_allocations' => $graceHardConflictAllocations,
+            'fail_fast_limit' => $failFastLimit,
+            'message' => sprintf(
+                'Quality gate fail-fast na tentativa %d: hard_conflicts=%d excedeu o limite operacional %d (limite base=%d, margem=%d).',
+                $attempt,
+                $hardConflictAllocations,
+                $failFastLimit,
+                $thresholds['max_hard_conflict_allocations'],
+                $graceHardConflictAllocations
+            ),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $telemetry
+     * @return array<string, mixed>
+     */
+    private function summarizeRepairTelemetry(array $telemetry): array
+    {
+        return [
+            'hard_penalty_before' => $telemetry['hard_penalty_before'] ?? null,
+            'hard_penalty_after' => $telemetry['hard_penalty_after'] ?? null,
+            'soft_penalty_after' => $telemetry['soft_penalty_after'] ?? null,
+            'score_after' => $telemetry['score_after'] ?? null,
+            'invalid_genes_before' => $telemetry['invalid_genes_before'] ?? null,
+            'invalid_genes_after' => $telemetry['invalid_genes_after'] ?? null,
+            'relocations' => $telemetry['relocations'] ?? 0,
+            'swaps' => $telemetry['swaps'] ?? 0,
+            'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
+            'pass_count' => count($telemetry['passes'] ?? []),
         ];
     }
 

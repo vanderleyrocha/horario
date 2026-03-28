@@ -49,6 +49,27 @@ final class GATelemetryLogger
             'alns_effective_frequency' => isset($metrics['landscape_observation']['alns_trigger']['effective_frequency'])
                 ? (int) $metrics['landscape_observation']['alns_trigger']['effective_frequency']
                 : (isset($metrics['alns_effective_frequency']) ? (int) $metrics['alns_effective_frequency'] : null),
+            'alns_real_activation_applied' => isset($metrics['landscape_observation']['alns_trigger']['real_activation']['applied'])
+                ? (bool) $metrics['landscape_observation']['alns_trigger']['real_activation']['applied']
+                : null,
+            'alns_real_activation_policy' => $metrics['landscape_observation']['alns_trigger']['real_activation']['policy'] ?? null,
+            'alns_real_activation_mode' => $metrics['landscape_observation']['alns_trigger']['real_activation']['mode'] ?? null,
+            'alns_aggression_label' => $metrics['landscape_observation']['alns_trigger']['response']['aggression_label'] ?? null,
+            'alns_intensity' => isset($metrics['landscape_observation']['alns_trigger']['response']['intensity'])
+                ? round((float) $metrics['landscape_observation']['alns_trigger']['response']['intensity'], 6)
+                : null,
+            'alns_destroy_ratio' => isset($metrics['landscape_observation']['alns_trigger']['response']['destroy_ratio'])
+                ? round((float) $metrics['landscape_observation']['alns_trigger']['response']['destroy_ratio'], 6)
+                : null,
+            'alns_repair_intensity' => isset($metrics['landscape_observation']['alns_trigger']['response']['repair_intensity'])
+                ? round((float) $metrics['landscape_observation']['alns_trigger']['response']['repair_intensity'], 6)
+                : null,
+            'alns_recent_mean_improvement' => isset($metrics['landscape_observation']['alns_trigger']['response']['recent_mean_improvement'])
+                ? round((float) $metrics['landscape_observation']['alns_trigger']['response']['recent_mean_improvement'], 6)
+                : null,
+            'alns_recent_success_rate' => isset($metrics['landscape_observation']['alns_trigger']['response']['recent_success_rate'])
+                ? round((float) $metrics['landscape_observation']['alns_trigger']['response']['recent_success_rate'], 6)
+                : null,
             'landscape_phenomenon' => $metrics['landscape_phenomenon'] ?? null,
             'landscape_confidence' => isset($metrics['landscape_observation']['confidence'])
                 ? round((float) $metrics['landscape_observation']['confidence'], 6)

@@ -7,11 +7,13 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
-class RegretInsertionOperator implements RepairOperatorInterface
+class RegretInsertionOperator implements AdaptiveRepairOperatorInterface, RepairOperatorInterface
 {
-    public function __construct(private readonly ScheduleData $data)
-    {
-    }
+    private float $candidateSampleRatio = 1.0;
+
+    private int $regretDepth = 2;
+
+    public function __construct(private readonly ScheduleData $data) {}
 
     public function repair(PartialSolution $partial): Cromossomo
     {
@@ -20,7 +22,7 @@ class RegretInsertionOperator implements RepairOperatorInterface
 
         $genes = $assigned;
 
-        while (!empty($unassigned)) {
+        while (! empty($unassigned)) {
 
             $bestLessonIndex = null;
             $bestRegret = -INF;
@@ -56,32 +58,33 @@ class RegretInsertionOperator implements RepairOperatorInterface
     private function evaluateInsertionOptions(Gene $gene, array $currentGenes): array
     {
         $slots = $this->data->timeSlots;
-
-        $bestCost = INF;
-        $secondCost = INF;
-
-        $bestCandidate = null;
+        $options = [];
 
         foreach ($slots as $slot) {
-
-            $candidate =
-                $gene->withDiaPeriodo($slot['day'], $slot['period']);
-
-            $cost =
-                $this->estimateConflictCost($candidate, $currentGenes);
-
-            if ($cost < $bestCost) {
-
-                $secondCost = $bestCost;
-                $bestCost = $cost;
-                $bestCandidate = $candidate;
-            } elseif ($cost < $secondCost) {
-
-                $secondCost = $cost;
-            }
+            $candidate = $gene->withDiaPeriodo($slot->day, $slot->lessonNumber);
+            $options[] = [
+                'cost' => $this->estimateConflictCost($candidate, $currentGenes),
+                'candidate' => $candidate,
+            ];
         }
 
-        return [$bestCost, $secondCost, $bestCandidate];
+        usort($options, static function (array $left, array $right): int {
+            return [$left['cost'], $left['candidate']->diaSemana(), $left['candidate']->periodoDia()]
+                <=>
+                [$right['cost'], $right['candidate']->diaSemana(), $right['candidate']->periodoDia()];
+        });
+
+        if ($options === []) {
+            return [INF, INF, null];
+        }
+
+        $limit = max($this->regretDepth, (int) ceil(count($options) * $this->candidateSampleRatio));
+        $trimmedOptions = array_slice($options, 0, min(count($options), $limit));
+        $best = $trimmedOptions[0];
+        $comparisonIndex = min(count($trimmedOptions) - 1, $this->regretDepth - 1);
+        $comparison = $trimmedOptions[$comparisonIndex];
+
+        return [$best['cost'], $comparison['cost'], $best['candidate']];
     }
 
     private function estimateConflictCost(Gene $candidate, array $genes): float
@@ -101,5 +104,11 @@ class RegretInsertionOperator implements RepairOperatorInterface
     public function getName(): string
     {
         return 'RegretInsertion';
+    }
+
+    public function configureRepairIntensity(float $intensity): void
+    {
+        $this->candidateSampleRatio = max(0.35, min(1.0, 0.35 + ($intensity * 0.65)));
+        $this->regretDepth = $intensity >= 0.75 ? 3 : 2;
     }
 }

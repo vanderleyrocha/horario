@@ -14,13 +14,19 @@ final class GreedyRepairOperator
 
     private const LOCAL_REBUILD_MAX_NEIGHBORS = 3;
 
+    private const HEARTBEAT_EVERY_INVALID_GENES = 25;
+
     /**
      * @var array<string, mixed>
      */
     private array $lastTelemetry = [];
 
-    public function repair(Cromossomo $chromosome, ScheduleData $data, ?callable $fitnessProbe = null): Cromossomo
-    {
+    public function repair(
+        Cromossomo $chromosome,
+        ScheduleData $data,
+        ?callable $fitnessProbe = null,
+        ?callable $progressHeartbeat = null
+    ): Cromossomo {
         $child = $chromosome->copy();
         $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
 
@@ -32,7 +38,9 @@ final class GreedyRepairOperator
             }
 
             $passTelemetry = $this->startPassTelemetry($pass, $child, $invalidIndexes, $fitnessProbe);
+            $this->emitHeartbeat($progressHeartbeat, 'pass_started', $passTelemetry);
             $changed = false;
+            $processedInvalidGenes = 0;
 
             foreach ($invalidIndexes as $index) {
                 $currentGenes = $child->genes();
@@ -72,9 +80,18 @@ final class GreedyRepairOperator
                     $passTelemetry['local_rebuilds']++;
                     $changed = true;
                 }
+
+                $processedInvalidGenes++;
+                $this->emitProgressHeartbeat(
+                    progressHeartbeat: $progressHeartbeat,
+                    passTelemetry: $passTelemetry,
+                    processedInvalidGenes: $processedInvalidGenes,
+                    totalInvalidGenes: count($invalidIndexes)
+                );
             }
 
             $this->finishPassTelemetry($passTelemetry, $child, $fitnessProbe);
+            $this->emitHeartbeat($progressHeartbeat, 'pass_finished', $passTelemetry);
             $this->lastTelemetry['passes'][] = $passTelemetry;
 
             if (! $changed) {
@@ -586,6 +603,57 @@ final class GreedyRepairOperator
         $this->lastTelemetry['relocations'] = array_sum(array_column($this->lastTelemetry['passes'], 'relocations'));
         $this->lastTelemetry['swaps'] = array_sum(array_column($this->lastTelemetry['passes'], 'swaps'));
         $this->lastTelemetry['local_rebuilds'] = array_sum(array_column($this->lastTelemetry['passes'], 'local_rebuilds'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $passTelemetry
+     */
+    private function emitHeartbeat(?callable $progressHeartbeat, string $event, array $passTelemetry): void
+    {
+        if ($progressHeartbeat === null) {
+            return;
+        }
+
+        $progressHeartbeat([
+            'event' => $event,
+            'pass' => $passTelemetry['pass'] ?? null,
+            'invalid_genes_before' => $passTelemetry['invalid_genes_before'] ?? null,
+            'invalid_genes_after' => $passTelemetry['invalid_genes_after'] ?? null,
+            'hard_penalty_before' => $passTelemetry['hard_penalty_before'] ?? null,
+            'hard_penalty_after' => $passTelemetry['hard_penalty_after'] ?? null,
+            'hard_penalty_delta' => $passTelemetry['hard_penalty_delta'] ?? null,
+            'relocations' => $passTelemetry['relocations'] ?? 0,
+            'swaps' => $passTelemetry['swaps'] ?? 0,
+            'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $passTelemetry
+     */
+    private function emitProgressHeartbeat(
+        ?callable $progressHeartbeat,
+        array $passTelemetry,
+        int $processedInvalidGenes,
+        int $totalInvalidGenes
+    ): void {
+        if (
+            $progressHeartbeat === null
+            || $processedInvalidGenes <= 0
+            || $processedInvalidGenes % self::HEARTBEAT_EVERY_INVALID_GENES !== 0
+        ) {
+            return;
+        }
+
+        $progressHeartbeat([
+            'event' => 'pass_progress',
+            'pass' => $passTelemetry['pass'] ?? null,
+            'processed_invalid_genes' => $processedInvalidGenes,
+            'total_invalid_genes' => $totalInvalidGenes,
+            'relocations' => $passTelemetry['relocations'] ?? 0,
+            'swaps' => $passTelemetry['swaps'] ?? 0,
+            'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
+        ]);
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelectionStrategy;
 use App\Modules\AG\Domain\Intensification\LNS\Destroy\DestroyOperatorInterface;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Repair\RepairOperatorInterface;
+use App\Modules\AG\Domain\Landscape\LandscapeEngine;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\CrossoverOperatorInterface;
@@ -158,7 +159,62 @@ it('triggers alns adaptively in short runs and publishes trigger telemetry', fun
         ->and($alnsReports[0]['alns_trigger_reason'] ?? null)->toBe('budget_interval')
         ->and($alnsReports[0]['alns_effective_frequency'] ?? null)->toBe(2)
         ->and($alnsReports[0]['alns_destroy_operator'] ?? null)->toBe('AdaptiveDestroy')
-        ->and($alnsReports[0]['alns_repair_operator'] ?? null)->toBe('AdaptiveRepair');
+        ->and($alnsReports[0]['alns_repair_operator'] ?? null)->toBe('AdaptiveRepair')
+        ->and($alnsReports[0]['landscape_observation']['alns_trigger']['response']['aggression_label'] ?? null)->toBeString()
+        ->and($alnsReports[0]['landscape_observation']['alns_trigger']['response']['destroy_ratio'] ?? null)->toBeFloat()
+        ->and($alnsReports[0]['landscape_observation']['alns_trigger']['response']['recent_sample_size'] ?? null)->toBeInt();
+});
+
+it('activates temporary intensive alns via activation gate in opt-in mode before the regular interval', function (): void {
+    config()->set('ag.search_response_activation.enable_temporary_intensive_alns', true);
+    config()->set('ag.search_response_activation.temporary_intensive_alns_cooldown', 2);
+
+    $engine = makeStandaloneEngine(
+        problem: new StandaloneFakeProblem,
+        mutation: new CountingMutationOperator,
+        termination: new StandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        lns: new AdaptiveLargeNeighborhoodSearch(
+            destroyOperators: [new StandaloneFakeDestroyOperator('AdaptiveDestroy')],
+            repairOperators: [new StandaloneFakeRepairOperator('AdaptiveRepair')],
+            selector: new StandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair'])
+        ),
+        lnsFrequency: 50,
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'buildAlnsTriggerTelemetry');
+    $method->setAccessible(true);
+
+    $telemetry = $method->invoke(
+        $engine,
+        1,
+        'exploration',
+        [
+            'phenomenon' => 'neutral',
+            'basin_of_attraction_lock_detected' => false,
+            'search_response_simulation' => [
+                'policy' => 'basin_lock_escape',
+                'would_escalate' => true,
+                'activate_alns' => true,
+            ],
+            'search_response_activation_gate' => [
+                'eligible_as_candidate' => true,
+                'candidate_policy' => 'basin_lock_escape',
+                'mode' => 'diagnostic_only',
+            ],
+        ],
+        false
+    );
+
+    expect($telemetry)->toMatchArray([
+        'alns_triggered' => true,
+        'alns_trigger_reason' => 'activation_gate',
+        'alns_real_activation_enabled' => true,
+        'alns_real_activation_requested' => true,
+        'alns_real_activation_applied' => true,
+        'alns_real_activation_policy' => 'basin_lock_escape',
+        'alns_real_activation_mode' => 'opt_in',
+    ])
+        ->and($telemetry['alns_trigger_sources'] ?? [])->toContain('activation_gate');
 });
 
 function makeStandaloneEngine(
@@ -167,7 +223,8 @@ function makeStandaloneEngine(
     TerminationCriterionInterface $termination,
     ?ProgressReporterInterface $progress = null,
     ?AdaptiveLargeNeighborhoodSearch $lns = null,
-    int $lnsFrequency = 50
+    int $lnsFrequency = 50,
+    ?LandscapeEngine $landscapeEngine = null
 ): GeneticAlgorithmEngine {
     return new GeneticAlgorithmEngine(
         problem: $problem,
@@ -184,6 +241,7 @@ function makeStandaloneEngine(
         lns: $lns,
         progress: $progress,
         lnsFrequency: $lnsFrequency,
+        landscapeEngine: $landscapeEngine,
     );
 }
 

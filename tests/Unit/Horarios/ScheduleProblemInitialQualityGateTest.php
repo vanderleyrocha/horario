@@ -49,37 +49,41 @@ it('accepts the initial candidate when the quality gate metrics are within thres
         ->and($progress->stages())->toContain('quality_gate_passed');
 });
 
+it('fails fast before the expensive quality gate repair when hard conflicts are far above the operational limit', function (): void {
+    $progress = new ScheduleProblemProgressSpy;
+    $problem = makeDenseConflictScheduleProblem(
+        lessonCount: 10,
+        hardPenalty: 20.0,
+        softPenalty: 5.0,
+        progress: $progress
+    );
+
+    expect(fn () => $problem->createIndividual())
+        ->toThrow(RuntimeException::class, 'Quality gate fail-fast');
+
+    expect($progress->stages())->toContain('quality_gate_fail_fast')
+        ->and($progress->stages())->not->toContain('quality_gate_repair_started');
+});
+
+it('publishes heartbeat stages while repairing the initial quality gate candidate', function (): void {
+    $progress = new ScheduleProblemProgressSpy;
+    $problem = makeDenseConflictScheduleProblem(
+        lessonCount: 2,
+        hardPenalty: 20.0,
+        softPenalty: 5.0,
+        progress: $progress
+    );
+
+    expect(fn () => $problem->createIndividual())
+        ->toThrow(RuntimeException::class, 'Quality gate rejeitou');
+
+    expect($progress->stages())->toContain('quality_gate_repair_started')
+        ->and($progress->stages())->toContain('quality_gate_repair_finished')
+        ->and($progress->payloadsForStage('quality_gate_repairing'))->not->toBeEmpty();
+});
+
 function makeScheduleProblem(float $hardPenalty, float $softPenalty, ?ProgressReporterInterface $progress = null): ScheduleProblem
 {
-    $lesson = new LessonData(
-        id: 1,
-        professorId: 10,
-        classId: 20,
-        disciplinaId: 30,
-        requiredSlots: 1,
-        weeklyOccurrences: 1,
-        requiresConsecutive: false
-    );
-
-    $scheduleData = new ScheduleData(
-        lessons: [1 => $lesson],
-        professors: [],
-        classes: [],
-        timeSlots: [1 => new TimeSlot(1, 1, 1)],
-        restrictions: [],
-        lessonsByProfessor: [10 => [1]],
-        lessonsByClass: [20 => [1]],
-        restrictionsByProfessor: [],
-        restrictionsByClass: [],
-        expectedLoadByLesson: [1 => 1],
-        availableSlotsByProfessor: [10 => [1]],
-        availableSlotsByClass: [20 => [1]],
-        totalTimeSlots: 1,
-        totalLessons: 1,
-        totalProfessors: 1,
-        totalClasses: 1
-    );
-
     $fitnessEvaluator = new FitnessEvaluator(
         weights: new FitnessWeights,
         rules: [
@@ -89,11 +93,72 @@ function makeScheduleProblem(float $hardPenalty, float $softPenalty, ?ProgressRe
     );
 
     return new ScheduleProblem(
-        data: $scheduleData,
+        data: makeScheduleData(lessonCount: 1),
         contextBuilder: new EvaluationContextBuilder,
         fitnessEvaluator: $fitnessEvaluator,
         repairOperator: new GreedyRepairOperator,
         progress: $progress
+    );
+}
+
+function makeDenseConflictScheduleProblem(
+    int $lessonCount,
+    float $hardPenalty,
+    float $softPenalty,
+    ?ProgressReporterInterface $progress = null
+): ScheduleProblem {
+    $fitnessEvaluator = new FitnessEvaluator(
+        weights: new FitnessWeights,
+        rules: [
+            new ScheduleProblemFixedHardPenaltyRule($hardPenalty),
+            new ScheduleProblemFixedSoftPenaltyRule($softPenalty),
+        ]
+    );
+
+    return new ScheduleProblem(
+        data: makeScheduleData(lessonCount: $lessonCount),
+        contextBuilder: new EvaluationContextBuilder,
+        fitnessEvaluator: $fitnessEvaluator,
+        repairOperator: new GreedyRepairOperator,
+        progress: $progress
+    );
+}
+
+function makeScheduleData(int $lessonCount): ScheduleData
+{
+    $lessons = [];
+    $lessonIds = [];
+
+    for ($i = 1; $i <= $lessonCount; $i++) {
+        $lessons[$i] = new LessonData(
+            id: $i,
+            professorId: 10,
+            classId: 20,
+            disciplinaId: 30 + $i,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false
+        );
+        $lessonIds[] = $i;
+    }
+
+    return new ScheduleData(
+        lessons: $lessons,
+        professors: [],
+        classes: [],
+        timeSlots: [1 => new TimeSlot(1, 1, 1)],
+        restrictions: [],
+        lessonsByProfessor: [10 => $lessonIds],
+        lessonsByClass: [20 => $lessonIds],
+        restrictionsByProfessor: [],
+        restrictionsByClass: [],
+        expectedLoadByLesson: array_fill_keys($lessonIds, 1),
+        availableSlotsByProfessor: [10 => [1]],
+        availableSlotsByClass: [20 => [1]],
+        totalTimeSlots: 1,
+        totalLessons: $lessonCount,
+        totalProfessors: 1,
+        totalClasses: 1
     );
 }
 

@@ -226,11 +226,28 @@ final class GeneticAlgorithmEngine
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
             ];
+        } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
+            $telemetry['landscape_observation'] = [
+                'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+            ];
         }
 
         if (($alnsTrigger['alns_triggered'] ?? false) === true) {
             $this->lastAlnsGeneration = $currentGeneration;
-            $telemetry += $this->applyLns($newPopulation, $alnsTrigger);
+            $alnsTelemetry = $this->applyLns(
+                population: $newPopulation,
+                triggerTelemetry: $alnsTrigger,
+                landscapeObservation: $telemetry['landscape_observation'] ?? null
+            );
+            $telemetry += $alnsTelemetry;
+
+            if (isset($telemetry['landscape_observation']) && is_array($telemetry['landscape_observation'])) {
+                $telemetry['landscape_observation'] = $this->mergeAlnsObservationTelemetry(
+                    $telemetry['landscape_observation'],
+                    $alnsTrigger,
+                    $alnsTelemetry
+                );
+            }
         }
 
         $this->lastEvolutionTelemetry = [
@@ -253,14 +270,20 @@ final class GeneticAlgorithmEngine
         return $newPopulation;
     }
 
-    private function applyLns(array &$population, array $triggerTelemetry = []): array
-    {
+    private function applyLns(
+        array &$population,
+        array $triggerTelemetry = [],
+        ?array $landscapeObservation = null
+    ): array {
         if ($this->lns === null || $population === []) {
             return [];
         }
 
         $best = $this->getBest($population);
-        $candidate = $this->lns->improve($best->copy());
+        $candidate = $this->lns->improve($best->copy(), [
+            'trigger' => $triggerTelemetry,
+            'landscape_observation' => $landscapeObservation,
+        ]);
         $candidate = $this->problem->repair($candidate);
         $this->problem->evaluate($candidate);
         $this->replacement->replace($population, $candidate);
@@ -360,11 +383,28 @@ final class GeneticAlgorithmEngine
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
             ];
+        } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
+            $telemetry['landscape_observation'] = [
+                'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+            ];
         }
 
         if (($alnsTrigger['alns_triggered'] ?? false) === true) {
             $this->lastAlnsGeneration = $generation;
-            $telemetry += $this->applyLns($population, $alnsTrigger);
+            $alnsTelemetry = $this->applyLns(
+                population: $population,
+                triggerTelemetry: $alnsTrigger,
+                landscapeObservation: $telemetry['landscape_observation'] ?? null
+            );
+            $telemetry += $alnsTelemetry;
+
+            if (isset($telemetry['landscape_observation']) && is_array($telemetry['landscape_observation'])) {
+                $telemetry['landscape_observation'] = $this->mergeAlnsObservationTelemetry(
+                    $telemetry['landscape_observation'],
+                    $alnsTrigger,
+                    $alnsTelemetry
+                );
+            }
 
             $metrics = $this->metrics->recordExtended(
                 generation: $generation,
@@ -464,6 +504,11 @@ final class GeneticAlgorithmEngine
             ? null
             : $generation - $this->lastAlnsGeneration;
         $cooldownSatisfied = $generationsSinceLastTrigger === null || $generationsSinceLastTrigger >= $cooldown;
+        $realActivation = $this->resolveRealAlnsActivation(
+            landscapeObservation: $landscapeObservation,
+            generationsSinceLastTrigger: $generationsSinceLastTrigger,
+            eligible: $this->lns !== null && $generation > 0
+        );
         $landscapePressure = $this->hasLandscapePressure(
             landscapeState: $landscapeState,
             landscapeObservation: $landscapeObservation,
@@ -479,6 +524,10 @@ final class GeneticAlgorithmEngine
 
         if ($landscapeDue) {
             $triggerSources[] = 'landscape_pressure';
+        }
+
+        if (($realActivation['applied'] ?? false) === true) {
+            $triggerSources[] = 'activation_gate';
         }
 
         $eligible = $this->lns !== null && $generation > 0;
@@ -498,6 +547,13 @@ final class GeneticAlgorithmEngine
                 ? implode('+', $triggerSources)
                 : ($cooldownSatisfied ? ($landscapePressure ? 'waiting_interval' : 'not_due') : 'cooldown'),
             'alns_trigger_sources' => $triggerSources,
+            'alns_real_activation_enabled' => $realActivation['enabled'] ?? false,
+            'alns_real_activation_requested' => $realActivation['requested'] ?? false,
+            'alns_real_activation_applied' => $realActivation['applied'] ?? false,
+            'alns_real_activation_policy' => $realActivation['policy'] ?? null,
+            'alns_real_activation_mode' => $realActivation['mode'] ?? 'diagnostic_only',
+            'alns_real_activation_cooldown' => $realActivation['cooldown_generations'] ?? null,
+            'alns_real_activation_reason' => $realActivation['reason'] ?? null,
         ];
     }
 
@@ -572,7 +628,156 @@ final class GeneticAlgorithmEngine
             'triggered' => $alnsTrigger['alns_triggered'] ?? false,
             'reason' => $alnsTrigger['alns_trigger_reason'] ?? null,
             'sources' => $alnsTrigger['alns_trigger_sources'] ?? [],
+            'real_activation' => [
+                'enabled' => $alnsTrigger['alns_real_activation_enabled'] ?? false,
+                'requested' => $alnsTrigger['alns_real_activation_requested'] ?? false,
+                'applied' => $alnsTrigger['alns_real_activation_applied'] ?? false,
+                'policy' => $alnsTrigger['alns_real_activation_policy'] ?? null,
+                'mode' => $alnsTrigger['alns_real_activation_mode'] ?? 'diagnostic_only',
+                'cooldown_generations' => $alnsTrigger['alns_real_activation_cooldown'] ?? null,
+                'reason' => $alnsTrigger['alns_real_activation_reason'] ?? null,
+            ],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     * @return array<string, mixed>
+     */
+    private function resolveRealAlnsActivation(
+        ?array $landscapeObservation,
+        ?int $generationsSinceLastTrigger,
+        bool $eligible
+    ): array {
+        $enabled = (bool) config('ag.search_response_activation.enable_temporary_intensive_alns', false);
+        $cooldown = max(1, (int) config('ag.search_response_activation.temporary_intensive_alns_cooldown', 2));
+        $requested = false;
+        $applied = false;
+        $policy = null;
+        $mode = 'diagnostic_only';
+        $reason = $enabled
+            ? 'Activation gate did not request temporary intensive ALNS for the current observation.'
+            : 'Temporary intensive ALNS is disabled by configuration.';
+
+        if (! is_array($landscapeObservation)) {
+            return [
+                'enabled' => $enabled,
+                'requested' => false,
+                'applied' => false,
+                'policy' => null,
+                'mode' => $mode,
+                'cooldown_generations' => $cooldown,
+                'reason' => $reason,
+            ];
+        }
+
+        $activationGate = is_array($landscapeObservation['search_response_activation_gate'] ?? null)
+            ? $landscapeObservation['search_response_activation_gate']
+            : [];
+        $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
+            ? $landscapeObservation['search_response_simulation']
+            : [];
+        $policy = $activationGate['candidate_policy'] ?? null;
+        $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
+        $simulationRequestsAlns = (bool) ($simulation['activate_alns'] ?? false)
+            && (bool) ($simulation['would_escalate'] ?? false);
+
+        $requested = $enabled
+            && (bool) ($activationGate['eligible_as_candidate'] ?? false)
+            && $policyAligned
+            && $simulationRequestsAlns;
+
+        if (! $requested) {
+            if (! $enabled) {
+                $reason = 'Temporary intensive ALNS is disabled by configuration.';
+            } elseif (! (bool) ($activationGate['eligible_as_candidate'] ?? false)) {
+                $reason = 'Activation gate has not approved a real candidate policy yet.';
+            } elseif (! $policyAligned) {
+                $reason = 'Current simulated policy does not match the activation gate candidate.';
+            } else {
+                $reason = 'Current simulated response does not request ALNS activation.';
+            }
+
+            return [
+                'enabled' => $enabled,
+                'requested' => false,
+                'applied' => false,
+                'policy' => $policy,
+                'mode' => $activationGate['mode'] ?? $mode,
+                'cooldown_generations' => $cooldown,
+                'reason' => $reason,
+            ];
+        }
+
+        $cooldownSatisfied = $generationsSinceLastTrigger === null || $generationsSinceLastTrigger >= $cooldown;
+        $applied = $eligible && $cooldownSatisfied;
+        $mode = 'opt_in';
+        $reason = $applied
+            ? 'Temporary intensive ALNS activated via SearchResponseActivationGate.'
+            : 'Temporary intensive ALNS is waiting for its short cooldown window.';
+
+        return [
+            'enabled' => $enabled,
+            'requested' => $requested,
+            'applied' => $applied,
+            'policy' => $policy,
+            'mode' => $mode,
+            'cooldown_generations' => $cooldown,
+            'reason' => $reason,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $landscapeObservation
+     * @param  array<string, mixed>  $alnsTrigger
+     * @param  array<string, mixed>  $alnsTelemetry
+     * @return array<string, mixed>
+     */
+    private function mergeAlnsObservationTelemetry(
+        array $landscapeObservation,
+        array $alnsTrigger,
+        array $alnsTelemetry
+    ): array {
+        $existingTrigger = is_array($landscapeObservation['alns_trigger'] ?? null)
+            ? $landscapeObservation['alns_trigger']
+            : $this->alnsTriggerObservationPayload($alnsTrigger);
+        $profile = is_array($alnsTelemetry['alns_intensity_profile'] ?? null)
+            ? $alnsTelemetry['alns_intensity_profile']
+            : [];
+        $recentEffectiveness = is_array($alnsTelemetry['alns_recent_effectiveness'] ?? null)
+            ? $alnsTelemetry['alns_recent_effectiveness']
+            : [];
+
+        $existingTrigger['response'] = [
+            'destroy_operator' => $alnsTelemetry['alns_destroy_operator'] ?? null,
+            'repair_operator' => $alnsTelemetry['alns_repair_operator'] ?? null,
+            'improvement' => isset($alnsTelemetry['alns_improvement'])
+                ? round((float) $alnsTelemetry['alns_improvement'], 6)
+                : null,
+            'aggression_label' => $profile['aggression_label'] ?? null,
+            'intensity' => isset($profile['intensity']) ? round((float) $profile['intensity'], 4) : null,
+            'destroy_ratio' => isset($profile['destroy_ratio']) ? round((float) $profile['destroy_ratio'], 4) : null,
+            'repair_intensity' => isset($profile['repair_intensity']) ? round((float) $profile['repair_intensity'], 4) : null,
+            'target_removed_genes' => isset($profile['target_removed_genes']) ? (int) $profile['target_removed_genes'] : null,
+            'removed_genes' => isset($alnsTelemetry['alns_removed_genes']) ? (int) $alnsTelemetry['alns_removed_genes'] : null,
+            'remaining_assigned_genes' => isset($alnsTelemetry['alns_remaining_assigned_genes'])
+                ? (int) $alnsTelemetry['alns_remaining_assigned_genes']
+                : null,
+            'recent_mean_improvement' => isset($recentEffectiveness['mean_improvement'])
+                ? round((float) $recentEffectiveness['mean_improvement'], 4)
+                : null,
+            'recent_success_rate' => isset($recentEffectiveness['success_rate'])
+                ? round((float) $recentEffectiveness['success_rate'], 4)
+                : null,
+            'recent_sample_size' => isset($recentEffectiveness['sample_size'])
+                ? (int) $recentEffectiveness['sample_size']
+                : null,
+            'reasons' => is_array($profile['reasons'] ?? null) ? $profile['reasons'] : [],
+        ];
+
+        $landscapeObservation['alns_trigger'] = $existingTrigger;
+
+        return $landscapeObservation;
     }
 
     /**

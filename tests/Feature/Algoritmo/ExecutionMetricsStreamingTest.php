@@ -260,6 +260,31 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'triggered' => true,
                 'reason' => 'budget_interval+landscape_pressure',
                 'sources' => ['budget_interval', 'landscape_pressure'],
+                'real_activation' => [
+                    'enabled' => true,
+                    'requested' => true,
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                    'mode' => 'opt_in',
+                    'cooldown_generations' => 2,
+                    'reason' => 'Temporary intensive ALNS activated via SearchResponseActivationGate.',
+                ],
+                'response' => [
+                    'destroy_operator' => 'ConflictDestroy',
+                    'repair_operator' => 'RegretInsertion',
+                    'improvement' => 0.42,
+                    'aggression_label' => 'high',
+                    'intensity' => 0.81,
+                    'destroy_ratio' => 0.47,
+                    'repair_intensity' => 0.88,
+                    'target_removed_genes' => 6,
+                    'removed_genes' => 6,
+                    'remaining_assigned_genes' => 12,
+                    'recent_mean_improvement' => 0.21,
+                    'recent_success_rate' => 0.67,
+                    'recent_sample_size' => 3,
+                    'reasons' => ['landscape_pressure', 'basin_lock', 'deep_valley'],
+                ],
             ],
         ],
         'operator_used' => 'StructuredSwapMutation',
@@ -304,6 +329,11 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['effective_frequency'] ?? null)->toBe(3)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['reason'] ?? null)->toBe('budget_interval+landscape_pressure')
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['real_activation']['applied'] ?? null)->toBeTrue()
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['real_activation']['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['response']['aggression_label'] ?? null)->toBe('high')
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['response']['destroy_ratio'] ?? null)->toBe(0.47)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['response']['recent_success_rate'] ?? null)->toBe(0.67)
         ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape')
         ->and($cachedMetric['landscape_observation']['search_response_audit']['target_population_turnover'] ?? null)->toBe(0.45)
         ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
@@ -328,5 +358,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(4)
         ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue()
         ->and($storedObservation['search_response_readiness_dashboard']['best_policy_by_success']['policy'] ?? null)->toBe('basin_lock_escape')
-        ->and($storedObservation['alns_trigger']['sources'] ?? null)->toBe(['budget_interval', 'landscape_pressure']);
+        ->and($storedObservation['alns_trigger']['sources'] ?? null)->toBe(['budget_interval', 'landscape_pressure'])
+        ->and($storedObservation['alns_trigger']['real_activation']['mode'] ?? null)->toBe('opt_in')
+        ->and($storedObservation['alns_trigger']['response']['repair_intensity'] ?? null)->toBe(0.88)
+        ->and($storedObservation['alns_trigger']['response']['reasons'] ?? null)->toBe(['landscape_pressure', 'basin_lock', 'deep_valley']);
 });
