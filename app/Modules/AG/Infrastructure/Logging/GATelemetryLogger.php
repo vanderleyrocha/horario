@@ -118,6 +118,11 @@ final class GATelemetryLogger
             'search_response_outcome_progress_score' => isset($metrics['landscape_observation']['search_response_outcome']['progress_score'])
                 ? round((float) $metrics['landscape_observation']['search_response_outcome']['progress_score'], 6)
                 : null,
+            'search_response_effectiveness_total_resolved_outcomes' => isset($metrics['landscape_observation']['search_response_effectiveness_report']['total_resolved_outcomes'])
+                ? (int) $metrics['landscape_observation']['search_response_effectiveness_report']['total_resolved_outcomes']
+                : null,
+            'search_response_effectiveness_best_policy_by_success' => $metrics['landscape_observation']['search_response_effectiveness_report']['best_policy_by_success'] ?? null,
+            'search_response_effectiveness_best_policy_by_progress' => $metrics['landscape_observation']['search_response_effectiveness_report']['best_policy_by_progress'] ?? null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

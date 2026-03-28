@@ -349,11 +349,14 @@ function updateLandscapeObservation(phenomenon, observation) {
     const searchResponseOutcomeProgress = Number(normalizedObservation.search_response_outcome?.progress_score ?? 0)
     const searchResponseOutcomeSatisfied = Boolean(normalizedObservation.search_response_outcome?.targets_satisfied ?? false)
     const searchResponsePendingAudits = Number(normalizedObservation.search_response_pending_audits ?? 0)
+    const effectivenessBestBySuccess = String(normalizedObservation.search_response_effectiveness_report?.best_policy_by_success ?? "")
+    const effectivenessBestByProgress = String(normalizedObservation.search_response_effectiveness_report?.best_policy_by_progress ?? "")
+    const effectivenessTotalResolved = Number(normalizedObservation.search_response_effectiveness_report?.total_resolved_outcomes ?? 0)
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateAllCharts() {

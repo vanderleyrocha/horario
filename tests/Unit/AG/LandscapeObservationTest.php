@@ -241,5 +241,8 @@ it('publishes a shadow outcome once the simulated response horizon expires', fun
         ->and($observation->searchResponseOutcome['policy'] ?? null)->toBe('basin_lock_escape')
         ->and($observation->searchResponseOutcome['targets_satisfied'] ?? null)->toBeTrue()
         ->and($observation->searchResponseOutcome['progress_score'] ?? 0.0)->toBeGreaterThan(0.5)
-        ->and($observation->searchResponsePendingAudits)->toBe(0);
+        ->and($observation->searchResponsePendingAudits)->toBe(0)
+        ->and($observation->searchResponseEffectivenessReport)->toBeArray()
+        ->and($observation->searchResponseEffectivenessReport['total_resolved_outcomes'] ?? null)->toBeGreaterThanOrEqual(1)
+        ->and($observation->searchResponseEffectivenessReport['best_policy_by_success'] ?? null)->toBe('basin_lock_escape');
 });

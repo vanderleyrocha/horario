@@ -88,3 +88,138 @@ it('resolves a shadow outcome after the audit horizon and measures target progre
         ->and($outcomesAtHorizon[0]->toArray()['progress_score'] ?? 0.0)->toBeGreaterThan(0.9)
         ->and($tracker->pendingCount())->toBe(0);
 });
+
+it('aggregates effectiveness by policy across resolved shadow outcomes', function (): void {
+    $policy = new SearchResponsePolicy;
+    $tracker = new SearchResponseOutcomeTracker;
+
+    $basinEpisode = LandscapeEpisode::start(
+        phenomenon: LandscapePhenomenon::DeepValley,
+        generation: 5,
+        confidence: 0.85,
+        depthScore: 0.88,
+        populationTurnover: 0.10,
+        eliteSimilarity: 0.90,
+        bestSignatureChanged: false
+    );
+
+    $deepValleyEpisode = LandscapeEpisode::start(
+        phenomenon: LandscapePhenomenon::DeepValley,
+        generation: 9,
+        confidence: 0.70,
+        depthScore: 0.74,
+        populationTurnover: 0.18,
+        eliteSimilarity: 0.84,
+        bestSignatureChanged: false
+    );
+
+    $lockedObservation = new LandscapeObservation(
+        phenomenon: LandscapePhenomenon::DeepValley,
+        confidence: 0.85,
+        bestDelta: 0.0,
+        fitnessGap: 1.0,
+        stagnation: 24,
+        plateauDuration: 8,
+        convergenceTrend: 0.65,
+        depthScore: 0.88,
+        bestDeltaWindow: -0.01,
+        avgDeltaWindow: -0.009,
+        improvementAcceptanceRate: 0.0,
+        worseningAcceptanceRate: 0.70,
+        populationTurnover: 0.10,
+        bestSignatureChanged: false,
+        eliteSimilarity: 0.90,
+        diversity: 0.10,
+        entropy: 0.13,
+        basinLockConfidence: 0.82,
+        basinLockDetected: true
+    );
+
+    $recoveredObservation = new LandscapeObservation(
+        phenomenon: LandscapePhenomenon::Neutral,
+        confidence: 0.20,
+        bestDelta: 0.09,
+        fitnessGap: 0.5,
+        stagnation: 3,
+        plateauDuration: 0,
+        convergenceTrend: 0.10,
+        depthScore: 0.18,
+        bestDeltaWindow: 0.04,
+        avgDeltaWindow: 0.02,
+        improvementAcceptanceRate: 0.42,
+        worseningAcceptanceRate: 0.10,
+        populationTurnover: 0.48,
+        bestSignatureChanged: true,
+        eliteSimilarity: 0.57,
+        diversity: 0.52,
+        entropy: 0.63,
+        basinLockConfidence: 0.40,
+        basinLockDetected: false
+    );
+
+    $basinSimulation = $policy->simulate($lockedObservation, $basinEpisode, LandscapeState::PrematureConvergence);
+    $basinAudit = $policy->audit($basinSimulation, $lockedObservation, $basinEpisode, 5);
+    $tracker->register($basinAudit);
+    $tracker->resolveDue(11, $recoveredObservation);
+
+    $deepValleyObservation = new LandscapeObservation(
+        phenomenon: LandscapePhenomenon::DeepValley,
+        confidence: 0.70,
+        bestDelta: 0.0,
+        fitnessGap: 0.9,
+        stagnation: 18,
+        plateauDuration: 6,
+        convergenceTrend: 0.42,
+        depthScore: 0.74,
+        bestDeltaWindow: -0.006,
+        avgDeltaWindow: -0.003,
+        improvementAcceptanceRate: 0.06,
+        worseningAcceptanceRate: 0.56,
+        populationTurnover: 0.18,
+        bestSignatureChanged: false,
+        eliteSimilarity: 0.84,
+        diversity: 0.18,
+        entropy: 0.20,
+        basinLockConfidence: 0.58,
+        basinLockDetected: false
+    );
+
+    $partialRecoveryObservation = new LandscapeObservation(
+        phenomenon: LandscapePhenomenon::Neutral,
+        confidence: 0.35,
+        bestDelta: 0.03,
+        fitnessGap: 0.7,
+        stagnation: 7,
+        plateauDuration: 1,
+        convergenceTrend: 0.18,
+        depthScore: 0.28,
+        bestDeltaWindow: 0.01,
+        avgDeltaWindow: 0.006,
+        improvementAcceptanceRate: 0.20,
+        worseningAcceptanceRate: 0.22,
+        populationTurnover: 0.29,
+        bestSignatureChanged: true,
+        eliteSimilarity: 0.73,
+        diversity: 0.30,
+        entropy: 0.38,
+        basinLockConfidence: 0.54,
+        basinLockDetected: false
+    );
+
+    $deepValleySimulation = $policy->simulate($deepValleyObservation, $deepValleyEpisode, LandscapeState::Exploitation);
+    $deepValleyAudit = $policy->audit($deepValleySimulation, $deepValleyObservation, $deepValleyEpisode, 9);
+    $tracker->register($deepValleyAudit);
+    $tracker->resolveDue(13, $partialRecoveryObservation);
+
+    $report = $tracker->effectivenessReport()->toArray();
+
+    expect($report)->toMatchArray([
+        'total_resolved_outcomes' => 2,
+        'best_policy_by_success' => 'basin_lock_escape',
+        'best_policy_by_progress' => 'basin_lock_escape',
+    ])
+        ->and($report['policies'])->toHaveCount(2)
+        ->and($report['policies'][0]['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($report['policies'][0]['success_rate'] ?? 0.0)->toBeGreaterThan(0.9)
+        ->and($report['policies'][1]['policy'] ?? null)->toBe('deep_valley_probe');
+});

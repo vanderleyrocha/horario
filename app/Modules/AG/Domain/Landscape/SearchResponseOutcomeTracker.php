@@ -11,6 +11,13 @@ final class SearchResponseOutcomeTracker
      */
     private array $pendingAudits = [];
 
+    /**
+     * @var SearchResponseOutcome[]
+     */
+    private array $resolvedOutcomes = [];
+
+    private int $maxResolvedOutcomes = 200;
+
     public function register(SearchResponseAudit $audit): void
     {
         if (! $audit->wouldTrigger) {
@@ -35,7 +42,13 @@ final class SearchResponseOutcomeTracker
                 continue;
             }
 
-            $resolved[] = $this->evaluateOutcome($audit, $generation, $observation);
+            $outcome = $this->evaluateOutcome($audit, $generation, $observation);
+            $resolved[] = $outcome;
+            $this->resolvedOutcomes[] = $outcome;
+
+            if (count($this->resolvedOutcomes) > $this->maxResolvedOutcomes) {
+                array_shift($this->resolvedOutcomes);
+            }
         }
 
         $this->pendingAudits = $stillPending;
@@ -46,6 +59,71 @@ final class SearchResponseOutcomeTracker
     public function pendingCount(): int
     {
         return count($this->pendingAudits);
+    }
+
+    public function effectivenessReport(): SearchResponseEffectivenessReport
+    {
+        if ($this->resolvedOutcomes === []) {
+            return new SearchResponseEffectivenessReport(
+                totalResolvedOutcomes: 0,
+                bestPolicyBySuccess: null,
+                bestPolicyByProgress: null,
+                policies: []
+            );
+        }
+
+        $grouped = [];
+
+        foreach ($this->resolvedOutcomes as $outcome) {
+            $policy = $outcome->policy;
+
+            if (! isset($grouped[$policy])) {
+                $grouped[$policy] = [
+                    'policy' => $policy,
+                    'resolved_outcomes' => 0,
+                    'targets_satisfied_count' => 0,
+                    'approached_targets_count' => 0,
+                    'avg_progress_score' => 0.0,
+                    'success_rate' => 0.0,
+                    'approach_rate' => 0.0,
+                ];
+            }
+
+            $grouped[$policy]['resolved_outcomes']++;
+            $grouped[$policy]['targets_satisfied_count'] += $outcome->targetsSatisfied ? 1 : 0;
+            $grouped[$policy]['approached_targets_count'] += $outcome->approachedTargets ? 1 : 0;
+            $grouped[$policy]['avg_progress_score'] += $outcome->progressScore;
+        }
+
+        foreach ($grouped as $policy => $stats) {
+            $count = max(1, (int) $stats['resolved_outcomes']);
+            $grouped[$policy]['avg_progress_score'] = round($stats['avg_progress_score'] / $count, 6);
+            $grouped[$policy]['success_rate'] = round($stats['targets_satisfied_count'] / $count, 6);
+            $grouped[$policy]['approach_rate'] = round($stats['approached_targets_count'] / $count, 6);
+        }
+
+        $policies = array_values($grouped);
+
+        usort($policies, static function (array $left, array $right): int {
+            return [$right['success_rate'], $right['avg_progress_score'], $right['resolved_outcomes']]
+                <=> [$left['success_rate'], $left['avg_progress_score'], $left['resolved_outcomes']];
+        });
+
+        $bestPolicyBySuccess = $policies[0]['policy'] ?? null;
+
+        $progressPolicies = $policies;
+
+        usort($progressPolicies, static function (array $left, array $right): int {
+            return [$right['avg_progress_score'], $right['approach_rate'], $right['resolved_outcomes']]
+                <=> [$left['avg_progress_score'], $left['approach_rate'], $left['resolved_outcomes']];
+        });
+
+        return new SearchResponseEffectivenessReport(
+            totalResolvedOutcomes: count($this->resolvedOutcomes),
+            bestPolicyBySuccess: $bestPolicyBySuccess,
+            bestPolicyByProgress: $progressPolicies[0]['policy'] ?? null,
+            policies: $policies
+        );
     }
 
     private function evaluateOutcome(

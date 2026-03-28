@@ -31,7 +31,8 @@ final class LandscapeObservation
         public readonly ?array $searchResponseSimulation = null,
         public readonly ?array $searchResponseAudit = null,
         public readonly ?array $searchResponseOutcome = null,
-        public readonly int $searchResponsePendingAudits = 0
+        public readonly int $searchResponsePendingAudits = 0,
+        public readonly ?array $searchResponseEffectivenessReport = null
     ) {}
 
     public function withEpisodeContext(
@@ -65,7 +66,8 @@ final class LandscapeObservation
             searchResponseSimulation: $this->searchResponseSimulation,
             searchResponseAudit: $this->searchResponseAudit,
             searchResponseOutcome: $this->searchResponseOutcome,
-            searchResponsePendingAudits: $this->searchResponsePendingAudits
+            searchResponsePendingAudits: $this->searchResponsePendingAudits,
+            searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport
         );
     }
 
@@ -96,7 +98,8 @@ final class LandscapeObservation
             searchResponseSimulation: $searchResponseSimulation,
             searchResponseAudit: $this->searchResponseAudit,
             searchResponseOutcome: $this->searchResponseOutcome,
-            searchResponsePendingAudits: $this->searchResponsePendingAudits
+            searchResponsePendingAudits: $this->searchResponsePendingAudits,
+            searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport
         );
     }
 
@@ -127,12 +130,16 @@ final class LandscapeObservation
             searchResponseSimulation: $this->searchResponseSimulation,
             searchResponseAudit: $searchResponseAudit,
             searchResponseOutcome: $this->searchResponseOutcome,
-            searchResponsePendingAudits: $this->searchResponsePendingAudits
+            searchResponsePendingAudits: $this->searchResponsePendingAudits,
+            searchResponseEffectivenessReport: $this->searchResponseEffectivenessReport
         );
     }
 
-    public function withSearchResponseOutcome(?array $searchResponseOutcome, int $searchResponsePendingAudits): self
-    {
+    public function withSearchResponseOutcome(
+        ?array $searchResponseOutcome,
+        int $searchResponsePendingAudits,
+        ?array $searchResponseEffectivenessReport = null
+    ): self {
         return new self(
             phenomenon: $this->phenomenon,
             confidence: $this->confidence,
@@ -158,7 +165,8 @@ final class LandscapeObservation
             searchResponseSimulation: $this->searchResponseSimulation,
             searchResponseAudit: $this->searchResponseAudit,
             searchResponseOutcome: $searchResponseOutcome,
-            searchResponsePendingAudits: $searchResponsePendingAudits
+            searchResponsePendingAudits: $searchResponsePendingAudits,
+            searchResponseEffectivenessReport: $searchResponseEffectivenessReport ?? $this->searchResponseEffectivenessReport
         );
     }
 
@@ -190,6 +198,7 @@ final class LandscapeObservation
             'search_response_audit' => $this->searchResponseAudit,
             'search_response_outcome' => $this->searchResponseOutcome,
             'search_response_pending_audits' => $this->searchResponsePendingAudits,
+            'search_response_effectiveness_report' => $this->searchResponseEffectivenessReport,
         ];
     }
 }

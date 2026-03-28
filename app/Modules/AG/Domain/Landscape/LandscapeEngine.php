@@ -178,10 +178,12 @@ final class LandscapeEngine
         $latestOutcome = $resolvedOutcomes === []
             ? null
             : $resolvedOutcomes[array_key_last($resolvedOutcomes)]->toArray();
+        $effectivenessReport = $this->searchResponseOutcomeTracker?->effectivenessReport()?->toArray();
 
         $this->lastObservation = $this->lastObservation->withSearchResponseOutcome(
             searchResponseOutcome: $latestOutcome,
-            searchResponsePendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0
+            searchResponsePendingAudits: $this->searchResponseOutcomeTracker?->pendingCount() ?? 0,
+            searchResponseEffectivenessReport: $effectivenessReport
         );
 
         return $state;
