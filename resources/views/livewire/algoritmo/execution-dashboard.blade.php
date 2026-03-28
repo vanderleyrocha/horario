@@ -22,7 +22,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-4 gap-4 mt-4">
+        <div class="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-6">
 
             <div class="bg-white shadow rounded p-4">
                 <p class="text-sm text-gray-500">Status</p>
@@ -42,6 +42,18 @@
             <div class="bg-white shadow rounded p-4">
                 <p class="text-sm text-gray-500">Melhor fitness</p>
                 <p class="text-lg font-bold">{{ number_format((float) ($executionInfo['bestFitness'] ?? 0), 4) }}</p>
+            </div>
+
+            <div class="bg-white shadow rounded p-4">
+                <p class="text-sm text-gray-500">Ultimo heartbeat</p>
+                <p class="text-lg font-bold" data-dashboard-last-heartbeat>Sem heartbeat ainda</p>
+                <p class="mt-1 text-xs text-slate-500" data-dashboard-heartbeat-status>Aguardando primeiro sinal</p>
+            </div>
+
+            <div class="bg-white shadow rounded p-4">
+                <p class="text-sm text-gray-500">Atraso atual</p>
+                <p class="text-lg font-bold" data-dashboard-heartbeat-delay>--</p>
+                <p class="mt-1 text-xs text-slate-500" data-dashboard-heartbeat-note>O contador atualiza sozinho entre os heartbeats.</p>
             </div>
 
         </div>

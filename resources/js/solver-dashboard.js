@@ -8,6 +8,10 @@ if (window.__solverDashboardRegistered) {
 const chartState = {
     root: null,
     executionId: null,
+    heartbeatIntervalId: null,
+    lastHeartbeatAt: null,
+    lastHeartbeatPhase: "",
+    lastHeartbeatStage: "",
     seenGenerations: new Set(),
     operatorUsage: new Map(),
     fitnessChart: null,
@@ -19,6 +23,10 @@ const chartState = {
 }
 
 function destroyCharts() {
+    if (chartState.heartbeatIntervalId) {
+        window.clearInterval(chartState.heartbeatIntervalId)
+    }
+
     chartState.fitnessChart?.destroy()
     chartState.diversityChart?.destroy()
     chartState.entropyChart?.destroy()
@@ -35,6 +43,10 @@ function destroyCharts() {
     chartState.seenGenerations = new Set()
     chartState.operatorUsage = new Map()
     chartState.executionId = null
+    chartState.heartbeatIntervalId = null
+    chartState.lastHeartbeatAt = null
+    chartState.lastHeartbeatPhase = ""
+    chartState.lastHeartbeatStage = ""
 }
 
 function createLineChart(element, label) {
@@ -224,6 +236,152 @@ function normalizeMetricEvent(detail) {
     return typeof detail === "object" ? detail : null
 }
 
+function parseHeartbeatTimestamp(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        const milliseconds = value > 1_000_000_000_000 ? value : value * 1000
+        return new Date(milliseconds)
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+        const parsed = new Date(value)
+
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed
+        }
+    }
+
+    return null
+}
+
+function formatElapsedSeconds(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+        return "--"
+    }
+
+    if (seconds < 60) {
+        return `${Math.floor(seconds)}s`
+    }
+
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+
+    if (minutes < 60) {
+        return `${minutes}min ${remainingSeconds}s`
+    }
+
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+
+    return `${hours}h ${remainingMinutes}min`
+}
+
+function resolveHeartbeatSeverity(phase, stage, ageSeconds) {
+    let thresholds = { monitoring: 20, warning: 60, critical: 180 }
+
+    if (phase === "initial_population" && stage.includes("quality_gate_repair")) {
+        thresholds = { monitoring: 30, warning: 120, critical: 360 }
+    } else if (phase === "initial_population") {
+        thresholds = { monitoring: 20, warning: 90, critical: 240 }
+    } else if (phase === "evolving" || phase === "evolution") {
+        thresholds = { monitoring: 15, warning: 45, critical: 120 }
+    }
+
+    if (ageSeconds <= thresholds.monitoring) {
+        return {
+            status: "saudavel",
+            note: "Heartbeat recente. O solver segue publicando progresso normalmente.",
+        }
+    }
+
+    if (ageSeconds <= thresholds.warning) {
+        return {
+            status: "monitorando",
+            note: "Heartbeat mais espacoso, mas ainda dentro da janela esperada para esta fase.",
+        }
+    }
+
+    if (ageSeconds <= thresholds.critical) {
+        return {
+            status: "atencao",
+            note: phase === "initial_population"
+                ? "A populacao inicial esta demorando para publicar um novo heartbeat."
+                : "O heartbeat da execucao esta atrasado e merece acompanhamento.",
+        }
+    }
+
+    return {
+        status: "possivel estagnacao operacional",
+        note: phase === "initial_population"
+            ? "Sem novo heartbeat ha tempo demais durante a populacao inicial ou reparo."
+            : "Sem novo heartbeat ha tempo demais. Vale conferir worker, fila e logs.",
+    }
+}
+
+function renderDashboardHeartbeatMonitor() {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const lastHeartbeatElement = root.querySelector("[data-dashboard-last-heartbeat]")
+    const delayElement = root.querySelector("[data-dashboard-heartbeat-delay]")
+    const statusElement = root.querySelector("[data-dashboard-heartbeat-status]")
+    const noteElement = root.querySelector("[data-dashboard-heartbeat-note]")
+
+    if (!lastHeartbeatElement || !delayElement || !statusElement || !noteElement) {
+        return
+    }
+
+    if (!(chartState.lastHeartbeatAt instanceof Date) || Number.isNaN(chartState.lastHeartbeatAt.getTime())) {
+        lastHeartbeatElement.textContent = "Sem heartbeat ainda"
+        delayElement.textContent = "--"
+        statusElement.textContent = "Aguardando primeiro sinal"
+        noteElement.textContent = "O contador atualiza sozinho entre os heartbeats."
+        return
+    }
+
+    const ageSeconds = Math.max(0, (Date.now() - chartState.lastHeartbeatAt.getTime()) / 1000)
+    const severity = resolveHeartbeatSeverity(
+        chartState.lastHeartbeatPhase,
+        chartState.lastHeartbeatStage,
+        ageSeconds,
+    )
+
+    lastHeartbeatElement.textContent = chartState.lastHeartbeatAt.toLocaleString("pt-BR")
+    delayElement.textContent = formatElapsedSeconds(ageSeconds)
+    statusElement.textContent = severity.status
+    noteElement.textContent = severity.note
+}
+
+function updateDashboardHeartbeatMonitor(metric) {
+    if (!metric || typeof metric !== "object") {
+        return
+    }
+
+    const heartbeatAt = parseHeartbeatTimestamp(metric.timestamp ?? metric.created_at ?? metric.updated_at)
+
+    if (!heartbeatAt) {
+        return
+    }
+
+    chartState.lastHeartbeatAt = heartbeatAt
+    chartState.lastHeartbeatPhase = String(metric.phase ?? "")
+    chartState.lastHeartbeatStage = String(metric.stage ?? "")
+
+    renderDashboardHeartbeatMonitor()
+}
+
+function ensureHeartbeatTicker() {
+    if (chartState.heartbeatIntervalId) {
+        return
+    }
+
+    chartState.heartbeatIntervalId = window.setInterval(() => {
+        renderDashboardHeartbeatMonitor()
+    }, 1000)
+}
+
 function syncOperatorChart() {
     if (!chartState.operatorChart) {
         return
@@ -257,6 +415,8 @@ function appendMetric(metric) {
     if (!metric || !chartState.fitnessChart) {
         return
     }
+
+    updateDashboardHeartbeatMonitor(metric)
 
     if ((metric.phase ?? null) === "initial_population") {
         updateInitialPopulationObservation(metric)
@@ -572,6 +732,7 @@ function initializeDashboard() {
 
     chartState.root = root
     chartState.executionId = window.executionId ?? null
+    ensureHeartbeatTicker()
     chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Melhor fitness", "Fitness médio"])
     chartState.diversityChart = createLineChart(diversityCanvas, "Diversidade")
     chartState.entropyChart = createLineChart(entropyCanvas, "Entropia")
@@ -580,6 +741,7 @@ function initializeDashboard() {
     chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Estado do landscape")
 
     loadInitialMetrics()
+    renderDashboardHeartbeatMonitor()
 }
 
 function handleMetricEvent(event) {
