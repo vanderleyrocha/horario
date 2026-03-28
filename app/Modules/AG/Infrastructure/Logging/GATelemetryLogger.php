@@ -42,6 +42,13 @@ final class GATelemetryLogger
             'alns_improvement' => isset($metrics['alns_improvement'])
                 ? round((float) $metrics['alns_improvement'], 6)
                 : null,
+            'alns_trigger_reason' => $metrics['landscape_observation']['alns_trigger']['reason'] ?? ($metrics['alns_trigger_reason'] ?? null),
+            'alns_triggered' => isset($metrics['landscape_observation']['alns_trigger']['triggered'])
+                ? (bool) $metrics['landscape_observation']['alns_trigger']['triggered']
+                : (isset($metrics['alns_triggered']) ? (bool) $metrics['alns_triggered'] : null),
+            'alns_effective_frequency' => isset($metrics['landscape_observation']['alns_trigger']['effective_frequency'])
+                ? (int) $metrics['landscape_observation']['alns_trigger']['effective_frequency']
+                : (isset($metrics['alns_effective_frequency']) ? (int) $metrics['alns_effective_frequency'] : null),
             'landscape_phenomenon' => $metrics['landscape_phenomenon'] ?? null,
             'landscape_confidence' => isset($metrics['landscape_observation']['confidence'])
                 ? round((float) $metrics['landscape_observation']['confidence'], 6)

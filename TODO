@@ -565,3 +565,60 @@ vendor\bin\pint --test ...
 PASS
 
 Próximo passo que eu sugiro: transformar esse relatório global em uma série temporal por policy, para mostrar se near_gate, candidate_ready e os sinais de landscape estão melhorando ou piorando ao longo das execuções, em vez de só olhar o agregado atual.
+
+
+
+Sim. Há espaço claro para melhorar o código, e o diagnóstico aponta uma causa principal bem específica.
+
+Nos logs em [ga-2026-03-28.log](d:/laragon/www/horario/storage/logs/ga-2026-03-28.log) e [laravel.log](d:/laragon/www/horario/storage/logs/laravel.log), e nas métricas da `schedule_execution` `id=1`, o padrão foi este:
+- 20 gerações registradas
+- `best_fitness = 0.0` em todas
+- `avg_fitness = 0.0` em todas
+- `variance = 0.0` em todas
+- diversidade e entropia altas quase o tempo todo
+- ALNS nunca disparou
+- reparo final falhou 3 vezes com exatamente o mesmo resultado: `hard_penalty = 122`, `soft_penalty = 389.5`, `score = 0`
+
+Também confirmei que o `horario_id=3` é estruturalmente viável pelo analisador: `is_feasible = true`, `global_saturation = 100`, sem overloads e sem déficit de blocos. Então o problema não é inviabilidade do horário; é o pipeline de construção/evolução/reparo.
+
+**Diagnóstico**
+O gargalo principal está em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135). Hoje, qualquer indivíduo inviável com penalidade alta cai praticamente no mesmo `fitness = 0`. Como a população inteira ficou nessa faixa, o GA perdeu gradiente: seleção, crossover, mutação, HH e SLAE ficaram sem sinal útil. A alta diversidade mostra que os cromossomos eram diferentes, mas todos igualmente ruins para a função objetivo.
+
+O segundo gargalo está em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41). A construção GRASP aceita um cromossomo assim que termina de alocar tudo, mesmo com `forced_allocations` e `hard_conflict_allocations`. O diagnóstico preventivo atual em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L296) só barra casos muito óbvios; ele não rejeita indivíduos estruturalmente “completos”, mas já muito inviáveis.
+
+O terceiro gargalo é o reparo. [GreedyRepairOperator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Repair/GreedyRepairOperator.php#L13) faz só relocação gulosa, em até 3 passes, sem swap, sem kick-chain e sem rebuild parcial. E em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L220), o reparo final repete 3 vezes o mesmo operador determinístico; os logs mostram que isso não muda nada.
+
+**Intervenções que devem ser feitas**
+1. Corrigir a função de fitness para preservar gradiente entre inviáveis.
+Aplicar isso em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135). Soluções viáveis devem continuar sempre acima das inviáveis, mas as inviáveis não podem colapsar todas em `0`. Esse é o ajuste de maior impacto.
+
+2. Endurecer a geração inicial com gate de qualidade.
+Em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41), depois de montar o indivíduo, avaliar imediatamente e rejeitar/reconstruir quando o `hardPenalty` passar de um limiar. Também limitar `hard_conflict_allocations` e tornar o `fallback` menos cego em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L468).
+
+3. Fortalecer o reparo.
+Evoluir [GreedyRepairOperator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Repair/GreedyRepairOperator.php#L13) para reparar conflitos hard por prioridade, com swap entre genes, ejection chain ou destroy-and-rebuild local. Repetir 3 vezes o mesmo reparo determinístico, como hoje em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L220), não traz ganho real.
+
+4. Fazer o ALNS realmente acontecer.
+Hoje o engine é criado com `lnsFrequency: 50` em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L200), mas a execução tinha só 20 gerações. Resultado: `alns_triggered_count = 0`. Isso precisa virar frequência adaptativa ou baseada em percentual do orçamento de gerações.
+
+5. Persistir telemetria da população inicial.
+Hoje [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L548) reporta progresso, mas não estamos guardando em banco o que mais importa para depuração: `forced_allocations`, `hard_conflict_allocations`, `hardPenalty` inicial mínimo/médio/máximo. Sem isso, a execução “nasce ruim” e só descobrimos no fim.
+
+6. Aproveitar ou consolidar o legado de geração populacional.
+[PopulationGenerator.php](d:/laragon/www/horario/app/Modules/AG/Infrastructure/Population/PopulationGenerator.php#L28) já tem ideias úteis de fail-fast estrutural e tentativas controladas, mas não está no caminho principal. Vale integrar esses conceitos ao `ScheduleProblem` ou remover a duplicidade.
+
+**Ordem recomendada**
+1. `FitnessEvaluator` com gradiente entre inviáveis
+2. Gate de qualidade na `createIndividual()`
+3. Reparo hard mais forte
+4. ALNS com frequência alcançável
+5. Telemetria persistida da população inicial
+
+**Testes que passam a ser necessários**
+- garantir que dois inviáveis com penalidades diferentes tenham fitness diferente, mantendo qualquer viável acima deles
+- garantir que `createIndividual()` rejeite cromossomos com `hardPenalty` excessivo
+- garantir que o reparo reduza `hardPenalty` ou pare cedo quando não houver melhora
+- garantir que o ALNS dispare em execuções curtas
+- teste de integração com seed fixa validando que um caso estruturalmente viável consiga produzir ao menos um indivíduo viável no pipeline
+
+Se quiser, eu seguiria agora pela intervenção de maior ROI: corrigir o gradiente lexicográfico em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135) e, na mesma etapa, adicionar o gate de qualidade na geração inicial em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41).

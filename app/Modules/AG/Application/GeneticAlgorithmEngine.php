@@ -38,6 +38,8 @@ final class GeneticAlgorithmEngine
 
     private int $evolutionGeneration = 0;
 
+    private ?int $lastAlnsGeneration = null;
+
     public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
     {
         $this->mutationPool = [$this->mutation];
@@ -176,6 +178,9 @@ final class GeneticAlgorithmEngine
         $newPopulation = $generationStep['population'];
         $telemetry = [];
         $stagnation = $this->termination->getGenerationsWithoutImprovement();
+        $observationPayload = null;
+        $landscapeState = null;
+        $activateDynamicLns = false;
 
         if ($this->landscapeEngine !== null) {
             $localMetrics = $this->metrics->recordExtended(
@@ -201,17 +206,31 @@ final class GeneticAlgorithmEngine
                 bestSignature: $generationStep['best_signature']
             ));
 
-            $telemetry['landscape_state'] = $this->landscapeEngine->state()?->value;
+            $landscapeState = $this->landscapeEngine->state()?->value;
+            $activateDynamicLns = in_array($landscapeState, ['plateau', 'premature_convergence'], true);
+            $telemetry['landscape_state'] = $landscapeState;
             $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
-            $telemetry['landscape_observation'] = $observation->toArray();
+            $observationPayload = $observation->toArray();
+            $telemetry['landscape_observation'] = $observationPayload;
         }
 
-        if (
-            $this->lns !== null &&
-            $currentGeneration > 0 &&
-            $currentGeneration % $this->lnsFrequency === 0
-        ) {
-            $telemetry += $this->applyLns($newPopulation);
+        $alnsTrigger = $this->buildAlnsTriggerTelemetry(
+            generation: $currentGeneration,
+            landscapeState: $landscapeState,
+            landscapeObservation: $observationPayload,
+            activateDynamicLns: $activateDynamicLns
+        );
+        $telemetry += $alnsTrigger;
+
+        if ($observationPayload !== null) {
+            $telemetry['landscape_observation'] = $observationPayload + [
+                'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+            ];
+        }
+
+        if (($alnsTrigger['alns_triggered'] ?? false) === true) {
+            $this->lastAlnsGeneration = $currentGeneration;
+            $telemetry += $this->applyLns($newPopulation, $alnsTrigger);
         }
 
         $this->lastEvolutionTelemetry = [
@@ -234,7 +253,7 @@ final class GeneticAlgorithmEngine
         return $newPopulation;
     }
 
-    private function applyLns(array &$population): array
+    private function applyLns(array &$population, array $triggerTelemetry = []): array
     {
         if ($this->lns === null || $population === []) {
             return [];
@@ -252,6 +271,8 @@ final class GeneticAlgorithmEngine
         if ($telemetry !== []) {
             Log::info('ga.alns.applied', [
                 'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'trigger_reason' => $triggerTelemetry['alns_trigger_reason'] ?? null,
+                'effective_frequency' => $triggerTelemetry['alns_effective_frequency'] ?? null,
                 'destroy_operator' => $telemetry['alns_destroy_operator'] ?? null,
                 'repair_operator' => $telemetry['alns_repair_operator'] ?? null,
                 'improvement' => $telemetry['alns_improvement'] ?? null,
@@ -262,7 +283,7 @@ final class GeneticAlgorithmEngine
             ]);
         }
 
-        return $telemetry;
+        return $triggerTelemetry + $telemetry;
     }
 
     /**
@@ -289,6 +310,7 @@ final class GeneticAlgorithmEngine
         $heatmap = [];
         $activateDynamicLNS = false;
         $telemetry = [];
+        $observationPayload = null;
 
         if ($this->landscapeEngine !== null) {
             $landscapeMetrics = new LandscapeMetrics(
@@ -321,16 +343,28 @@ final class GeneticAlgorithmEngine
 
             if ($observation = $this->landscapeEngine->observation()) {
                 $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
-                $telemetry['landscape_observation'] = $observation->toArray();
+                $observationPayload = $observation->toArray();
+                $telemetry['landscape_observation'] = $observationPayload;
             }
         }
 
-        if (
-            $this->lns !== null &&
-            $generation > 0 &&
-            ($generation % $this->lnsFrequency === 0 || $activateDynamicLNS)
-        ) {
-            $telemetry += $this->applyLns($population);
+        $alnsTrigger = $this->buildAlnsTriggerTelemetry(
+            generation: $generation,
+            landscapeState: $landscapeState,
+            landscapeObservation: $observationPayload,
+            activateDynamicLns: $activateDynamicLNS
+        );
+        $telemetry += $alnsTrigger;
+
+        if ($observationPayload !== null) {
+            $telemetry['landscape_observation'] = $observationPayload + [
+                'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+            ];
+        }
+
+        if (($alnsTrigger['alns_triggered'] ?? false) === true) {
+            $this->lastAlnsGeneration = $generation;
+            $telemetry += $this->applyLns($population, $alnsTrigger);
 
             $metrics = $this->metrics->recordExtended(
                 generation: $generation,
@@ -398,6 +432,147 @@ final class GeneticAlgorithmEngine
         $progress->landscapeState = $landscapeState ?? 'unknown';
 
         $this->progress->report($progress->toArray() + $alnsTelemetry);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     * @return array<string, mixed>
+     */
+    private function buildAlnsTriggerTelemetry(
+        int $generation,
+        ?string $landscapeState,
+        ?array $landscapeObservation,
+        bool $activateDynamicLns
+    ): array {
+        $baseFrequency = max(2, $this->lnsFrequency);
+        $maxGenerations = max(1, $this->termination->getMaxGenerations() ?? ($generation + 1));
+        $budgetFrequency = $this->budgetAwareLnsFrequency($maxGenerations);
+        $landscapeFrequency = $this->landscapeAwareLnsFrequency(
+            budgetFrequency: $budgetFrequency,
+            landscapeState: $landscapeState,
+            landscapeObservation: $landscapeObservation,
+            activateDynamicLns: $activateDynamicLns
+        );
+        $effectiveFrequency = min($baseFrequency, $budgetFrequency, $landscapeFrequency ?? PHP_INT_MAX);
+
+        if ($effectiveFrequency === PHP_INT_MAX) {
+            $effectiveFrequency = min($baseFrequency, $budgetFrequency);
+        }
+
+        $cooldown = max(1, (int) floor($effectiveFrequency / 2));
+        $generationsSinceLastTrigger = $this->lastAlnsGeneration === null
+            ? null
+            : $generation - $this->lastAlnsGeneration;
+        $cooldownSatisfied = $generationsSinceLastTrigger === null || $generationsSinceLastTrigger >= $cooldown;
+        $landscapePressure = $this->hasLandscapePressure(
+            landscapeState: $landscapeState,
+            landscapeObservation: $landscapeObservation,
+            activateDynamicLns: $activateDynamicLns
+        );
+        $intervalDue = $generation > 0 && $generation % $effectiveFrequency === 0;
+        $landscapeDue = $generation > 0 && $landscapePressure && $cooldownSatisfied;
+        $triggerSources = [];
+
+        if ($intervalDue && $cooldownSatisfied) {
+            $triggerSources[] = 'budget_interval';
+        }
+
+        if ($landscapeDue) {
+            $triggerSources[] = 'landscape_pressure';
+        }
+
+        $eligible = $this->lns !== null && $generation > 0;
+        $triggered = $eligible && $triggerSources !== [];
+
+        return [
+            'alns_base_frequency' => $baseFrequency,
+            'alns_budget_frequency' => $budgetFrequency,
+            'alns_landscape_frequency' => $landscapeFrequency,
+            'alns_effective_frequency' => $effectiveFrequency,
+            'alns_cooldown_generations' => $cooldown,
+            'alns_generations_since_last_trigger' => $generationsSinceLastTrigger,
+            'alns_landscape_pressure' => $landscapePressure,
+            'alns_trigger_eligible' => $eligible,
+            'alns_triggered' => $triggered,
+            'alns_trigger_reason' => $triggered
+                ? implode('+', $triggerSources)
+                : ($cooldownSatisfied ? ($landscapePressure ? 'waiting_interval' : 'not_due') : 'cooldown'),
+            'alns_trigger_sources' => $triggerSources,
+        ];
+    }
+
+    private function budgetAwareLnsFrequency(int $maxGenerations): int
+    {
+        $targetTriggers = match (true) {
+            $maxGenerations <= 10 => 2,
+            $maxGenerations <= 20 => 3,
+            $maxGenerations <= 40 => 4,
+            $maxGenerations <= 80 => 5,
+            default => 6,
+        };
+
+        return max(2, (int) ceil($maxGenerations / ($targetTriggers + 1)));
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     */
+    private function landscapeAwareLnsFrequency(
+        int $budgetFrequency,
+        ?string $landscapeState,
+        ?array $landscapeObservation,
+        bool $activateDynamicLns
+    ): ?int {
+        if (! $this->hasLandscapePressure($landscapeState, $landscapeObservation, $activateDynamicLns)) {
+            return null;
+        }
+
+        return max(2, (int) ceil($budgetFrequency / 2));
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     */
+    private function hasLandscapePressure(
+        ?string $landscapeState,
+        ?array $landscapeObservation,
+        bool $activateDynamicLns
+    ): bool {
+        if ($activateDynamicLns) {
+            return true;
+        }
+
+        if (in_array($landscapeState, ['plateau', 'premature_convergence'], true)) {
+            return true;
+        }
+
+        if (! is_array($landscapeObservation)) {
+            return false;
+        }
+
+        return (bool) ($landscapeObservation['basin_of_attraction_lock_detected'] ?? false)
+            || in_array($landscapeObservation['phenomenon'] ?? null, ['deep_valley', 'local_minimum'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $alnsTrigger
+     * @return array<string, mixed>
+     */
+    private function alnsTriggerObservationPayload(array $alnsTrigger): array
+    {
+        return [
+            'base_frequency' => $alnsTrigger['alns_base_frequency'] ?? null,
+            'budget_frequency' => $alnsTrigger['alns_budget_frequency'] ?? null,
+            'landscape_frequency' => $alnsTrigger['alns_landscape_frequency'] ?? null,
+            'effective_frequency' => $alnsTrigger['alns_effective_frequency'] ?? null,
+            'cooldown_generations' => $alnsTrigger['alns_cooldown_generations'] ?? null,
+            'generations_since_last_trigger' => $alnsTrigger['alns_generations_since_last_trigger'] ?? null,
+            'landscape_pressure' => $alnsTrigger['alns_landscape_pressure'] ?? false,
+            'eligible' => $alnsTrigger['alns_trigger_eligible'] ?? false,
+            'triggered' => $alnsTrigger['alns_triggered'] ?? false,
+            'reason' => $alnsTrigger['alns_trigger_reason'] ?? null,
+            'sources' => $alnsTrigger['alns_trigger_sources'] ?? [],
+        ];
     }
 
     /**

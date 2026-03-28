@@ -248,6 +248,19 @@ it('flushes generation metrics immediately and publishes the current metric to c
                     ],
                 ],
             ],
+            'alns_trigger' => [
+                'base_frequency' => 10,
+                'budget_frequency' => 5,
+                'landscape_frequency' => 3,
+                'effective_frequency' => 3,
+                'cooldown_generations' => 1,
+                'generations_since_last_trigger' => 2,
+                'landscape_pressure' => true,
+                'eligible' => true,
+                'triggered' => true,
+                'reason' => 'budget_interval+landscape_pressure',
+                'sources' => ['budget_interval', 'landscape_pressure'],
+            ],
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -289,6 +302,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse()
         ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['effective_frequency'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['reason'] ?? null)->toBe('budget_interval+landscape_pressure')
         ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape')
         ->and($cachedMetric['landscape_observation']['search_response_audit']['target_population_turnover'] ?? null)->toBe(0.45)
         ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
@@ -312,5 +327,6 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['search_response_effectiveness_report']['best_policy_by_progress'] ?? null)->toBe('deep_valley_probe')
         ->and($storedObservation['search_response_effectiveness_report']['policies'][0]['resolved_outcomes'] ?? null)->toBe(4)
         ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue()
-        ->and($storedObservation['search_response_readiness_dashboard']['best_policy_by_success']['policy'] ?? null)->toBe('basin_lock_escape');
+        ->and($storedObservation['search_response_readiness_dashboard']['best_policy_by_success']['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($storedObservation['alns_trigger']['sources'] ?? null)->toBe(['budget_interval', 'landscape_pressure']);
 });

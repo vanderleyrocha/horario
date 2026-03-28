@@ -95,7 +95,7 @@ final class FitnessEvaluator
          */
         $affectedRuleClasses =
             $this->dependencyGraph
-            ->affectedRules($region);
+                ->affectedRules($region);
 
         /**
          * Filtra as regras realmente necessárias
@@ -141,9 +141,10 @@ final class FitnessEvaluator
          * Assim, qualquer solução viável domina qualquer inviável.
          */
         if ($hardPenalty > 0.0) {
-            $infeasiblePenalty = min(49.999, $hardPenalty + $softPenalty);
+            $hardComponent = $hardPenalty;
+            $softComponent = $softPenalty * 0.10;
 
-            return max(0.0, 49.999 - $infeasiblePenalty);
+            return min(49.999, 49.999 / (1.0 + $hardComponent + $softComponent));
         }
 
         return 50.0 + max(0.0, 50.0 - $softPenalty);

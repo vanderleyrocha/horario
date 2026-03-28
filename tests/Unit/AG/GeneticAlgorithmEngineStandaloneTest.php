@@ -8,6 +8,11 @@ use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\FitnessResult;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelectionStrategy;
+use App\Modules\AG\Domain\Intensification\LNS\Destroy\DestroyOperatorInterface;
+use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
+use App\Modules\AG\Domain\Intensification\LNS\Repair\RepairOperatorInterface;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\CrossoverOperatorInterface;
@@ -124,11 +129,45 @@ it('publishes the same structured progress payload for the frontend through the 
         ]);
 });
 
+it('triggers alns adaptively in short runs and publishes trigger telemetry', function (): void {
+    $progress = new CollectingProgressReporter;
+    $problem = new StandaloneFakeProblem;
+    $lns = new AdaptiveLargeNeighborhoodSearch(
+        destroyOperators: [new StandaloneFakeDestroyOperator('AdaptiveDestroy')],
+        repairOperators: [new StandaloneFakeRepairOperator('AdaptiveRepair')],
+        selector: new StandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair'])
+    );
+
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        mutation: new CountingMutationOperator,
+        termination: new StandaloneTerminationCriterion(maxGenerationExclusive: 5),
+        progress: $progress,
+        lns: $lns,
+        lnsFrequency: 50
+    );
+
+    $engine->run(4);
+
+    $alnsReports = array_values(array_filter(
+        $progress->reports,
+        static fn (array $payload): bool => ($payload['alns_triggered'] ?? false) === true
+    ));
+
+    expect($alnsReports)->not->toBeEmpty()
+        ->and($alnsReports[0]['alns_trigger_reason'] ?? null)->toBe('budget_interval')
+        ->and($alnsReports[0]['alns_effective_frequency'] ?? null)->toBe(2)
+        ->and($alnsReports[0]['alns_destroy_operator'] ?? null)->toBe('AdaptiveDestroy')
+        ->and($alnsReports[0]['alns_repair_operator'] ?? null)->toBe('AdaptiveRepair');
+});
+
 function makeStandaloneEngine(
     GeneticProblem $problem,
     CountingMutationOperator $mutation,
     TerminationCriterionInterface $termination,
-    ?ProgressReporterInterface $progress = null
+    ?ProgressReporterInterface $progress = null,
+    ?AdaptiveLargeNeighborhoodSearch $lns = null,
+    int $lnsFrequency = 50
 ): GeneticAlgorithmEngine {
     return new GeneticAlgorithmEngine(
         problem: $problem,
@@ -142,7 +181,9 @@ function makeStandaloneEngine(
         populationEvaluator: new PopulationFitnessEvaluator($problem),
         replacement: new NoopReplacement,
         hyperHeuristic: null,
+        lns: $lns,
         progress: $progress,
+        lnsFrequency: $lnsFrequency,
     );
 }
 
@@ -275,4 +316,65 @@ final class CollectingProgressReporter implements ProgressReporterInterface
     }
 
     public function reportError(AGError $error): void {}
+}
+
+final class StandaloneFixedAlnsSelectionStrategy implements OperatorSelectionStrategy
+{
+    /**
+     * @param  string[]  $selectionOrder
+     */
+    public function __construct(private array $selectionOrder) {}
+
+    public function select(array $operators, array $stats): object
+    {
+        $target = array_shift($this->selectionOrder);
+
+        if ($target === null) {
+            return $operators[0];
+        }
+
+        foreach ($operators as $operator) {
+            if (method_exists($operator, 'getName') && $operator->getName() === $target) {
+                return $operator;
+            }
+        }
+
+        throw new RuntimeException('No operator matched the fixed ALNS selection.');
+    }
+}
+
+final class StandaloneFakeDestroyOperator implements DestroyOperatorInterface
+{
+    public function __construct(private readonly string $name) {}
+
+    public function destroy(Cromossomo $solution): PartialSolution
+    {
+        return new PartialSolution($solution->genes(), []);
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
+    }
+}
+
+final class StandaloneFakeRepairOperator implements RepairOperatorInterface
+{
+    public function __construct(private readonly string $name) {}
+
+    public function repair(PartialSolution $partial): Cromossomo
+    {
+        $candidate = new Cromossomo([
+            new Gene(999, 1, 1, 1, 1, 1, 1),
+            new Gene(1000, 2, 2, 2, 2, 2, 1),
+        ]);
+        $candidate->setFitness(1999.0);
+
+        return $candidate;
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
+    }
 }

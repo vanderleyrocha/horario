@@ -141,6 +141,7 @@ final class RunGeneticAlgorithm
         );
 
         $islandEngine = new IslandModelEngine(migrationPolicy: new BestIndividualsMigration(2), migrationInterval: 25);
+        $baseLnsFrequency = $this->resolveBaseLnsFrequency($config->numeroGeracoes);
 
         $metricsGlobal = [];
 
@@ -197,7 +198,7 @@ final class RunGeneticAlgorithm
 
             $landscapeEngine = new LandscapeEngine(new LandscapeAnalyzer, new LandscapeDetector, new LandscapeResponseStrategy, new LandscapeMemory);
 
-            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: 50, executionMetrics: $executionMetrics, landscapeEngine: $landscapeEngine);
+            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: $baseLnsFrequency, executionMetrics: $executionMetrics, landscapeEngine: $landscapeEngine);
 
             $islandEngine->addIsland(new Island($i + 1, engine: $engine, populationSize: $config->tamanhoPopulacao, replacement: $replacement));
 
@@ -224,11 +225,24 @@ final class RunGeneticAlgorithm
         $lastHardPenalty = INF;
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
-            $candidate = $problem->repair($candidate);
+            $candidate = $problem->repairWithTelemetry(
+                $candidate,
+                reportProgress: true,
+                source: 'final_repair'
+            );
             $result = $problem->evaluate($candidate);
             $lastHardPenalty = $result->hardPenalty();
+            $repairTelemetry = $problem->lastRepairTelemetry();
 
             if ($result->hardPenalty() <= 0.0 && $problem->isFeasible($candidate)) {
+                Log::info('solver.final_repair_succeeded', [
+                    'attempt' => $attempt,
+                    'hard_penalty' => $result->hardPenalty(),
+                    'soft_penalty' => $result->softPenalty(),
+                    'score' => $result->score(),
+                    'repair' => $repairTelemetry,
+                ]);
+
                 return $candidate;
             }
 
@@ -237,6 +251,7 @@ final class RunGeneticAlgorithm
                 'hard_penalty' => $result->hardPenalty(),
                 'soft_penalty' => $result->softPenalty(),
                 'score' => $result->score(),
+                'repair' => $repairTelemetry,
             ]);
         }
 
@@ -245,6 +260,16 @@ final class RunGeneticAlgorithm
                 'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
                 $lastHardPenalty
             )
+        );
+    }
+
+    private function resolveBaseLnsFrequency(int $maxGenerations): int
+    {
+        $configured = (int) config('ag.lns_frequency', 50);
+
+        return min(
+            max(2, $configured),
+            max(2, (int) ceil(max(1, $maxGenerations) / 2))
         );
     }
 }

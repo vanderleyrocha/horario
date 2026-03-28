@@ -15,7 +15,7 @@ use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 
 it('keeps any feasible solution above any infeasible solution', function (): void {
     $evaluator = new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             new FixedHardPenaltyRule(1.0),
             new FixedSoftPenaltyRule(40.0),
@@ -28,7 +28,7 @@ it('keeps any feasible solution above any infeasible solution', function (): voi
     $infeasible = $evaluator->evaluate($chromosome, $context);
 
     $feasibleEvaluator = new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             new FixedHardPenaltyRule(0.0),
             new FixedSoftPenaltyRule(40.0),
@@ -42,6 +42,33 @@ it('keeps any feasible solution above any infeasible solution', function (): voi
         ->and($feasible->hardPenalty())->toBe(0.0)
         ->and($feasible->score())->toBeGreaterThanOrEqual(50.0)
         ->and($feasible->score())->toBeGreaterThan($infeasible->score());
+});
+
+it('preserves score gradient between infeasible solutions', function (): void {
+    $chromosome = new Cromossomo([new Gene(1, 1, 1, 1, 1, 1, 1)]);
+    $context = makeEvalContext();
+
+    $lessInfeasible = (new FitnessEvaluator(
+        weights: new FitnessWeights,
+        rules: [
+            new FixedHardPenaltyRule(1.0),
+            new FixedSoftPenaltyRule(10.0),
+        ]
+    ))->evaluate($chromosome, $context);
+
+    $moreInfeasible = (new FitnessEvaluator(
+        weights: new FitnessWeights,
+        rules: [
+            new FixedHardPenaltyRule(8.0),
+            new FixedSoftPenaltyRule(40.0),
+        ]
+    ))->evaluate($chromosome, $context);
+
+    expect($lessInfeasible->hardPenalty())->toBeGreaterThan(0.0)
+        ->and($moreInfeasible->hardPenalty())->toBeGreaterThan($lessInfeasible->hardPenalty())
+        ->and($lessInfeasible->score())->toBeGreaterThan(0.0)
+        ->and($moreInfeasible->score())->toBeGreaterThan(0.0)
+        ->and($lessInfeasible->score())->toBeGreaterThan($moreInfeasible->score());
 });
 
 function makeEvalContext(): EvaluationContext
@@ -73,9 +100,7 @@ function makeEvalContext(): EvaluationContext
 
 final class FixedHardPenaltyRule implements HardRuleInterface
 {
-    public function __construct(private readonly float $penalty)
-    {
-    }
+    public function __construct(private readonly float $penalty) {}
 
     public function evaluate(EvaluationContext $context): RuleResult
     {
@@ -90,9 +115,7 @@ final class FixedHardPenaltyRule implements HardRuleInterface
 
 final class FixedSoftPenaltyRule implements SoftRuleInterface
 {
-    public function __construct(private readonly float $penalty)
-    {
-    }
+    public function __construct(private readonly float $penalty) {}
 
     public function evaluate(EvaluationContext $context): RuleResult
     {
@@ -104,4 +127,3 @@ final class FixedSoftPenaltyRule implements SoftRuleInterface
         return false;
     }
 }
-

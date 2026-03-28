@@ -10,71 +10,212 @@ use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
 final class GreedyRepairOperator
 {
-    public function repair(Cromossomo $chromosome, ScheduleData $data): Cromossomo
+    private const MAX_PASSES = 4;
+
+    private const LOCAL_REBUILD_MAX_NEIGHBORS = 3;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $lastTelemetry = [];
+
+    public function repair(Cromossomo $chromosome, ScheduleData $data, ?callable $fitnessProbe = null): Cromossomo
     {
         $child = $chromosome->copy();
+        $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
 
-        $maxPasses = 3;
+        for ($pass = 1; $pass <= self::MAX_PASSES; $pass++) {
+            $invalidIndexes = $this->prioritizeInvalidGeneIndexes($child);
 
-        for ($pass = 0; $pass < $maxPasses; $pass++) {
+            if ($invalidIndexes === []) {
+                break;
+            }
+
+            $passTelemetry = $this->startPassTelemetry($pass, $child, $invalidIndexes, $fitnessProbe);
             $changed = false;
 
-            foreach ($child->genes() as $index => $gene) {
+            foreach ($invalidIndexes as $index) {
+                $currentGenes = $child->genes();
 
-                if ($this->isValid($child, $gene, $index)) {
+                if (! isset($currentGenes[$index])) {
                     continue;
                 }
 
-                $candidate = $this->relocateGene($child, $gene, $data, $index);
-
-                if ($candidate === null) {
+                if ($this->isValid($child, $currentGenes[$index], $index)) {
                     continue;
                 }
 
-                if (
-                    $candidate->diaSemana() !== $gene->diaSemana() ||
-                    $candidate->periodoDia() !== $gene->periodoDia()
-                ) {
-                    $child->replaceGene($index, $candidate);
+                $candidate = $this->attemptRelocation($child, $index, $data);
+
+                if ($candidate !== null) {
+                    $child = $candidate;
+                    $passTelemetry['relocations']++;
+                    $changed = true;
+
+                    continue;
+                }
+
+                $candidate = $this->attemptSwap($child, $index, $data);
+
+                if ($candidate !== null) {
+                    $child = $candidate;
+                    $passTelemetry['swaps']++;
+                    $changed = true;
+
+                    continue;
+                }
+
+                $candidate = $this->attemptLocalRebuild($child, $index, $data);
+
+                if ($candidate !== null) {
+                    $child = $candidate;
+                    $passTelemetry['local_rebuilds']++;
                     $changed = true;
                 }
             }
+
+            $this->finishPassTelemetry($passTelemetry, $child, $fitnessProbe);
+            $this->lastTelemetry['passes'][] = $passTelemetry;
 
             if (! $changed) {
                 break;
             }
         }
 
+        $this->finalizeTelemetry($child, $fitnessProbe);
+
         return $child;
     }
 
-    private function relocateGene(Cromossomo $cromossomo, Gene $gene, ScheduleData $data, int $sourceGeneIndex): ?Gene
+    /**
+     * @return array<string, mixed>
+     */
+    public function lastTelemetry(): array
     {
-        $profSlots = $data->availableSlotsByProfessor[$gene->professorId()] ?? [];
+        return $this->lastTelemetry;
+    }
 
-        $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
+    /**
+     * @return int[]
+     */
+    private function prioritizeInvalidGeneIndexes(Cromossomo $chromosome): array
+    {
+        $conflictMap = $this->buildConflictMap($chromosome);
 
-        /*
-        | interseção correta de slotIds
-        */
+        uasort($conflictMap, static function (array $left, array $right): int {
+            return [$right['count'], $right['duration'], -$right['index']]
+                <=>
+                [$left['count'], $left['duration'], -$left['index']];
+        });
 
-        $possible = array_intersect($profSlots, $classSlots);
+        return array_keys($conflictMap);
+    }
 
-        foreach ($possible as $slotId) {
+    /**
+     * @return array<int, array{index:int,count:int,duration:int,peers:int[]}>
+     */
+    private function buildConflictMap(Cromossomo $chromosome): array
+    {
+        $conflicts = [];
 
-            if (!isset($data->timeSlots[$slotId])) {
+        $this->accumulateConflicts($chromosome->professorPeriodoIndex(), $chromosome, $conflicts);
+        $this->accumulateConflicts($chromosome->turmaPeriodoIndex(), $chromosome, $conflicts);
+
+        foreach ($conflicts as $index => $data) {
+            $conflicts[$index]['peers'] = array_values(array_unique($data['peers']));
+        }
+
+        return $conflicts;
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $indexMap
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[]}>  $conflicts
+     */
+    private function accumulateConflicts(array $indexMap, Cromossomo $chromosome, array &$conflicts): void
+    {
+        foreach ($indexMap as $days) {
+            foreach ($days as $periods) {
+                foreach ($periods as $indexes) {
+                    if (count($indexes) <= 1) {
+                        continue;
+                    }
+
+                    foreach ($indexes as $index) {
+                        if (! isset($conflicts[$index])) {
+                            $gene = $chromosome->genes()[$index];
+                            $conflicts[$index] = [
+                                'index' => $index,
+                                'count' => 0,
+                                'duration' => $gene->duracaoTempos(),
+                                'peers' => [],
+                            ];
+                        }
+
+                        foreach ($indexes as $peerIndex) {
+                            if ($peerIndex === $index) {
+                                continue;
+                            }
+
+                            $conflicts[$index]['count']++;
+                            $conflicts[$index]['peers'][] = (int) $peerIndex;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private function attemptRelocation(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    {
+        $gene = $chromosome->genes()[$sourceGeneIndex];
+        $candidate = $this->findBestRelocation(
+            chromosome: $chromosome,
+            gene: $gene,
+            data: $data,
+            sourceGeneIndex: $sourceGeneIndex,
+            ignoredIndexes: [],
+            allowSamePosition: false
+        );
+
+        if ($candidate === null) {
+            return null;
+        }
+
+        $copy = $chromosome->copy();
+        $copy->replaceGene($sourceGeneIndex, $candidate);
+
+        return $copy;
+    }
+
+    private function attemptSwap(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    {
+        $genes = $chromosome->genes();
+        $sourceGene = $genes[$sourceGeneIndex];
+
+        foreach ($genes as $targetIndex => $targetGene) {
+            if ($targetIndex === $sourceGeneIndex) {
                 continue;
             }
 
-            $slot = $data->timeSlots[$slotId];
+            $swappedSource = $sourceGene->withDiaPeriodo($targetGene->diaSemana(), $targetGene->periodoDia());
+            $swappedTarget = $targetGene->withDiaPeriodo($sourceGene->diaSemana(), $sourceGene->periodoDia());
 
-            if (! $this->slotSupportsDuration($slot->lessonNumber, $gene->duracaoTempos(), $data)) {
+            if (
+                ! $this->canStartGeneAt($swappedSource, $data)
+                || ! $this->canStartGeneAt($swappedTarget, $data)
+            ) {
                 continue;
             }
 
-            $candidate = $gene->withDiaPeriodo($slot->day, $slot->lessonNumber);
+            $candidate = $chromosome->copy();
+            $candidate->replaceGene($sourceGeneIndex, $swappedSource);
+            $candidate->replaceGene($targetIndex, $swappedTarget);
 
-            if ($this->isValid($cromossomo, $candidate, $sourceGeneIndex)) {
+            if (
+                $this->isValid($candidate, $swappedSource, $sourceGeneIndex)
+                && $this->isValid($candidate, $swappedTarget, $targetIndex)
+            ) {
                 return $candidate;
             }
         }
@@ -82,7 +223,212 @@ final class GreedyRepairOperator
         return null;
     }
 
-    private function isValid(Cromossomo $cromossomo, Gene $gene, ?int $sourceGeneIndex = null): bool
+    private function attemptLocalRebuild(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    {
+        $conflictMap = $this->buildConflictMap($chromosome);
+        $sourceConflicts = $conflictMap[$sourceGeneIndex] ?? null;
+
+        if ($sourceConflicts === null || $sourceConflicts['peers'] === []) {
+            return null;
+        }
+
+        $neighborhoodIndexes = array_slice(
+            array_values(array_unique([
+                $sourceGeneIndex,
+                ...$sourceConflicts['peers'],
+                ...$this->collectBlockingIndexes($chromosome, $chromosome->genes()[$sourceGeneIndex], $data, $sourceGeneIndex),
+            ])),
+            0,
+            self::LOCAL_REBUILD_MAX_NEIGHBORS
+        );
+
+        if (count($neighborhoodIndexes) < 2) {
+            return null;
+        }
+
+        $working = $chromosome->copy();
+        $orderedNeighborhood = $this->orderNeighborhoodForRebuild($working, $data, $neighborhoodIndexes);
+        $remainingIndexes = $orderedNeighborhood;
+
+        foreach ($orderedNeighborhood as $geneIndex) {
+            $gene = $working->genes()[$geneIndex];
+            $ignoredIndexes = array_values(array_diff($remainingIndexes, [$geneIndex]));
+            $candidate = $this->findBestRelocation(
+                chromosome: $working,
+                gene: $gene,
+                data: $data,
+                sourceGeneIndex: $geneIndex,
+                ignoredIndexes: $ignoredIndexes,
+                allowSamePosition: $geneIndex !== $sourceGeneIndex
+            );
+
+            if ($candidate === null) {
+                return null;
+            }
+
+            $working->replaceGene($geneIndex, $candidate);
+            $remainingIndexes = array_values(array_diff($remainingIndexes, [$geneIndex]));
+        }
+
+        foreach ($neighborhoodIndexes as $geneIndex) {
+            $gene = $working->genes()[$geneIndex];
+
+            if (! $this->isValid($working, $gene, $geneIndex)) {
+                return null;
+            }
+        }
+
+        return $working->signature() === $chromosome->signature()
+            ? null
+            : $working;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function collectBlockingIndexes(
+        Cromossomo $chromosome,
+        Gene $gene,
+        ScheduleData $data,
+        int $sourceGeneIndex
+    ): array {
+        $blockingIndexes = [];
+        $professorIndex = $chromosome->professorPeriodoIndex();
+        $turmaIndex = $chromosome->turmaPeriodoIndex();
+
+        foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            $slot = $data->timeSlots[$slotId] ?? null;
+
+            if ($slot === null) {
+                continue;
+            }
+
+            foreach (range($slot->lessonNumber, $slot->lessonNumber + $gene->duracaoTempos() - 1) as $period) {
+                foreach ($professorIndex[$gene->professorId()][$slot->day][$period] ?? [] as $occupiedGeneIndex) {
+                    if ($occupiedGeneIndex !== $sourceGeneIndex) {
+                        $blockingIndexes[] = (int) $occupiedGeneIndex;
+                    }
+                }
+
+                foreach ($turmaIndex[$gene->turmaId()][$slot->day][$period] ?? [] as $occupiedGeneIndex) {
+                    if ($occupiedGeneIndex !== $sourceGeneIndex) {
+                        $blockingIndexes[] = (int) $occupiedGeneIndex;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($blockingIndexes));
+    }
+
+    /**
+     * @param  int[]  $ignoredIndexes
+     */
+    private function findBestRelocation(
+        Cromossomo $chromosome,
+        Gene $gene,
+        ScheduleData $data,
+        int $sourceGeneIndex,
+        array $ignoredIndexes,
+        bool $allowSamePosition
+    ): ?Gene {
+        $bestCandidate = null;
+        $bestConflictScore = PHP_INT_MAX;
+
+        foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            $slot = $data->timeSlots[$slotId] ?? null;
+
+            if ($slot === null) {
+                continue;
+            }
+
+            if (
+                ! $allowSamePosition
+                && $slot->day === $gene->diaSemana()
+                && $slot->lessonNumber === $gene->periodoDia()
+            ) {
+                continue;
+            }
+
+            $candidate = $gene->withDiaPeriodo($slot->day, $slot->lessonNumber);
+
+            if (! $this->isValid($chromosome, $candidate, $sourceGeneIndex, $ignoredIndexes)) {
+                continue;
+            }
+
+            $conflictScore = $this->sameEntityLoadScore($chromosome, $candidate, $sourceGeneIndex);
+
+            if ($conflictScore < $bestConflictScore) {
+                $bestConflictScore = $conflictScore;
+                $bestCandidate = $candidate;
+            }
+        }
+
+        return $bestCandidate;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function candidateStartSlotsForGene(Gene $gene, ScheduleData $data): array
+    {
+        $profSlots = $data->availableSlotsByProfessor[$gene->professorId()] ?? [];
+        $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
+        $possible = array_values(array_intersect($profSlots, $classSlots));
+
+        return array_values(array_filter(
+            $possible,
+            fn (int $slotId): bool => isset($data->timeSlots[$slotId])
+                && $this->slotSupportsDuration(
+                    $data->timeSlots[$slotId]->lessonNumber,
+                    $gene->duracaoTempos(),
+                    $data
+                )
+        ));
+    }
+
+    /**
+     * @param  int[]  $neighborhoodIndexes
+     * @return int[]
+     */
+    private function orderNeighborhoodForRebuild(Cromossomo $chromosome, ScheduleData $data, array $neighborhoodIndexes): array
+    {
+        $candidates = [];
+
+        foreach ($neighborhoodIndexes as $index) {
+            $gene = $chromosome->genes()[$index];
+            $candidates[$index] = count($this->candidateStartSlotsForGene($gene, $data));
+        }
+
+        usort($neighborhoodIndexes, static fn (int $left, int $right): int => [$candidates[$left], $left] <=> [$candidates[$right], $right]);
+
+        return $neighborhoodIndexes;
+    }
+
+    private function sameEntityLoadScore(Cromossomo $chromosome, Gene $candidate, int $sourceGeneIndex): int
+    {
+        $score = 0;
+        $professorIndex = $chromosome->professorPeriodoIndex();
+        $turmaIndex = $chromosome->turmaPeriodoIndex();
+
+        foreach ($candidate->timeslots() as $period) {
+            $score += count(array_filter(
+                $professorIndex[$candidate->professorId()][$candidate->diaSemana()][$period] ?? [],
+                static fn (int $occupiedIndex): bool => $occupiedIndex !== $sourceGeneIndex
+            ));
+            $score += count(array_filter(
+                $turmaIndex[$candidate->turmaId()][$candidate->diaSemana()][$period] ?? [],
+                static fn (int $occupiedIndex): bool => $occupiedIndex !== $sourceGeneIndex
+            ));
+        }
+
+        return $score;
+    }
+
+    /**
+     * @param  int[]  $ignoredIndexes
+     */
+    private function isValid(Cromossomo $cromossomo, Gene $gene, ?int $sourceGeneIndex = null, array $ignoredIndexes = []): bool
     {
         $professorPeriodoIndex = $cromossomo->professorPeriodoIndex();
         $turmaPeriodoIndex = $cromossomo->turmaPeriodoIndex();
@@ -96,8 +442,8 @@ final class GreedyRepairOperator
             $periodo = $periodoInicial + $offset;
 
             if (
-                $this->hasExternalOccupation($professorPeriodoIndex, $prof, $dia, $periodo, $sourceGeneIndex) ||
-                $this->hasExternalOccupation($turmaPeriodoIndex, $turma, $dia, $periodo, $sourceGeneIndex)
+                $this->hasExternalOccupation($professorPeriodoIndex, $prof, $dia, $periodo, $sourceGeneIndex, $ignoredIndexes) ||
+                $this->hasExternalOccupation($turmaPeriodoIndex, $turma, $dia, $periodo, $sourceGeneIndex, $ignoredIndexes)
             ) {
                 return false;
             }
@@ -106,8 +452,17 @@ final class GreedyRepairOperator
         return true;
     }
 
-    private function hasExternalOccupation(array $indexMap, int $entityId, int $dia, int $periodo, ?int $sourceGeneIndex): bool
-    {
+    /**
+     * @param  int[]  $ignoredIndexes
+     */
+    private function hasExternalOccupation(
+        array $indexMap,
+        int $entityId,
+        int $dia,
+        int $periodo,
+        ?int $sourceGeneIndex,
+        array $ignoredIndexes
+    ): bool {
         if (! isset($indexMap[$entityId][$dia][$periodo])) {
             return false;
         }
@@ -117,10 +472,142 @@ final class GreedyRepairOperator
                 continue;
             }
 
+            if (in_array((int) $occupiedGeneIndex, $ignoredIndexes, true)) {
+                continue;
+            }
+
             return true;
         }
 
         return false;
+    }
+
+    private function canStartGeneAt(Gene $gene, ScheduleData $data): bool
+    {
+        $slotId = $this->findSlotId($gene->diaSemana(), $gene->periodoDia(), $data);
+
+        if ($slotId === null) {
+            return false;
+        }
+
+        $profSlots = $data->availableSlotsByProfessor[$gene->professorId()] ?? [];
+        $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
+
+        return in_array($slotId, $profSlots, true)
+            && in_array($slotId, $classSlots, true)
+            && $this->slotSupportsDuration($gene->periodoDia(), $gene->duracaoTempos(), $data);
+    }
+
+    private function findSlotId(int $day, int $period, ScheduleData $data): ?int
+    {
+        foreach ($data->timeSlots as $slotId => $slot) {
+            if ($slot->day === $day && $slot->lessonNumber === $period) {
+                return (int) $slotId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function initializeTelemetry(Cromossomo $chromosome, ?callable $fitnessProbe): array
+    {
+        $fitness = $this->probeFitness($chromosome, $fitnessProbe);
+        $invalidCount = count($this->prioritizeInvalidGeneIndexes($chromosome));
+
+        return [
+            'passes' => [],
+            'invalid_genes_before' => $invalidCount,
+            'invalid_genes_after' => $invalidCount,
+            'hard_penalty_before' => $fitness['hard_penalty'] ?? null,
+            'hard_penalty_after' => $fitness['hard_penalty'] ?? null,
+            'soft_penalty_before' => $fitness['soft_penalty'] ?? null,
+            'soft_penalty_after' => $fitness['soft_penalty'] ?? null,
+            'score_before' => $fitness['score'] ?? null,
+            'score_after' => $fitness['score'] ?? null,
+            'relocations' => 0,
+            'swaps' => 0,
+            'local_rebuilds' => 0,
+        ];
+    }
+
+    /**
+     * @param  int[]  $invalidIndexes
+     * @return array<string, mixed>
+     */
+    private function startPassTelemetry(int $pass, Cromossomo $chromosome, array $invalidIndexes, ?callable $fitnessProbe): array
+    {
+        $fitness = $this->probeFitness($chromosome, $fitnessProbe);
+
+        return [
+            'pass' => $pass,
+            'invalid_genes_before' => count($invalidIndexes),
+            'invalid_genes_after' => count($invalidIndexes),
+            'hard_penalty_before' => $fitness['hard_penalty'] ?? null,
+            'hard_penalty_after' => $fitness['hard_penalty'] ?? null,
+            'hard_penalty_delta' => 0.0,
+            'relocations' => 0,
+            'swaps' => 0,
+            'local_rebuilds' => 0,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $passTelemetry
+     */
+    private function finishPassTelemetry(array &$passTelemetry, Cromossomo $chromosome, ?callable $fitnessProbe): void
+    {
+        $fitness = $this->probeFitness($chromosome, $fitnessProbe);
+        $passTelemetry['invalid_genes_after'] = count($this->prioritizeInvalidGeneIndexes($chromosome));
+        $passTelemetry['hard_penalty_after'] = $fitness['hard_penalty'] ?? null;
+
+        if (
+            isset($passTelemetry['hard_penalty_before'], $passTelemetry['hard_penalty_after'])
+            && $passTelemetry['hard_penalty_before'] !== null
+            && $passTelemetry['hard_penalty_after'] !== null
+        ) {
+            $passTelemetry['hard_penalty_delta'] = round(
+                (float) $passTelemetry['hard_penalty_before'] - (float) $passTelemetry['hard_penalty_after'],
+                4
+            );
+        }
+    }
+
+    private function finalizeTelemetry(Cromossomo $chromosome, ?callable $fitnessProbe): void
+    {
+        $fitness = $this->probeFitness($chromosome, $fitnessProbe);
+
+        $this->lastTelemetry['invalid_genes_after'] = count($this->prioritizeInvalidGeneIndexes($chromosome));
+        $this->lastTelemetry['hard_penalty_after'] = $fitness['hard_penalty'] ?? null;
+        $this->lastTelemetry['soft_penalty_after'] = $fitness['soft_penalty'] ?? null;
+        $this->lastTelemetry['score_after'] = $fitness['score'] ?? null;
+        $this->lastTelemetry['relocations'] = array_sum(array_column($this->lastTelemetry['passes'], 'relocations'));
+        $this->lastTelemetry['swaps'] = array_sum(array_column($this->lastTelemetry['passes'], 'swaps'));
+        $this->lastTelemetry['local_rebuilds'] = array_sum(array_column($this->lastTelemetry['passes'], 'local_rebuilds'));
+    }
+
+    /**
+     * @return array<string, float|null>
+     */
+    private function probeFitness(Cromossomo $chromosome, ?callable $fitnessProbe): array
+    {
+        if ($fitnessProbe === null) {
+            return [];
+        }
+
+        $fitness = $fitnessProbe($chromosome);
+
+        if (! is_array($fitness)) {
+            return [];
+        }
+
+        return [
+            'hard_penalty' => isset($fitness['hard_penalty']) ? (float) $fitness['hard_penalty'] : null,
+            'soft_penalty' => isset($fitness['soft_penalty']) ? (float) $fitness['soft_penalty'] : null,
+            'score' => isset($fitness['score']) ? (float) $fitness['score'] : null,
+        ];
     }
 
     private function slotSupportsDuration(int $initialPeriod, int $duration, ScheduleData $data): bool

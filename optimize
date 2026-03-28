@@ -9,3 +9,6 @@ php artisan queue:clear
 
 php artisan queue:restart
 
+npm run build
+
+php artisan queue:work --tries=1 --timeout=3600
