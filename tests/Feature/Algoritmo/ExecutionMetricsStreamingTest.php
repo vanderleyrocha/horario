@@ -78,6 +78,17 @@ it('flushes generation metrics immediately and publishes the current metric to c
             ],
             'basin_of_attraction_lock_confidence' => 0.77,
             'basin_of_attraction_lock_detected' => true,
+            'search_response_simulation' => [
+                'policy' => 'basin_lock_escape',
+                'simulated_only' => true,
+                'would_escalate' => true,
+                'target_state' => 'exploration',
+                'mutation_multiplier' => 3.0,
+                'activate_alns' => true,
+                'selection_pressure_multiplier' => 0.65,
+                'diversification_boost' => 0.85,
+                'reason' => 'Persistent basin-of-attraction lock with stable elite signature and low turnover.',
+            ],
         ],
         'operator_used' => 'StructuredSwapMutation',
         'operator_reward' => 0.18,
@@ -118,7 +129,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['elite_similarity'] ?? null)->toBe(0.82)
         ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse()
         ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
-        ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3);
+        ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape');
 
     $storedObservation = json_decode((string) $storedMetric->landscape_observation, true);
 
@@ -126,5 +138,6 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['best_delta_window'] ?? null)->toBe(-0.015)
         ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008)
         ->and($storedObservation['previous_episode']['exit_mode'] ?? null)->toBe('phenomenon_shift')
-        ->and($storedObservation['basin_of_attraction_lock_confidence'] ?? null)->toBe(0.77);
+        ->and($storedObservation['basin_of_attraction_lock_confidence'] ?? null)->toBe(0.77)
+        ->and($storedObservation['search_response_simulation']['activate_alns'] ?? null)->toBeTrue();
 });

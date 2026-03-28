@@ -10,9 +10,15 @@ final class LandscapeEngine
 
     private ?LandscapeState $lastState = null;
 
-    public function __construct(private LandscapeAnalyzer $analyzer, private LandscapeDetector $detector, private LandscapeResponseStrategy $strategy, private LandscapeMemory $memory)
-    {
+    public function __construct(
+        private LandscapeAnalyzer $analyzer,
+        private LandscapeDetector $detector,
+        private LandscapeResponseStrategy $strategy,
+        private LandscapeMemory $memory,
+        private ?SearchResponsePolicy $searchResponsePolicy = null
+    ) {
         $this->heatmapBuilder = new LandscapeHeatmapBuilder;
+        $this->searchResponsePolicy ??= new SearchResponsePolicy;
     }
 
     public function evaluate(LandscapeMetrics $metrics): LandscapeResponse
@@ -133,6 +139,16 @@ final class LandscapeEngine
             previousEpisode: $this->memory->lastCompletedEpisode()?->toArray(),
             basinLockConfidence: $this->lastObservation->basinLockConfidence,
             basinLockDetected: $this->lastObservation->basinLockDetected
+        );
+
+        $simulation = $this->searchResponsePolicy?->simulate(
+            observation: $this->lastObservation,
+            episode: $currentEpisode,
+            currentState: $state
+        );
+
+        $this->lastObservation = $this->lastObservation->withSearchResponseSimulation(
+            $simulation?->toArray()
         );
 
         return $state;

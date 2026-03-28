@@ -112,7 +112,10 @@ it('observes a deep valley after persistent plateau and convergence pressure', f
         ->and($observation->previousEpisode)->toBeArray()
         ->and($observation->previousEpisode['phenomenon'] ?? null)->toBe('local_minimum')
         ->and($observation->previousEpisode['exit_mode'] ?? null)->toBe('phenomenon_shift')
-        ->and($observation->basinLockConfidence)->toBeGreaterThanOrEqual(0.75);
+        ->and($observation->basinLockConfidence)->toBeGreaterThanOrEqual(0.75)
+        ->and($observation->searchResponseSimulation)->toBeArray()
+        ->and($observation->searchResponseSimulation['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeTrue();
 });
 
 it('closes the previous episode with recovered exit mode when the landscape returns to neutral', function (): void {
@@ -175,5 +178,8 @@ it('closes the previous episode with recovered exit mode when the landscape retu
         ->and($observation->previousEpisode)->toBeArray()
         ->and($observation->previousEpisode['phenomenon'] ?? null)->toBe('local_minimum')
         ->and($observation->previousEpisode['exit_mode'] ?? null)->toBe('recovered')
-        ->and($observation->currentEpisode['duration'] ?? null)->toBe(1);
+        ->and($observation->currentEpisode['duration'] ?? null)->toBe(1)
+        ->and($observation->searchResponseSimulation)->toBeArray()
+        ->and($observation->searchResponseSimulation['policy'] ?? null)->toBe('stability_hold')
+        ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeFalse();
 });

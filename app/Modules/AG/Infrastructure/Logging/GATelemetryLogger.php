@@ -82,6 +82,14 @@ final class GATelemetryLogger
             'landscape_basin_lock_detected' => isset($metrics['landscape_observation']['basin_of_attraction_lock_detected'])
                 ? (bool) $metrics['landscape_observation']['basin_of_attraction_lock_detected']
                 : null,
+            'search_response_policy' => $metrics['landscape_observation']['search_response_simulation']['policy'] ?? null,
+            'search_response_would_escalate' => isset($metrics['landscape_observation']['search_response_simulation']['would_escalate'])
+                ? (bool) $metrics['landscape_observation']['search_response_simulation']['would_escalate']
+                : null,
+            'search_response_target_state' => $metrics['landscape_observation']['search_response_simulation']['target_state'] ?? null,
+            'search_response_activate_alns' => isset($metrics['landscape_observation']['search_response_simulation']['activate_alns'])
+                ? (bool) $metrics['landscape_observation']['search_response_simulation']['activate_alns']
+                : null,
             'recorded_at' => now()->toIso8601String(),
         ]);
     }

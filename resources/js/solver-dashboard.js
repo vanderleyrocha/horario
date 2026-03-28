@@ -342,11 +342,13 @@ function updateLandscapeObservation(phenomenon, observation) {
     const basinLockConfidence = Number(normalizedObservation.basin_of_attraction_lock_confidence ?? 0)
     const basinLockDetected = Boolean(normalizedObservation.basin_of_attraction_lock_detected ?? false)
     const episodeDuration = Number(normalizedObservation.current_episode?.duration ?? 0)
+    const searchResponsePolicy = String(normalizedObservation.search_response_simulation?.policy ?? "")
+    const searchResponseWouldEscalate = Boolean(normalizedObservation.search_response_simulation?.would_escalate ?? false)
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)} | turnover ${(populationTurnover * 100).toFixed(0)}% | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)} | turnover ${(populationTurnover * 100).toFixed(0)}% | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateAllCharts() {
