@@ -44,16 +44,26 @@
                 <p class="text-lg font-bold">{{ number_format((float) ($executionInfo['bestFitness'] ?? 0), 4) }}</p>
             </div>
 
-            <div class="bg-white shadow rounded p-4">
+            <div class="bg-white shadow rounded p-4" data-dashboard-last-heartbeat-card>
                 <p class="text-sm text-gray-500">Ultimo heartbeat</p>
                 <p class="text-lg font-bold" data-dashboard-last-heartbeat>Sem heartbeat ainda</p>
                 <p class="mt-1 text-xs text-slate-500" data-dashboard-heartbeat-status>Aguardando primeiro sinal</p>
             </div>
 
-            <div class="bg-white shadow rounded p-4">
+            <div class="bg-white shadow rounded p-4" data-dashboard-heartbeat-delay-card>
                 <p class="text-sm text-gray-500">Atraso atual</p>
                 <p class="text-lg font-bold" data-dashboard-heartbeat-delay>--</p>
                 <p class="mt-1 text-xs text-slate-500" data-dashboard-heartbeat-note>O contador atualiza sozinho entre os heartbeats.</p>
+                <div class="mt-3 hidden" data-dashboard-log-link-wrapper>
+                    <a
+                        href="{{ route('algoritmo.execution.logs', ['execution' => $execution->id]) }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center rounded-md border border-current/20 px-3 py-1 text-xs font-semibold transition hover:opacity-80"
+                        data-dashboard-log-link>
+                        Abrir logs desta execucao
+                    </a>
+                </div>
             </div>
 
         </div>

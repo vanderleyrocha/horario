@@ -2,14 +2,15 @@
 
 // routes/web.php
 
+use App\Http\Controllers\ExecutionLogViewerController;
 use App\Http\Controllers\TesteController;
+use App\Livewire\Aulas;
 use App\Livewire\Auth\Login;
+use App\Livewire\Auth\UserManager;
 use App\Livewire\Dashboard;
+use App\Livewire\Disciplinas;
 use App\Livewire\Professores;
 use App\Livewire\Turmas;
-use App\Livewire\Disciplinas;
-use App\Livewire\Aulas;
-use App\Livewire\Auth\UserManager;
 use App\Models\Horario;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,7 @@ Route::get('/home', function () {
 
     /** @var \Illuminate\Contracts\Auth\Guard $auth */
     $auth = auth();
+
     return $auth->check()
         ? redirect()->route('dashboard')
         : redirect()->route('login');
@@ -48,14 +50,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/disciplinas/criar', Disciplinas\Create::class)->name('disciplinas.create');
     Route::get('/disciplinas/{disciplina}/editar', Disciplinas\Edit::class)->name('disciplinas.edit');
 
-
     // SOLVER
 
     Route::get('/algoritmo/{horario}', \App\Livewire\Algoritmo\ExecutionCenter::class)->name('algoritmo.center');
     Route::get('/algoritmo/index/{horario}', fn (Horario $horario) => redirect()->route('algoritmo.center', $horario))->name('algoritmo.index');
 
-
     Route::get('/algoritmo/execution/{execution}', \App\Livewire\Algoritmo\ExecutionDashboard::class)->name('algoritmo.execution');
+    Route::get('/algoritmo/execution/{execution}/logs', ExecutionLogViewerController::class)->name('algoritmo.execution.logs');
 
     Route::get('/algoritmo/execution/{execution}/stream', \App\Livewire\Algoritmo\ExecutionMetricsStream::class)->name('algoritmo.stream');
 
@@ -112,4 +113,4 @@ Route::middleware('auth')->group(function () {
     Route::get('/teste/alocacoes', [TesteController::class, 'alocacoes'])->name('teste.alocacoes');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';

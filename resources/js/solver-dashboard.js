@@ -194,6 +194,25 @@ const LANDSCAPE_PHENOMENON_LABELS = {
     deep_valley: "Vale profundo",
 }
 
+Object.assign(LANDSCAPE_STATE_SCALE, {
+    exploitation: 2,
+    "exploracao_controlada": 2,
+    "exploracao controlada": 2,
+    plateau: 3,
+    premature_convergence: 4,
+    convergencia_prematura: 4,
+    chaotic: 5,
+    caotico: 5,
+})
+
+Object.assign(LANDSCAPE_LABELS, {
+    1: "Exploracao",
+    2: "Exploitation",
+    3: "Plateau",
+    4: "Convergencia prematura",
+    5: "Caotico",
+})
+
 function normalizeLandscapeState(state) {
     if (typeof state !== "string" || state.trim() === "") {
         return 0
@@ -328,8 +347,11 @@ function renderDashboardHeartbeatMonitor() {
     const delayElement = root.querySelector("[data-dashboard-heartbeat-delay]")
     const statusElement = root.querySelector("[data-dashboard-heartbeat-status]")
     const noteElement = root.querySelector("[data-dashboard-heartbeat-note]")
+    const lastHeartbeatCard = root.querySelector("[data-dashboard-last-heartbeat-card]")
+    const delayCard = root.querySelector("[data-dashboard-heartbeat-delay-card]")
+    const logLinkWrapper = root.querySelector("[data-dashboard-log-link-wrapper]")
 
-    if (!lastHeartbeatElement || !delayElement || !statusElement || !noteElement) {
+    if (!lastHeartbeatElement || !delayElement || !statusElement || !noteElement || !lastHeartbeatCard || !delayCard || !logLinkWrapper) {
         return
     }
 
@@ -338,6 +360,7 @@ function renderDashboardHeartbeatMonitor() {
         delayElement.textContent = "--"
         statusElement.textContent = "Aguardando primeiro sinal"
         noteElement.textContent = "O contador atualiza sozinho entre os heartbeats."
+        applyHeartbeatCardSeverity(lastHeartbeatCard, delayCard, logLinkWrapper, "idle")
         return
     }
 
@@ -352,6 +375,67 @@ function renderDashboardHeartbeatMonitor() {
     delayElement.textContent = formatElapsedSeconds(ageSeconds)
     statusElement.textContent = severity.status
     noteElement.textContent = severity.note
+    applyHeartbeatCardSeverity(lastHeartbeatCard, delayCard, logLinkWrapper, severity.status)
+}
+
+function applyHeartbeatCardSeverity(lastHeartbeatCard, delayCard, logLinkWrapper, status) {
+    const paletteByStatus = {
+        idle: {
+            card: ["border-slate-200", "bg-white", "text-slate-900"],
+            note: ["text-slate-500"],
+            showLogs: false,
+        },
+        saudavel: {
+            card: ["border-emerald-200", "bg-emerald-50", "text-emerald-900"],
+            note: ["text-emerald-700"],
+            showLogs: false,
+        },
+        monitorando: {
+            card: ["border-sky-200", "bg-sky-50", "text-sky-900"],
+            note: ["text-sky-700"],
+            showLogs: false,
+        },
+        atencao: {
+            card: ["border-amber-200", "bg-amber-50", "text-amber-900"],
+            note: ["text-amber-700"],
+            showLogs: true,
+        },
+        "possivel estagnacao operacional": {
+            card: ["border-rose-200", "bg-rose-50", "text-rose-900"],
+            note: ["text-rose-700"],
+            showLogs: true,
+        },
+    }
+
+    const palette = paletteByStatus[status] ?? paletteByStatus.idle
+    const resetCardClasses = [
+        "border-slate-200", "bg-white", "text-slate-900",
+        "border-emerald-200", "bg-emerald-50", "text-emerald-900",
+        "border-sky-200", "bg-sky-50", "text-sky-900",
+        "border-amber-200", "bg-amber-50", "text-amber-900",
+        "border-rose-200", "bg-rose-50", "text-rose-900",
+    ]
+    const resetNoteClasses = [
+        "text-slate-500",
+        "text-emerald-700",
+        "text-sky-700",
+        "text-amber-700",
+        "text-rose-700",
+    ]
+
+    for (const element of [lastHeartbeatCard, delayCard]) {
+        element.classList.remove(...resetCardClasses)
+        element.classList.add(...palette.card)
+    }
+
+    const noteTarget = delayCard.querySelector("[data-dashboard-heartbeat-note]")
+
+    if (noteTarget) {
+        noteTarget.classList.remove(...resetNoteClasses)
+        noteTarget.classList.add(...palette.note)
+    }
+
+    logLinkWrapper.classList.toggle("hidden", !palette.showLogs)
 }
 
 function updateDashboardHeartbeatMonitor(metric) {
