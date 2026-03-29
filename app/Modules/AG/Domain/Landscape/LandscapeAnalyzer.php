@@ -99,6 +99,8 @@ final class LandscapeAnalyzer
             entropy: round($metrics->entropy, 6),
             currentEpisode: $episode->toArray(),
             previousEpisode: $memory->lastCompletedEpisode()?->toArray(),
+            recentEpisodeHistory: $memory->recentCompletedEpisodes(),
+            episodeTrend: null,
             basinLockConfidence: round($basinLockConfidence, 6),
             basinLockDetected: $basinLockConfidence >= 0.75
         );

@@ -21,6 +21,7 @@ use App\Modules\AG\Domain\Operators\Elitism\ElitismStrategyInterface;
 use App\Modules\AG\Domain\Operators\Mutation\Interfaces\DiversityAwareMutationInterface;
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
+use App\Modules\AG\Domain\Operators\Selection\AdaptiveSelectionPressureInterface;
 use App\Modules\AG\Domain\Operators\Selection\SelectionOperatorInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
@@ -32,6 +33,12 @@ final class GeneticAlgorithmEngine
 {
     private const INITIAL_POPULATION_LOG_SAMPLE_SIZE = 3;
 
+    private const OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS = 30;
+
+    private const LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS = 300;
+
+    private const CANCELLATION_CHECK_INTERVAL_SECONDS = 2;
+
     private array $mutationPool;
 
     private array $lastEvolutionTelemetry = [];
@@ -40,9 +47,34 @@ final class GeneticAlgorithmEngine
 
     private ?int $lastAlnsGeneration = null;
 
+    private ?int $lastMutationShockGeneration = null;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $activeMutationShock = null;
+
+    private float $currentSelectionPressureMultiplier = 1.0;
+
+    private ?int $lastSelectionPressureReductionGeneration = null;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $activeSelectionPressureReduction = null;
+
+    private ?float $lastOperationalHeartbeatAt = null;
+
+    private ?float $lastLongRunningOperationLogAt = null;
+
+    private ?float $lastCancellationCheckAt = null;
+
+    private ?string $lastKnownExecutionStatus = null;
+
     public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
     {
         $this->mutationPool = [$this->mutation];
+        $this->applySelectionPressureMultiplier(1.0);
     }
 
     public function run(int $populationSize): Cromossomo
@@ -181,6 +213,7 @@ final class GeneticAlgorithmEngine
         $observationPayload = null;
         $landscapeState = null;
         $activateDynamicLns = false;
+        $selectionPressureTelemetry = $this->selectionPressureTelemetry();
 
         if ($this->landscapeEngine !== null) {
             $localMetrics = $this->metrics->recordExtended(
@@ -190,7 +223,7 @@ final class GeneticAlgorithmEngine
                 stagnation: $stagnation
             );
 
-            $observation = $this->landscapeEngine->observe(new LandscapeMetrics(
+            $response = $this->landscapeEngine->evaluate(new LandscapeMetrics(
                 generation: $currentGeneration,
                 bestFitness: $localMetrics->bestFitness,
                 avgFitness: $localMetrics->avgFitness,
@@ -206,12 +239,21 @@ final class GeneticAlgorithmEngine
                 bestSignature: $generationStep['best_signature']
             ));
 
-            $landscapeState = $this->landscapeEngine->state()?->value;
-            $activateDynamicLns = in_array($landscapeState, ['plateau', 'premature_convergence'], true);
+            $landscapeState = $response->state->value;
+            $activateDynamicLns = $response->activateALNS;
             $telemetry['landscape_state'] = $landscapeState;
-            $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
-            $observationPayload = $observation->toArray();
-            $telemetry['landscape_observation'] = $observationPayload;
+            $selectionPressureTelemetry = $this->applySelectionPressureMultiplier(
+                $response->selectionPressureMultiplier,
+                'landscape_response',
+                $landscapeState
+            );
+            $telemetry += $selectionPressureTelemetry;
+
+            if ($observation = $this->landscapeEngine->observation()) {
+                $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
+                $observationPayload = $observation->toArray();
+                $telemetry['landscape_observation'] = $observationPayload;
+            }
         }
 
         $alnsTrigger = $this->buildAlnsTriggerTelemetry(
@@ -221,14 +263,59 @@ final class GeneticAlgorithmEngine
             activateDynamicLns: $activateDynamicLns
         );
         $telemetry += $alnsTrigger;
+        $mutationShockActivation = $this->resolveRealMutationShockActivation(
+            generation: $currentGeneration,
+            landscapeObservation: $observationPayload,
+            eligible: true
+        );
+        $telemetry += $mutationShockActivation;
+        $selectionPressureActivation = $this->resolveRealSelectionPressureReductionActivation(
+            generation: $currentGeneration,
+            landscapeObservation: $observationPayload,
+            eligible: true
+        );
+        $telemetry += $selectionPressureActivation;
 
         if ($observationPayload !== null) {
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $generationStep
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $generationStep
+                ),
             ];
         } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
             $telemetry['landscape_observation'] = [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $generationStep
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $generationStep
+                ),
+            ];
+        } elseif (
+            ($mutationShockActivation['mutation_shock_trigger_eligible'] ?? false) === true
+            || ($selectionPressureActivation['selection_pressure_trigger_eligible'] ?? false) === true
+        ) {
+            $telemetry['landscape_observation'] = [
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $generationStep
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $generationStep
+                ),
             ];
         }
 
@@ -263,6 +350,8 @@ final class GeneticAlgorithmEngine
             'population_turnover' => $generationStep['population_turnover'],
             'best_signature_changed' => $generationStep['best_signature_changed'],
             'elite_similarity' => $generationStep['elite_similarity'],
+            'selection_pressure_effective_multiplier' => $generationStep['selection_pressure_effective_multiplier'] ?? null,
+            'selection_pressure_effective_tournament_size' => $generationStep['selection_pressure_effective_tournament_size'] ?? null,
         ] + $telemetry;
 
         $this->evolutionGeneration++;
@@ -334,6 +423,7 @@ final class GeneticAlgorithmEngine
         $activateDynamicLNS = false;
         $telemetry = [];
         $observationPayload = null;
+        $selectionPressureTelemetry = $this->selectionPressureTelemetry();
 
         if ($this->landscapeEngine !== null) {
             $landscapeMetrics = new LandscapeMetrics(
@@ -363,6 +453,12 @@ final class GeneticAlgorithmEngine
             $mutationRate *= $response->mutationMultiplier;
             $mutationRate = max(0.001, min($mutationRate, 0.9));
             $activateDynamicLNS = $response->activateALNS;
+            $selectionPressureTelemetry = $this->applySelectionPressureMultiplier(
+                $response->selectionPressureMultiplier,
+                'landscape_response',
+                $landscapeState
+            );
+            $telemetry += $selectionPressureTelemetry;
 
             if ($observation = $this->landscapeEngine->observation()) {
                 $telemetry['landscape_phenomenon'] = $observation->phenomenon->value;
@@ -378,14 +474,59 @@ final class GeneticAlgorithmEngine
             activateDynamicLns: $activateDynamicLNS
         );
         $telemetry += $alnsTrigger;
+        $mutationShockActivation = $this->resolveRealMutationShockActivation(
+            generation: $generation,
+            landscapeObservation: $observationPayload,
+            eligible: true
+        );
+        $telemetry += $mutationShockActivation;
+        $selectionPressureActivation = $this->resolveRealSelectionPressureReductionActivation(
+            generation: $generation,
+            landscapeObservation: $observationPayload,
+            eligible: true
+        );
+        $telemetry += $selectionPressureActivation;
 
         if ($observationPayload !== null) {
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $populationTrajectory
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $populationTrajectory
+                ),
             ];
         } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
             $telemetry['landscape_observation'] = [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $populationTrajectory
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $populationTrajectory
+                ),
+            ];
+        } elseif (
+            ($mutationShockActivation['mutation_shock_trigger_eligible'] ?? false) === true
+            || ($selectionPressureActivation['selection_pressure_trigger_eligible'] ?? false) === true
+        ) {
+            $telemetry['landscape_observation'] = [
+                'mutation_shock' => $this->mutationShockObservationPayload(
+                    $mutationShockActivation,
+                    $populationTrajectory
+                ),
+                'selection_pressure' => $this->selectionPressureObservationPayload(
+                    $selectionPressureTelemetry,
+                    $selectionPressureActivation,
+                    $populationTrajectory
+                ),
             ];
         }
 
@@ -794,6 +935,227 @@ final class GeneticAlgorithmEngine
     }
 
     /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     * @return array<string, mixed>
+     */
+    private function resolveRealMutationShockActivation(
+        int $generation,
+        ?array $landscapeObservation,
+        bool $eligible
+    ): array {
+        $enabled = (bool) config('ag.search_response_activation.enable_temporary_mutation_shock', false);
+        $cooldown = max(1, (int) config('ag.search_response_activation.temporary_mutation_shock_cooldown', 2));
+        $duration = max(1, (int) config('ag.search_response_activation.temporary_mutation_shock_duration', 2));
+        $requested = false;
+        $applied = false;
+        $policy = null;
+        $mode = 'diagnostic_only';
+        $multiplier = 1.0;
+        $reason = $enabled
+            ? 'Activation gate did not request a temporary mutation shock for the current observation.'
+            : 'Temporary mutation shock is disabled by configuration.';
+
+        if (! is_array($landscapeObservation)) {
+            return [
+                'mutation_shock_trigger_eligible' => $enabled,
+                'mutation_shock_enabled' => $enabled,
+                'mutation_shock_requested' => false,
+                'mutation_shock_applied' => false,
+                'mutation_shock_policy' => null,
+                'mutation_shock_mode' => $mode,
+                'mutation_shock_cooldown_generations' => $cooldown,
+                'mutation_shock_duration_generations' => $duration,
+                'mutation_shock_multiplier' => $multiplier,
+                'mutation_shock_reason' => $reason,
+            ];
+        }
+
+        $activationGate = is_array($landscapeObservation['search_response_activation_gate'] ?? null)
+            ? $landscapeObservation['search_response_activation_gate']
+            : [];
+        $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
+            ? $landscapeObservation['search_response_simulation']
+            : [];
+        $policy = $activationGate['candidate_policy'] ?? null;
+        $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
+        $multiplier = max(1.0, (float) ($simulation['mutation_multiplier'] ?? 1.0));
+        $simulationRequestsShock = (bool) ($simulation['would_escalate'] ?? false) && $multiplier > 1.0;
+
+        $requested = $enabled
+            && (bool) ($activationGate['eligible_as_candidate'] ?? false)
+            && $policyAligned
+            && $simulationRequestsShock;
+
+        if (! $requested) {
+            if (! $enabled) {
+                $reason = 'Temporary mutation shock is disabled by configuration.';
+            } elseif (! (bool) ($activationGate['eligible_as_candidate'] ?? false)) {
+                $reason = 'Activation gate has not approved a real candidate policy yet.';
+            } elseif (! $policyAligned) {
+                $reason = 'Current simulated policy does not match the activation gate candidate.';
+            } else {
+                $reason = 'Current simulated response does not request a mutation shock.';
+            }
+
+            return [
+                'mutation_shock_trigger_eligible' => $enabled,
+                'mutation_shock_enabled' => $enabled,
+                'mutation_shock_requested' => false,
+                'mutation_shock_applied' => false,
+                'mutation_shock_policy' => $policy,
+                'mutation_shock_mode' => $activationGate['mode'] ?? $mode,
+                'mutation_shock_cooldown_generations' => $cooldown,
+                'mutation_shock_duration_generations' => $duration,
+                'mutation_shock_multiplier' => $multiplier,
+                'mutation_shock_reason' => $reason,
+            ];
+        }
+
+        $generationsSinceLastShock = $this->lastMutationShockGeneration === null
+            ? null
+            : $generation - $this->lastMutationShockGeneration;
+        $cooldownSatisfied = $generationsSinceLastShock === null || $generationsSinceLastShock >= $cooldown;
+        $applied = $eligible && $cooldownSatisfied;
+        $mode = 'opt_in';
+        $reason = $applied
+            ? 'Temporary mutation shock armed via SearchResponseActivationGate.'
+            : 'Temporary mutation shock is waiting for its short cooldown window.';
+
+        if ($applied) {
+            $this->activeMutationShock = [
+                'policy' => $policy,
+                'multiplier' => $multiplier,
+                'remaining_generations' => $duration,
+                'duration_generations' => $duration,
+                'activated_generation' => $generation,
+                'reason' => $reason,
+            ];
+            $this->lastMutationShockGeneration = $generation;
+
+            Log::info('ga.mutation_shock.armed', [
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'generation' => $generation,
+                'policy' => $policy,
+                'multiplier' => round($multiplier, 6),
+                'duration_generations' => $duration,
+                'cooldown_generations' => $cooldown,
+            ]);
+        }
+
+        return [
+            'mutation_shock_trigger_eligible' => $enabled,
+            'mutation_shock_enabled' => $enabled,
+            'mutation_shock_requested' => $requested,
+            'mutation_shock_applied' => $applied,
+            'mutation_shock_policy' => $policy,
+            'mutation_shock_mode' => $mode,
+            'mutation_shock_cooldown_generations' => $cooldown,
+            'mutation_shock_duration_generations' => $duration,
+            'mutation_shock_multiplier' => $multiplier,
+            'mutation_shock_effective_from_generation' => $applied ? $generation + 1 : null,
+            'mutation_shock_reason' => $reason,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $mutationShockActivation
+     * @param  array<string, mixed>  $populationTrajectory
+     * @return array<string, mixed>
+     */
+    private function mutationShockObservationPayload(
+        array $mutationShockActivation,
+        array $populationTrajectory = []
+    ): array {
+        return [
+            'enabled' => $mutationShockActivation['mutation_shock_enabled'] ?? false,
+            'requested' => $mutationShockActivation['mutation_shock_requested'] ?? false,
+            'applied' => $mutationShockActivation['mutation_shock_applied'] ?? false,
+            'policy' => $mutationShockActivation['mutation_shock_policy'] ?? null,
+            'mode' => $mutationShockActivation['mutation_shock_mode'] ?? 'diagnostic_only',
+            'cooldown_generations' => $mutationShockActivation['mutation_shock_cooldown_generations'] ?? null,
+            'duration_generations' => $mutationShockActivation['mutation_shock_duration_generations'] ?? null,
+            'multiplier' => isset($mutationShockActivation['mutation_shock_multiplier'])
+                ? round((float) $mutationShockActivation['mutation_shock_multiplier'], 6)
+                : null,
+            'effective_from_generation' => $mutationShockActivation['mutation_shock_effective_from_generation'] ?? null,
+            'reason' => $mutationShockActivation['mutation_shock_reason'] ?? null,
+            'active' => $populationTrajectory['mutation_shock_active'] ?? false,
+            'active_multiplier' => isset($populationTrajectory['mutation_shock_multiplier'])
+                ? round((float) $populationTrajectory['mutation_shock_multiplier'], 6)
+                : null,
+            'remaining_generations_before' => $populationTrajectory['mutation_shock_remaining_generations_before'] ?? null,
+            'remaining_generations_after' => $populationTrajectory['mutation_shock_remaining_generations_after'] ?? null,
+            'activated_generation' => $populationTrajectory['mutation_shock_activated_generation'] ?? null,
+            'base_rate' => isset($populationTrajectory['mutation_rate_base'])
+                ? round((float) $populationTrajectory['mutation_rate_base'], 6)
+                : null,
+            'effective_rate' => isset($populationTrajectory['mutation_rate_effective'])
+                ? round((float) $populationTrajectory['mutation_rate_effective'], 6)
+                : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $selectionPressureTelemetry
+     * @param  array<string, mixed>  $selectionPressureActivation
+     * @param  array<string, mixed>  $populationTrajectory
+     * @return array<string, mixed>
+     */
+    private function selectionPressureObservationPayload(
+        array $selectionPressureTelemetry,
+        array $selectionPressureActivation,
+        array $populationTrajectory = []
+    ): array {
+        return [
+            'supported' => $selectionPressureTelemetry['selection_pressure_supported'] ?? false,
+            'source' => $populationTrajectory['selection_pressure_source']
+                ?? $selectionPressureTelemetry['selection_pressure_source']
+                ?? 'landscape_response',
+            'landscape_state' => $selectionPressureTelemetry['selection_pressure_landscape_state'] ?? null,
+            'base_multiplier' => isset($populationTrajectory['selection_pressure_base_multiplier'])
+                ? round((float) $populationTrajectory['selection_pressure_base_multiplier'], 6)
+                : (isset($selectionPressureTelemetry['selection_pressure_multiplier'])
+                    ? round((float) $selectionPressureTelemetry['selection_pressure_multiplier'], 6)
+                    : null),
+            'effective_multiplier' => isset($populationTrajectory['selection_pressure_effective_multiplier'])
+                ? round((float) $populationTrajectory['selection_pressure_effective_multiplier'], 6)
+                : (isset($selectionPressureTelemetry['selection_pressure_multiplier'])
+                    ? round((float) $selectionPressureTelemetry['selection_pressure_multiplier'], 6)
+                    : null),
+            'state' => $populationTrajectory['selection_pressure_state']
+                ?? $selectionPressureTelemetry['selection_pressure_state']
+                ?? 'nominal',
+            'base_tournament_size' => $selectionPressureTelemetry['selection_pressure_base_tournament_size'] ?? null,
+            'effective_tournament_size' => $populationTrajectory['selection_pressure_effective_tournament_size']
+                ?? $selectionPressureTelemetry['selection_pressure_effective_tournament_size']
+                ?? null,
+            'real_reduction' => [
+                'enabled' => $selectionPressureActivation['selection_pressure_real_enabled'] ?? false,
+                'requested' => $selectionPressureActivation['selection_pressure_real_requested'] ?? false,
+                'applied' => $selectionPressureActivation['selection_pressure_real_applied'] ?? false,
+                'policy' => $selectionPressureActivation['selection_pressure_real_policy'] ?? null,
+                'mode' => $selectionPressureActivation['selection_pressure_real_mode'] ?? 'diagnostic_only',
+                'cooldown_generations' => $selectionPressureActivation['selection_pressure_real_cooldown_generations'] ?? null,
+                'duration_generations' => $selectionPressureActivation['selection_pressure_real_duration_generations'] ?? null,
+                'multiplier' => isset($selectionPressureActivation['selection_pressure_real_multiplier'])
+                    ? round((float) $selectionPressureActivation['selection_pressure_real_multiplier'], 6)
+                    : null,
+                'effective_from_generation' => $selectionPressureActivation['selection_pressure_real_effective_from_generation'] ?? null,
+                'reason' => $selectionPressureActivation['selection_pressure_real_reason'] ?? null,
+            ],
+            'reduction_active' => $populationTrajectory['selection_pressure_reduction_active'] ?? false,
+            'reduction_multiplier' => isset($populationTrajectory['selection_pressure_reduction_multiplier'])
+                ? round((float) $populationTrajectory['selection_pressure_reduction_multiplier'], 6)
+                : null,
+            'reduction_policy' => $populationTrajectory['selection_pressure_reduction_policy'] ?? null,
+            'reduction_reason' => $populationTrajectory['selection_pressure_reduction_reason'] ?? null,
+            'reduction_activated_generation' => $populationTrajectory['selection_pressure_reduction_activated_generation'] ?? null,
+            'remaining_generations_before' => $populationTrajectory['selection_pressure_reduction_remaining_generations_before'] ?? null,
+            'remaining_generations_after' => $populationTrajectory['selection_pressure_reduction_remaining_generations_after'] ?? null,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $landscapeObservation
      * @param  array<string, mixed>  $alnsTrigger
      * @param  array<string, mixed>  $alnsTelemetry
@@ -865,9 +1227,17 @@ final class GeneticAlgorithmEngine
      */
     private function executeGenerationStep(array $population, int $populationSize): array
     {
+        $generation = $this->evolutionGeneration;
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
-        $mutationRate = $this->adaptiveMutation->computeRate($entropy);
+        $baseMutationRate = $this->adaptiveMutation->computeRate($entropy);
+        $mutationShock = $this->consumeActiveMutationShock($baseMutationRate, $generation);
+        $mutationRate = $mutationShock['mutation_rate'];
+        $selectionPressure = $this->consumeActiveSelectionPressureReduction(
+            $this->currentSelectionPressureMultiplier,
+            $generation
+        );
+        $generationStartedAt = microtime(true);
 
         if ($this->mutation instanceof DiversityAwareMutationInterface) {
             $this->mutation->setDiversity($diversity);
@@ -880,6 +1250,23 @@ final class GeneticAlgorithmEngine
         foreach ($this->elitism->selectElites($population) as $elite) {
             $newPopulation[] = $elite;
         }
+
+        $this->reportOperationalHeartbeat(
+            generation: $generation,
+            stage: 'generation_started',
+            operation: 'Preparando nova geracao',
+            operationStartedAt: $generationStartedAt,
+            context: [
+                'population_target' => $populationSize,
+                'offspring_built' => count($newPopulation),
+                'mutation_rate' => $mutationRate,
+                'mutation_rate_base' => $baseMutationRate,
+                'mutation_shock_active' => $mutationShock['telemetry']['mutation_shock_active'] ?? false,
+                'selection_pressure_multiplier' => $selectionPressure['telemetry']['selection_pressure_effective_multiplier'] ?? 1.0,
+                'selection_tournament_size' => $selectionPressure['telemetry']['selection_pressure_effective_tournament_size'] ?? null,
+            ],
+            force: true
+        );
 
         while (count($newPopulation) < $populationSize) {
             $this->assertNotCancelled();
@@ -911,8 +1298,37 @@ final class GeneticAlgorithmEngine
             if (count($newPopulation) < $populationSize) {
                 $newPopulation[] = $childB;
             }
+
+            $this->reportOperationalHeartbeat(
+                generation: $generation,
+                stage: 'building_offspring',
+                operation: 'Montando descendentes da geracao',
+                operationStartedAt: $generationStartedAt,
+                context: [
+                    'population_target' => $populationSize,
+                    'offspring_built' => count($newPopulation),
+                    'last_operator_used' => $operatorUsed ?? 'none',
+                    'mutation_rate' => $mutationRate,
+                    'mutation_rate_base' => $baseMutationRate,
+                    'mutation_shock_active' => $mutationShock['telemetry']['mutation_shock_active'] ?? false,
+                    'selection_pressure_multiplier' => $selectionPressure['telemetry']['selection_pressure_effective_multiplier'] ?? 1.0,
+                    'selection_tournament_size' => $selectionPressure['telemetry']['selection_pressure_effective_tournament_size'] ?? null,
+                ]
+            );
         }
 
+        $evaluationStartedAt = microtime(true);
+        $this->reportOperationalHeartbeat(
+            generation: $generation,
+            stage: 'evaluating_population',
+            operation: 'Avaliando a nova populacao da geracao',
+            operationStartedAt: $evaluationStartedAt,
+            context: [
+                'population_target' => $populationSize,
+                'offspring_built' => count($newPopulation),
+            ],
+            force: true
+        );
         $this->populationEvaluator->evaluate($newPopulation);
         $trajectorySignals = $this->calculateTrajectorySignals(
             previousPopulation: $population,
@@ -927,7 +1343,275 @@ final class GeneticAlgorithmEngine
             'operator_reward' => $this->summarizeOperatorReward($allRewards),
             'diversity' => $diversity,
             'entropy' => $entropy,
-        ] + $trajectorySignals;
+        ] + $trajectorySignals + $mutationShock['telemetry'] + $selectionPressure['telemetry'];
+    }
+
+    /**
+     * @return array{mutation_rate: float, telemetry: array<string, mixed>}
+     */
+    private function consumeActiveMutationShock(float $baseMutationRate, int $generation): array
+    {
+        if (
+            ! is_array($this->activeMutationShock)
+            || ((int) ($this->activeMutationShock['remaining_generations'] ?? 0)) <= 0
+        ) {
+            return [
+                'mutation_rate' => $baseMutationRate,
+                'telemetry' => [
+                    'mutation_rate_base' => $baseMutationRate,
+                    'mutation_shock_active' => false,
+                ],
+            ];
+        }
+
+        $shock = $this->activeMutationShock;
+        $multiplier = max(1.0, (float) ($shock['multiplier'] ?? 1.0));
+        $remainingBefore = max(0, (int) ($shock['remaining_generations'] ?? 0));
+        $effectiveMutationRate = max(0.001, min($baseMutationRate * $multiplier, 0.9));
+
+        $shock['remaining_generations'] = max(0, $remainingBefore - 1);
+        $remainingAfter = (int) $shock['remaining_generations'];
+        $this->activeMutationShock = $remainingAfter > 0 ? $shock : null;
+
+        return [
+            'mutation_rate' => $effectiveMutationRate,
+            'telemetry' => [
+                'mutation_rate_base' => $baseMutationRate,
+                'mutation_rate_effective' => $effectiveMutationRate,
+                'mutation_shock_active' => true,
+                'mutation_shock_multiplier' => $multiplier,
+                'mutation_shock_policy' => $shock['policy'] ?? null,
+                'mutation_shock_reason' => $shock['reason'] ?? null,
+                'mutation_shock_activated_generation' => $shock['activated_generation'] ?? $generation,
+                'mutation_shock_duration_generations' => $shock['duration_generations'] ?? null,
+                'mutation_shock_remaining_generations_before' => $remainingBefore,
+                'mutation_shock_remaining_generations_after' => $remainingAfter,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function applySelectionPressureMultiplier(
+        float $multiplier,
+        string $source = 'landscape_response',
+        ?string $landscapeState = null
+    ): array {
+        $normalizedMultiplier = max(0.34, min($multiplier, 3.0));
+        $this->currentSelectionPressureMultiplier = $normalizedMultiplier;
+
+        if ($this->selection instanceof AdaptiveSelectionPressureInterface) {
+            $this->selection->applySelectionPressureMultiplier($normalizedMultiplier);
+
+            return $this->selection->selectionPressureTelemetry() + [
+                'selection_pressure_source' => $source,
+                'selection_pressure_landscape_state' => $landscapeState,
+            ];
+        }
+
+        return [
+            'selection_pressure_supported' => false,
+            'selection_pressure_multiplier' => round($normalizedMultiplier, 6),
+            'selection_pressure_source' => $source,
+            'selection_pressure_landscape_state' => $landscapeState,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectionPressureTelemetry(): array
+    {
+        if ($this->selection instanceof AdaptiveSelectionPressureInterface) {
+            return $this->selection->selectionPressureTelemetry() + [
+                'selection_pressure_source' => 'default',
+                'selection_pressure_landscape_state' => null,
+            ];
+        }
+
+        return [
+            'selection_pressure_supported' => false,
+            'selection_pressure_multiplier' => round($this->currentSelectionPressureMultiplier, 6),
+            'selection_pressure_source' => 'default',
+            'selection_pressure_landscape_state' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $landscapeObservation
+     * @return array<string, mixed>
+     */
+    private function resolveRealSelectionPressureReductionActivation(
+        int $generation,
+        ?array $landscapeObservation,
+        bool $eligible
+    ): array {
+        $enabled = (bool) config('ag.search_response_activation.enable_temporary_selection_pressure_reduction', false);
+        $cooldown = max(1, (int) config('ag.search_response_activation.temporary_selection_pressure_reduction_cooldown', 2));
+        $duration = max(1, (int) config('ag.search_response_activation.temporary_selection_pressure_reduction_duration', 2));
+        $requested = false;
+        $applied = false;
+        $policy = null;
+        $mode = 'diagnostic_only';
+        $multiplier = 1.0;
+        $reason = $enabled
+            ? 'Activation gate did not request a temporary selection pressure reduction for the current observation.'
+            : 'Temporary selection pressure reduction is disabled by configuration.';
+
+        if (! is_array($landscapeObservation)) {
+            return [
+                'selection_pressure_trigger_eligible' => $enabled,
+                'selection_pressure_real_enabled' => $enabled,
+                'selection_pressure_real_requested' => false,
+                'selection_pressure_real_applied' => false,
+                'selection_pressure_real_policy' => null,
+                'selection_pressure_real_mode' => $mode,
+                'selection_pressure_real_cooldown_generations' => $cooldown,
+                'selection_pressure_real_duration_generations' => $duration,
+                'selection_pressure_real_multiplier' => $multiplier,
+                'selection_pressure_real_reason' => $reason,
+            ];
+        }
+
+        $activationGate = is_array($landscapeObservation['search_response_activation_gate'] ?? null)
+            ? $landscapeObservation['search_response_activation_gate']
+            : [];
+        $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
+            ? $landscapeObservation['search_response_simulation']
+            : [];
+        $policy = $activationGate['candidate_policy'] ?? null;
+        $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
+        $multiplier = max(0.34, min(1.0, (float) ($simulation['selection_pressure_multiplier'] ?? 1.0)));
+        $simulationRequestsReduction = (bool) ($simulation['would_escalate'] ?? false) && $multiplier < 1.0;
+
+        $requested = $enabled
+            && (bool) ($activationGate['eligible_as_candidate'] ?? false)
+            && $policyAligned
+            && $simulationRequestsReduction;
+
+        if (! $requested) {
+            if (! $enabled) {
+                $reason = 'Temporary selection pressure reduction is disabled by configuration.';
+            } elseif (! (bool) ($activationGate['eligible_as_candidate'] ?? false)) {
+                $reason = 'Activation gate has not approved a real candidate policy yet.';
+            } elseif (! $policyAligned) {
+                $reason = 'Current simulated policy does not match the activation gate candidate.';
+            } else {
+                $reason = 'Current simulated response does not request a selection pressure reduction.';
+            }
+
+            return [
+                'selection_pressure_trigger_eligible' => $enabled,
+                'selection_pressure_real_enabled' => $enabled,
+                'selection_pressure_real_requested' => false,
+                'selection_pressure_real_applied' => false,
+                'selection_pressure_real_policy' => $policy,
+                'selection_pressure_real_mode' => $activationGate['mode'] ?? $mode,
+                'selection_pressure_real_cooldown_generations' => $cooldown,
+                'selection_pressure_real_duration_generations' => $duration,
+                'selection_pressure_real_multiplier' => $multiplier,
+                'selection_pressure_real_reason' => $reason,
+            ];
+        }
+
+        $generationsSinceLastReduction = $this->lastSelectionPressureReductionGeneration === null
+            ? null
+            : $generation - $this->lastSelectionPressureReductionGeneration;
+        $cooldownSatisfied = $generationsSinceLastReduction === null || $generationsSinceLastReduction >= $cooldown;
+        $applied = $eligible && $cooldownSatisfied;
+        $mode = 'opt_in';
+        $reason = $applied
+            ? 'Temporary selection pressure reduction armed via SearchResponseActivationGate.'
+            : 'Temporary selection pressure reduction is waiting for its short cooldown window.';
+
+        if ($applied) {
+            $this->activeSelectionPressureReduction = [
+                'policy' => $policy,
+                'multiplier' => $multiplier,
+                'remaining_generations' => $duration,
+                'duration_generations' => $duration,
+                'activated_generation' => $generation,
+                'reason' => $reason,
+            ];
+            $this->lastSelectionPressureReductionGeneration = $generation;
+
+            Log::info('ga.selection_pressure_reduction.armed', [
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'generation' => $generation,
+                'policy' => $policy,
+                'multiplier' => round($multiplier, 6),
+                'duration_generations' => $duration,
+                'cooldown_generations' => $cooldown,
+            ]);
+        }
+
+        return [
+            'selection_pressure_trigger_eligible' => $enabled,
+            'selection_pressure_real_enabled' => $enabled,
+            'selection_pressure_real_requested' => $requested,
+            'selection_pressure_real_applied' => $applied,
+            'selection_pressure_real_policy' => $policy,
+            'selection_pressure_real_mode' => $mode,
+            'selection_pressure_real_cooldown_generations' => $cooldown,
+            'selection_pressure_real_duration_generations' => $duration,
+            'selection_pressure_real_multiplier' => $multiplier,
+            'selection_pressure_real_effective_from_generation' => $applied ? $generation + 1 : null,
+            'selection_pressure_real_reason' => $reason,
+        ];
+    }
+
+    /**
+     * @return array{telemetry: array<string, mixed>}
+     */
+    private function consumeActiveSelectionPressureReduction(float $baseMultiplier, int $generation): array
+    {
+        if (
+            ! is_array($this->activeSelectionPressureReduction)
+            || ((int) ($this->activeSelectionPressureReduction['remaining_generations'] ?? 0)) <= 0
+        ) {
+            $telemetry = $this->applySelectionPressureMultiplier($baseMultiplier, 'landscape_response');
+
+            return [
+                'telemetry' => $telemetry + [
+                    'selection_pressure_base_multiplier' => round($baseMultiplier, 6),
+                    'selection_pressure_effective_multiplier' => round(
+                        (float) ($telemetry['selection_pressure_multiplier'] ?? $baseMultiplier),
+                        6
+                    ),
+                    'selection_pressure_reduction_active' => false,
+                ],
+            ];
+        }
+
+        $reduction = $this->activeSelectionPressureReduction;
+        $multiplier = max(0.34, min(1.0, (float) ($reduction['multiplier'] ?? 1.0)));
+        $remainingBefore = max(0, (int) ($reduction['remaining_generations'] ?? 0));
+        $effectiveMultiplier = min(max(0.34, $baseMultiplier), $multiplier);
+        $telemetry = $this->applySelectionPressureMultiplier(
+            $effectiveMultiplier,
+            'activation_gate',
+            null
+        );
+
+        $reduction['remaining_generations'] = max(0, $remainingBefore - 1);
+        $remainingAfter = (int) $reduction['remaining_generations'];
+        $this->activeSelectionPressureReduction = $remainingAfter > 0 ? $reduction : null;
+
+        return [
+            'telemetry' => $telemetry + [
+                'selection_pressure_base_multiplier' => round($baseMultiplier, 6),
+                'selection_pressure_effective_multiplier' => round($effectiveMultiplier, 6),
+                'selection_pressure_reduction_active' => true,
+                'selection_pressure_reduction_multiplier' => round($multiplier, 6),
+                'selection_pressure_reduction_policy' => $reduction['policy'] ?? null,
+                'selection_pressure_reduction_reason' => $reduction['reason'] ?? null,
+                'selection_pressure_reduction_activated_generation' => $reduction['activated_generation'] ?? $generation,
+                'selection_pressure_reduction_duration_generations' => $reduction['duration_generations'] ?? null,
+                'selection_pressure_reduction_remaining_generations_before' => $remainingBefore,
+                'selection_pressure_reduction_remaining_generations_after' => $remainingAfter,
+            ],
+        ];
     }
 
     /**
@@ -1097,14 +1781,88 @@ final class GeneticAlgorithmEngine
             return;
         }
 
+        $now = microtime(true);
+
+        if (
+            $this->lastCancellationCheckAt !== null
+            && ($now - $this->lastCancellationCheckAt) < self::CANCELLATION_CHECK_INTERVAL_SECONDS
+        ) {
+            $status = $this->lastKnownExecutionStatus;
+
+            if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
+                throw ExecutionCancelledException::forExecution($this->executionMetrics->getExecutionId());
+            }
+
+            return;
+        }
+
         $executionId = $this->executionMetrics->getExecutionId();
 
         $status = ScheduleExecution::query()
             ->whereKey($executionId)
             ->value('status');
 
+        $this->lastCancellationCheckAt = $now;
+        $this->lastKnownExecutionStatus = is_string($status) ? $status : null;
+
         if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
             throw ExecutionCancelledException::forExecution($executionId);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function reportOperationalHeartbeat(
+        int $generation,
+        string $stage,
+        string $operation,
+        float $operationStartedAt,
+        array $context = [],
+        bool $force = false
+    ): void {
+        if ($this->progress === null) {
+            return;
+        }
+
+        $now = microtime(true);
+        $elapsedSeconds = max(0.0, $now - $operationStartedAt);
+        $shouldEmitHeartbeat = $force
+            || $this->lastOperationalHeartbeatAt === null
+            || ($now - $this->lastOperationalHeartbeatAt) >= self::OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS;
+        $shouldLogLongRunning = $elapsedSeconds >= self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS
+            && (
+                $this->lastLongRunningOperationLogAt === null
+                || ($now - $this->lastLongRunningOperationLogAt) >= self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS
+            );
+
+        if (! $shouldEmitHeartbeat && ! $shouldLogLongRunning) {
+            return;
+        }
+
+        $payload = [
+            'phase' => 'evolution',
+            'stage' => $stage,
+            'generation' => $generation,
+            'max_generations' => $this->termination->getMaxGenerations() ?? 0,
+            'execution_id' => $this->executionMetrics?->getExecutionId(),
+            'current_operation' => $stage,
+            'operation_label' => $operation,
+            'operation_elapsed_seconds' => (int) round($elapsedSeconds),
+        ] + $context;
+
+        if ($shouldEmitHeartbeat) {
+            $this->progress->report($payload);
+            $this->lastOperationalHeartbeatAt = $now;
+        }
+
+        if ($shouldLogLongRunning) {
+            Log::warning('ga.execution.long_running_operation', $payload + [
+                'horario_id' => $this->executionMetrics?->getHorarioId(),
+                'heartbeat_policy_seconds' => self::OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS,
+                'log_threshold_seconds' => self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS,
+            ]);
+            $this->lastLongRunningOperationLogAt = $now;
         }
     }
 }

@@ -35,6 +35,13 @@ final class LandscapeMemory
 
     private ?LandscapeEpisode $lastCompletedEpisode = null;
 
+    /**
+     * @var array<int, array<string, mixed>>
+     */
+    private array $recentCompletedEpisodes = [];
+
+    private int $maxRecentCompletedEpisodes = 5;
+
     /*
     ---------------------------------------------------------
     Registrar estado detectado
@@ -104,6 +111,11 @@ final class LandscapeMemory
         return $this->lastCompletedEpisode;
     }
 
+    public function recentCompletedEpisodes(): array
+    {
+        return $this->recentCompletedEpisodes;
+    }
+
     public function previewEpisode(
         LandscapePhenomenon $phenomenon,
         int $generation,
@@ -171,6 +183,11 @@ final class LandscapeMemory
                 : LandscapeEpisodeExitMode::PhenomenonShift;
 
             $this->lastCompletedEpisode = $this->currentEpisode->close($exitMode);
+            $this->recentCompletedEpisodes[] = $this->lastCompletedEpisode->toArray();
+
+            if (count($this->recentCompletedEpisodes) > $this->maxRecentCompletedEpisodes) {
+                array_shift($this->recentCompletedEpisodes);
+            }
         }
 
         $this->currentEpisode = LandscapeEpisode::start(
@@ -310,6 +327,7 @@ final class LandscapeMemory
         $this->trajectory = [];
         $this->currentEpisode = null;
         $this->lastCompletedEpisode = null;
+        $this->recentCompletedEpisodes = [];
     }
 
     /**

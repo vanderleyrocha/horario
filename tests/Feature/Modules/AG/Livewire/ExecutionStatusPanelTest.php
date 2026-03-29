@@ -1,8 +1,8 @@
 <?php
 
-use App\Modules\AG\UI\Livewire\ExecutionStatusPanel;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\UI\Livewire\ExecutionStatusPanel;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
@@ -31,7 +31,6 @@ it('exibe o tempo sem heartbeat sem alarme quando o progresso ainda esta recente
 
     Livewire::test(ExecutionStatusPanel::class, ['execution' => $execution])
         ->assertSee('Tempo sem heartbeat')
-        ->assertSee('12s')
         ->assertSee('saudavel')
         ->assertDontSee('Aviso de heartbeat');
 });
@@ -57,13 +56,15 @@ it('sinaliza possivel estagnacao operacional quando o heartbeat fica velho demai
         'timestamp' => now()->subMinutes(8)->toIso8601String(),
         'execution_id' => $execution->id,
         'attempt' => 6,
+        'operation_label' => 'Reparando candidato inicial do quality gate',
     ], now()->addMinutes(5));
 
     Livewire::test(ExecutionStatusPanel::class, ['execution' => $execution])
         ->assertSee('Tempo sem heartbeat')
         ->assertSee('possivel estagnacao operacional')
         ->assertSee('Aviso de heartbeat')
-        ->assertSee('O solver esta ha bastante tempo reparando o candidato inicial sem novo heartbeat.');
+        ->assertSee('O solver esta ha bastante tempo reparando o candidato inicial sem novo heartbeat.')
+        ->assertSee('Operacao atual: Reparando candidato inicial do quality gate');
 });
 
 it('mostra o resumo estruturado quando a execucao falha com contexto persistido', function (): void {

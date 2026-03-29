@@ -12,6 +12,8 @@ const chartState = {
     lastHeartbeatAt: null,
     lastHeartbeatPhase: "",
     lastHeartbeatStage: "",
+    lastHeartbeatOperationLabel: "",
+    lastHeartbeatOperationElapsedSeconds: null,
     seenGenerations: new Set(),
     operatorUsage: new Map(),
     fitnessChart: null,
@@ -47,6 +49,8 @@ function destroyCharts() {
     chartState.lastHeartbeatAt = null
     chartState.lastHeartbeatPhase = ""
     chartState.lastHeartbeatStage = ""
+    chartState.lastHeartbeatOperationLabel = ""
+    chartState.lastHeartbeatOperationElapsedSeconds = null
 }
 
 function createLineChart(element, label) {
@@ -194,6 +198,19 @@ const LANDSCAPE_PHENOMENON_LABELS = {
     deep_valley: "Vale profundo",
 }
 
+const LANDSCAPE_EPISODE_EXIT_LABELS = {
+    active: "Ativo",
+    recovered: "Recuperado",
+    phenomenon_shift: "Mudanca de fenomeno",
+}
+
+const LANDSCAPE_TREND_SEVERITY = {
+    neutral: 0,
+    plateau: 1,
+    local_minimum: 2,
+    deep_valley: 3,
+}
+
 Object.assign(LANDSCAPE_STATE_SCALE, {
     exploitation: 2,
     "exploracao_controlada": 2,
@@ -233,6 +250,147 @@ function landscapePhenomenonLabel(value) {
     }
 
     return LANDSCAPE_PHENOMENON_LABELS[value.trim().toLowerCase()]  ??  value
+}
+
+function landscapeEpisodeExitLabel(value) {
+    if (typeof value !== "string" || value.trim() === "") {
+        return "Ativo"
+    }
+
+    return LANDSCAPE_EPISODE_EXIT_LABELS[value.trim().toLowerCase()]  ??  value
+}
+
+function resolveLandscapeTransition(currentEpisode, previousEpisode) {
+    const currentPhenomenon = String(currentEpisode?.phenomenon  ??  "")
+    const previousPhenomenon = String(previousEpisode?.phenomenon  ??  "")
+    const previousExitMode = String(previousEpisode?.exit_mode  ??  "")
+    const previousLastGeneration = Number(previousEpisode?.last_generation  ??  0)
+    const currentStartGeneration = Number(currentEpisode?.start_generation  ??  0)
+
+    if (currentPhenomenon === "deep_valley") {
+        return {
+            badge: "Vale profundo ativo",
+            badgeClassName: "inline-flex w-fit rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-900",
+            detail: `O solver entrou em vale profundo e esta em episodio de alta intensidade desde a geracao ${currentStartGeneration}.`,
+        }
+    }
+
+    if (
+        previousPhenomenon !== "" &&
+        currentPhenomenon !== "" &&
+        previousExitMode === "phenomenon_shift" &&
+        previousPhenomenon !== currentPhenomenon &&
+        previousLastGeneration > 0
+    ) {
+        return {
+            badge: "Mudanca de fenomeno",
+            badgeClassName: "inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900",
+            detail: `O episodio ${landscapePhenomenonLabel(previousPhenomenon)} terminou na geracao ${previousLastGeneration} e a busca migrou para ${landscapePhenomenonLabel(currentPhenomenon)}.`,
+        }
+    }
+
+    if (previousPhenomenon !== "" && previousExitMode === "recovered" && previousLastGeneration > 0) {
+        return {
+            badge: "Recuperacao detectada",
+            badgeClassName: "inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900",
+            detail: `O episodio ${landscapePhenomenonLabel(previousPhenomenon)} terminou por recuperacao na geracao ${previousLastGeneration}.`,
+        }
+    }
+
+    if (currentPhenomenon !== "" && currentPhenomenon !== "neutral" && currentStartGeneration > 0) {
+        return {
+            badge: "Episodio monitorado",
+            badgeClassName: "inline-flex w-fit rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900",
+            detail: `O episodio ${landscapePhenomenonLabel(currentPhenomenon)} segue em observacao desde a geracao ${currentStartGeneration}.`,
+        }
+    }
+
+    return {
+        badge: "Sem transicao destacada",
+        badgeClassName: "inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700",
+        detail: "O dashboard destacara entradas em vale profundo, mudancas de fenomeno e recuperacoes assim que elas aparecerem.",
+    }
+}
+
+function resolveLandscapeTrend(recentEpisodeHistory, currentEpisode, previousEpisode) {
+    const completedHistory = Array.isArray(recentEpisodeHistory)
+        ? recentEpisodeHistory.filter((episode) => episode && typeof episode === "object")
+        : []
+
+    const trendSequence = completedHistory.map((episode) => String(episode.phenomenon  ??  "neutral"))
+    const currentPhenomenon = String(currentEpisode?.phenomenon  ??  "")
+    const previousPhenomenon = String(previousEpisode?.phenomenon  ??  "")
+    const previousExitMode = String(previousEpisode?.exit_mode  ??  "")
+
+    if (currentPhenomenon !== "" && currentPhenomenon !== "neutral") {
+        trendSequence.push(currentPhenomenon)
+    }
+
+    const normalizedSequence = trendSequence.slice(-3)
+    const severitySequence = normalizedSequence
+        .map((phenomenon) => LANDSCAPE_TREND_SEVERITY[phenomenon]  ??  0)
+
+    if (
+        normalizedSequence.length >= 3 &&
+        severitySequence[0] < severitySequence[1] &&
+        severitySequence[1] < severitySequence[2]
+    ) {
+        return {
+            badge: "Tendencia de piora",
+            badgeClassName: "inline-flex w-fit rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-900",
+            detail: `Sequencia recente em agravamento: ${normalizedSequence.map((item) => landscapePhenomenonLabel(item)).join(" -> ")}.`,
+        }
+    }
+
+    if (
+        completedHistory.length >= 2 &&
+        previousPhenomenon !== "" &&
+        previousExitMode === "recovered"
+    ) {
+        const recentRecoveredSequence = [
+            String(completedHistory.at(-2)?.phenomenon  ??  ""),
+            previousPhenomenon,
+            "recovered",
+        ].filter((item) => item !== "")
+
+        return {
+            badge: "Tendencia de melhora",
+            badgeClassName: "inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900",
+            detail: `Sequencia recente em recuperacao: ${recentRecoveredSequence.map((item) => item === "recovered" ? "Recuperado" : landscapePhenomenonLabel(item)).join(" -> ")}.`,
+        }
+    }
+
+    if (
+        normalizedSequence.length >= 2 &&
+        severitySequence.at(-1) !== undefined &&
+        severitySequence.at(-2) !== undefined &&
+        severitySequence.at(-1) < severitySequence.at(-2)
+    ) {
+        return {
+            badge: "Sinal de melhora",
+            badgeClassName: "inline-flex w-fit rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900",
+            detail: `A sequencia recente reduziu a intensidade do landscape: ${normalizedSequence.map((item) => landscapePhenomenonLabel(item)).join(" -> ")}.`,
+        }
+    }
+
+    if (
+        normalizedSequence.length >= 2 &&
+        severitySequence.at(-1) !== undefined &&
+        severitySequence.at(-2) !== undefined &&
+        severitySequence.at(-1) > severitySequence.at(-2)
+    ) {
+        return {
+            badge: "Sinal de piora",
+            badgeClassName: "inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900",
+            detail: `A sequencia recente aumentou a intensidade do landscape: ${normalizedSequence.map((item) => landscapePhenomenonLabel(item)).join(" -> ")}.`,
+        }
+    }
+
+    return {
+        badge: "Tendencia indefinida",
+        badgeClassName: "inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700",
+        detail: "A tendencia entre episodios sera destacada quando houver sequencia suficiente para comparacao.",
+    }
 }
 
 function normalizeMetricEvent(detail) {
@@ -298,11 +456,11 @@ function resolveHeartbeatSeverity(phase, stage, ageSeconds) {
     let thresholds = { monitoring: 20, warning: 60, critical: 180 }
 
     if (phase === "initial_population" && stage.includes("quality_gate_repair")) {
-        thresholds = { monitoring: 30, warning: 120, critical: 360 }
+        thresholds = { monitoring: 30, warning: 120, critical: 300 }
     } else if (phase === "initial_population") {
-        thresholds = { monitoring: 20, warning: 90, critical: 240 }
+        thresholds = { monitoring: 20, warning: 90, critical: 300 }
     } else if (phase === "evolving" || phase === "evolution") {
-        thresholds = { monitoring: 15, warning: 45, critical: 120 }
+        thresholds = { monitoring: 30, warning: 120, critical: 300 }
     }
 
     if (ageSeconds <= thresholds.monitoring) {
@@ -370,11 +528,21 @@ function renderDashboardHeartbeatMonitor() {
         chartState.lastHeartbeatStage,
         ageSeconds,
     )
+    const operationDetails = []
+
+    if (chartState.lastHeartbeatOperationLabel) {
+        operationDetails.push(`Operacao atual: ${chartState.lastHeartbeatOperationLabel}.`)
+    }
+
+    if (Number.isFinite(chartState.lastHeartbeatOperationElapsedSeconds) && chartState.lastHeartbeatOperationElapsedSeconds > 0) {
+        operationDetails.push(`Essa etapa esta em execucao ha ${formatElapsedSeconds(chartState.lastHeartbeatOperationElapsedSeconds)}.`)
+    }
+    const note = [severity.note, ...operationDetails].join(" ").trim()
 
     lastHeartbeatElement.textContent = chartState.lastHeartbeatAt.toLocaleString("pt-BR")
     delayElement.textContent = formatElapsedSeconds(ageSeconds)
     statusElement.textContent = severity.status
-    noteElement.textContent = severity.note
+    noteElement.textContent = note
     applyHeartbeatCardSeverity(lastHeartbeatCard, delayCard, logLinkWrapper, severity.status)
 }
 
@@ -452,6 +620,8 @@ function updateDashboardHeartbeatMonitor(metric) {
     chartState.lastHeartbeatAt = heartbeatAt
     chartState.lastHeartbeatPhase = String(metric.phase  ??  "")
     chartState.lastHeartbeatStage = String(metric.stage  ??  "")
+    chartState.lastHeartbeatOperationLabel = String(metric.operation_label  ??  "")
+    chartState.lastHeartbeatOperationElapsedSeconds = Number(metric.operation_elapsed_seconds  ??  Number.NaN)
 
     renderDashboardHeartbeatMonitor()
 }
@@ -936,6 +1106,15 @@ function updateLandscapeObservation(phenomenon, observation) {
     const confidenceElement = root.querySelector("[data-landscape-confidence]")
     const depthScoreElement = root.querySelector("[data-landscape-depth-score]")
     const summaryElement = root.querySelector("[data-landscape-summary]")
+    const currentEpisodeTitleElement = root.querySelector("[data-landscape-current-episode-title]")
+    const currentEpisodeDetailElement = root.querySelector("[data-landscape-current-episode-detail]")
+    const previousEpisodeTitleElement = root.querySelector("[data-landscape-previous-episode-title]")
+    const previousEpisodeDetailElement = root.querySelector("[data-landscape-previous-episode-detail]")
+    const transitionBadgeElement = root.querySelector("[data-landscape-transition-badge]")
+    const transitionDetailElement = root.querySelector("[data-landscape-transition-detail]")
+    const trendBadgeElement = root.querySelector("[data-landscape-trend-badge]")
+    const trendDetailElement = root.querySelector("[data-landscape-trend-detail]")
+    const transitionHistoryElement = root.querySelector("[data-landscape-transition-history]")
     const alnsBrakeBadgeElement = root.querySelector("[data-landscape-alns-brake-badge]")
     const alnsBrakeDetailElement = root.querySelector("[data-landscape-alns-brake-detail]")
 
@@ -944,6 +1123,15 @@ function updateLandscapeObservation(phenomenon, observation) {
         !confidenceElement ||
         !depthScoreElement ||
         !summaryElement ||
+        !currentEpisodeTitleElement ||
+        !currentEpisodeDetailElement ||
+        !previousEpisodeTitleElement ||
+        !previousEpisodeDetailElement ||
+        !transitionBadgeElement ||
+        !transitionDetailElement ||
+        !trendBadgeElement ||
+        !trendDetailElement ||
+        !transitionHistoryElement ||
         !alnsBrakeBadgeElement ||
         !alnsBrakeDetailElement
     ) {
@@ -959,6 +1147,13 @@ function updateLandscapeObservation(phenomenon, observation) {
     const bestSignatureChanged = Boolean(normalizedObservation.best_signature_changed  ??  false)
     const basinLockConfidence = Number(normalizedObservation.basin_of_attraction_lock_confidence  ??  0)
     const basinLockDetected = Boolean(normalizedObservation.basin_of_attraction_lock_detected  ??  false)
+    const currentEpisode = normalizedObservation.current_episode  ??  {}
+    const previousEpisode = normalizedObservation.previous_episode  ??  {}
+    const recentEpisodeHistory = Array.isArray(normalizedObservation.recent_episode_history)
+        ? normalizedObservation.recent_episode_history
+        : []
+    const mutationShock = normalizedObservation.mutation_shock  ??  {}
+    const selectionPressure = normalizedObservation.selection_pressure  ??  {}
     const episodeDuration = Number(normalizedObservation.current_episode?.duration  ??  0)
     const searchResponsePolicy = String(normalizedObservation.search_response_simulation?.policy  ??  "")
     const searchResponseWouldEscalate = Boolean(normalizedObservation.search_response_simulation?.would_escalate  ??  false)
@@ -993,6 +1188,20 @@ function updateLandscapeObservation(phenomenon, observation) {
     const alnsRealActivation = alnsTrigger.real_activation  ??  {}
     const alnsRealActivationApplied = Boolean(alnsRealActivation.applied  ??  false)
     const alnsRealActivationPolicy = String(alnsRealActivation.policy  ??  "")
+    const mutationShockApplied = Boolean(mutationShock.applied  ??  false)
+    const mutationShockActive = Boolean(mutationShock.active  ??  false)
+    const mutationShockMultiplier = Number(mutationShock.active_multiplier  ??  mutationShock.multiplier  ??  0)
+    const mutationShockRemaining = Number(mutationShock.remaining_generations_after  ??  0)
+    const selectionPressureSupported = Boolean(selectionPressure.supported  ??  false)
+    const selectionPressureState = String(selectionPressure.state  ??  "nominal")
+    const selectionPressureEffectiveMultiplier = Number(selectionPressure.effective_multiplier  ??  1)
+    const selectionPressureTournamentSize = Number(selectionPressure.effective_tournament_size  ??  0)
+    const selectionPressureReductionActive = Boolean(selectionPressure.reduction_active  ??  false)
+    const selectionPressureReductionMultiplier = Number(selectionPressure.reduction_multiplier  ??  0)
+    const selectionPressureReductionRemaining = Number(selectionPressure.remaining_generations_after  ??  0)
+    const selectionPressureRealReduction = selectionPressure.real_reduction  ??  {}
+    const selectionPressureRealReductionApplied = Boolean(selectionPressureRealReduction.applied  ??  false)
+    const selectionPressureRealReductionPolicy = String(selectionPressureRealReduction.policy  ??  "")
 
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
@@ -1034,7 +1243,119 @@ function updateLandscapeObservation(phenomenon, observation) {
     alnsBrakeBadgeElement.className = brakeBadgeClassName
     alnsBrakeDetailElement.textContent = brakeDetailParts.join(" | ")
 
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${alnsCooldownBrakeApplied ? ` | freio +${alnsCooldownBrakeExtraGenerations}g` : ""}${alnsRealActivationApplied ? ` live:${alnsRealActivationPolicy || "gate"}` : ""}${alnsAggressionLabel ? ` ${alnsAggressionLabel}` : ""}${alnsDestroyRatio > 0 ? ` d${alnsDestroyRatio.toFixed(2)}` : ""}${alnsAggressionLabel ? ` s${(alnsRecentSuccessRate * 100).toFixed(0)}%` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+    const currentEpisodePhenomenon = String(currentEpisode.phenomenon  ??  "")
+    const currentEpisodeStart = Number(currentEpisode.start_generation  ??  0)
+    const currentEpisodeLast = Number(currentEpisode.last_generation  ??  0)
+    const currentEpisodePeakConfidence = Number(currentEpisode.peak_confidence  ??  0)
+    const currentEpisodePeakDepthScore = Number(currentEpisode.peak_depth_score  ??  0)
+    const currentEpisodeStableSignatureRate = Number(currentEpisode.stable_best_signature_rate  ??  0)
+    const currentEpisodeAvgTurnover = Number(currentEpisode.avg_population_turnover  ??  0)
+    const currentEpisodeAvgEliteSimilarity = Number(currentEpisode.avg_elite_similarity  ??  0)
+
+    if (currentEpisodePhenomenon !== "") {
+        currentEpisodeTitleElement.textContent = `${landscapePhenomenonLabel(currentEpisodePhenomenon)} em curso`
+        currentEpisodeDetailElement.textContent = `Inicio g${currentEpisodeStart} | ultimo g${currentEpisodeLast} | duracao ${episodeDuration} geracoes | pico confianca ${currentEpisodePeakConfidence.toFixed(2)} | pico profundidade ${currentEpisodePeakDepthScore.toFixed(2)} | assinatura estavel ${(currentEpisodeStableSignatureRate * 100).toFixed(0)}% | turnover medio ${(currentEpisodeAvgTurnover * 100).toFixed(0)}% | elite media ${currentEpisodeAvgEliteSimilarity.toFixed(2)}`
+    } else {
+        currentEpisodeTitleElement.textContent = "Nenhum episodio ativo ainda"
+        currentEpisodeDetailElement.textContent = "O dashboard exibira inicio, duracao e intensidade maxima do episodio atual."
+    }
+
+    const previousEpisodePhenomenon = String(previousEpisode.phenomenon  ??  "")
+    const previousEpisodeStart = Number(previousEpisode.start_generation  ??  0)
+    const previousEpisodeLast = Number(previousEpisode.last_generation  ??  0)
+    const previousEpisodeDuration = Number(previousEpisode.duration  ??  0)
+    const previousEpisodePeakConfidence = Number(previousEpisode.peak_confidence  ??  0)
+    const previousEpisodePeakDepthScore = Number(previousEpisode.peak_depth_score  ??  0)
+    const previousEpisodeExitMode = String(previousEpisode.exit_mode  ??  "")
+
+    if (previousEpisodePhenomenon !== "") {
+        previousEpisodeTitleElement.textContent = `${landscapePhenomenonLabel(previousEpisodePhenomenon)} encerrado`
+        previousEpisodeDetailElement.textContent = `Inicio g${previousEpisodeStart} | fim g${previousEpisodeLast} | duracao ${previousEpisodeDuration} geracoes | pico confianca ${previousEpisodePeakConfidence.toFixed(2)} | pico profundidade ${previousEpisodePeakDepthScore.toFixed(2)} | saiu por ${landscapeEpisodeExitLabel(previousEpisodeExitMode)}`
+    } else {
+        previousEpisodeTitleElement.textContent = "Nenhum episodio encerrado ainda"
+        previousEpisodeDetailElement.textContent = "Quando um episodio terminar, o dashboard exibira como ele terminou e qual foi o pico de intensidade."
+    }
+
+    const transition = resolveLandscapeTransition(currentEpisode, previousEpisode)
+    transitionBadgeElement.textContent = transition.badge
+    transitionBadgeElement.className = transition.badgeClassName
+    transitionDetailElement.textContent = transition.detail
+
+    const persistedTrend = normalizedObservation.episode_trend && typeof normalizedObservation.episode_trend === "object"
+        ? normalizedObservation.episode_trend
+        : null
+    const trend = persistedTrend
+        ? {
+            badge: String(persistedTrend.headline  ??  "Tendencia indefinida"),
+            badgeClassName: (() => {
+                const direction = String(persistedTrend.direction  ??  "indeterminate")
+                const strength = String(persistedTrend.strength  ??  "none")
+
+                if (direction === "worsening" && strength === "strong") {
+                    return "inline-flex w-fit rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-900"
+                }
+
+                if (direction === "improving" && strength === "strong") {
+                    return "inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900"
+                }
+
+                if (direction === "worsening") {
+                    return "inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
+                }
+
+                if (direction === "improving") {
+                    return "inline-flex w-fit rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900"
+                }
+
+                return "inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+            })(),
+            detail: (() => {
+                const sequence = Array.isArray(persistedTrend.sequence) ? persistedTrend.sequence : []
+                const readableSequence = sequence.length > 0
+                    ? sequence
+                        .map((item) => item === "recovered" ? "Recuperado" : landscapePhenomenonLabel(String(item)))
+                        .join(" -> ")
+                    : ""
+                const detail = String(persistedTrend.detail  ?? "")
+
+                return readableSequence !== ""
+                    ? `${detail} Sequencia: ${readableSequence}.`
+                    : detail
+            })(),
+        }
+        : resolveLandscapeTrend(recentEpisodeHistory, currentEpisode, previousEpisode)
+    trendBadgeElement.textContent = trend.badge
+    trendBadgeElement.className = trend.badgeClassName
+    trendDetailElement.textContent = trend.detail
+
+    transitionHistoryElement.innerHTML = recentEpisodeHistory.length > 0
+        ? [...recentEpisodeHistory]
+            .reverse()
+            .map((episode) => {
+                const historyPhenomenon = landscapePhenomenonLabel(String(episode.phenomenon  ??  "neutral"))
+                const historyExitMode = landscapeEpisodeExitLabel(String(episode.exit_mode  ??  "active"))
+                const historyStart = Number(episode.start_generation  ??  0)
+                const historyLast = Number(episode.last_generation  ??  0)
+                const historyDuration = Number(episode.duration  ??  0)
+                const historyPeakDepth = Number(episode.peak_depth_score  ??  0)
+                const historyPeakConfidence = Number(episode.peak_confidence  ??  0)
+
+                return `
+                    <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                        <p class="font-semibold text-slate-900">${historyPhenomenon}</p>
+                        <p class="mt-1">g${historyStart} -> g${historyLast} | duracao ${historyDuration} geracoes | pico confianca ${historyPeakConfidence.toFixed(2)} | pico profundidade ${historyPeakDepth.toFixed(2)}</p>
+                        <p class="mt-1 text-xs uppercase tracking-wide text-slate-500">Saida: ${historyExitMode}</p>
+                    </div>
+                `
+            })
+            .join("")
+        : `
+            <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
+                O historico recente sera preenchido quando os episodios comecarem a encerrar.
+            </p>
+        `
+
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${selectionPressureSupported ? ` | sel x${selectionPressureEffectiveMultiplier.toFixed(2)}${selectionPressureTournamentSize > 0 ? ` t${selectionPressureTournamentSize}` : ""}` : ""}${selectionPressureState !== "nominal" ? ` ${selectionPressureState}` : ""}${selectionPressureRealReductionApplied ? ` liveSel:${selectionPressureRealReductionPolicy || "gate"}` : ""}${selectionPressureReductionActive ? ` red x${selectionPressureReductionMultiplier.toFixed(2)} ${selectionPressureReductionRemaining}g` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${alnsCooldownBrakeApplied ? ` | freio +${alnsCooldownBrakeExtraGenerations}g` : ""}${alnsRealActivationApplied ? ` live:${alnsRealActivationPolicy || "gate"}` : ""}${mutationShockApplied ? ` | shock arm x${mutationShockMultiplier.toFixed(2)}` : ""}${mutationShockActive ? ` | shock ativo x${mutationShockMultiplier.toFixed(2)} ${mutationShockRemaining}g` : ""}${alnsAggressionLabel ? ` ${alnsAggressionLabel}` : ""}${alnsDestroyRatio > 0 ? ` d${alnsDestroyRatio.toFixed(2)}` : ""}${alnsAggressionLabel ? ` s${(alnsRecentSuccessRate * 100).toFixed(0)}%` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateSearchResponseReadiness(observation) {

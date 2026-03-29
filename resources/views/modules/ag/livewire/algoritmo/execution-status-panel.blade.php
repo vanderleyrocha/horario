@@ -42,6 +42,11 @@
         <div class="mt-4 rounded-lg border {{ $heartbeatMonitor['panel_classes'] }} p-4 text-sm">
             <p class="font-semibold">Aviso de heartbeat</p>
             <p class="mt-1">{{ $heartbeatMonitor['message'] }}</p>
+            @if (! empty($heartbeatMonitor['operation_label']))
+                <p class="mt-2 text-xs font-medium uppercase tracking-wide">
+                    Operacao atual: {{ $heartbeatMonitor['operation_label'] }}
+                </p>
+            @endif
         </div>
     @endif
 
@@ -150,6 +155,15 @@
             @endif
             @if (isset($progress['best_fitness']))
                 Melhor fitness atual: {{ number_format((float) $progress['best_fitness'], 4) }}.
+            @endif
+            @if (! empty($progress['operation_label']))
+                <p class="mt-2 text-sm text-emerald-800">
+                    Operacao atual: <span class="font-semibold">{{ $progress['operation_label'] }}</span>
+                    @if (isset($progress['operation_elapsed_seconds']))
+                        <span class="mx-2 text-emerald-500">&middot;</span>
+                        Em execucao ha {{ (int) $progress['operation_elapsed_seconds'] }}s
+                    @endif
+                </p>
             @endif
         </div>
     @elseif ($execution->status === 'failed')

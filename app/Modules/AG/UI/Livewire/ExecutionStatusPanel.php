@@ -66,6 +66,7 @@ class ExecutionStatusPanel extends Component
         $heartbeatAt = $this->resolveHeartbeatAt();
         $phase = (string) ($this->progress['phase'] ?? '');
         $stage = (string) ($this->progress['stage'] ?? '');
+        $operationLabel = $this->resolveCurrentOperationLabel();
 
         if ($heartbeatAt === null) {
             return [
@@ -73,6 +74,7 @@ class ExecutionStatusPanel extends Component
                 'age_label' => 'aguardando heartbeat',
                 'status_label' => 'sem sinal',
                 'message' => 'A execucao ainda nao publicou heartbeat de progresso para esta etapa.',
+                'operation_label' => $operationLabel,
                 'badge_classes' => 'border-slate-200 bg-slate-100 text-slate-700',
                 'panel_classes' => 'border-slate-200 bg-slate-100 text-slate-800',
                 'is_warning' => false,
@@ -89,6 +91,7 @@ class ExecutionStatusPanel extends Component
                 'age_label' => $this->formatSeconds($ageInSeconds),
                 'status_label' => 'saudavel',
                 'message' => 'Heartbeat recente. O solver segue publicando progresso normalmente.',
+                'operation_label' => $operationLabel,
                 'badge_classes' => 'border-emerald-200 bg-emerald-100 text-emerald-700',
                 'panel_classes' => 'border-emerald-200 bg-emerald-50 text-emerald-900',
                 'is_warning' => false,
@@ -101,6 +104,7 @@ class ExecutionStatusPanel extends Component
                 'age_label' => $this->formatSeconds($ageInSeconds),
                 'status_label' => 'monitorando',
                 'message' => 'O heartbeat ficou mais espacoso, mas ainda esta dentro da janela esperada para esta fase.',
+                'operation_label' => $operationLabel,
                 'badge_classes' => 'border-sky-200 bg-sky-100 text-sky-700',
                 'panel_classes' => 'border-sky-200 bg-sky-50 text-sky-900',
                 'is_warning' => false,
@@ -112,7 +116,8 @@ class ExecutionStatusPanel extends Component
                 'age_seconds' => $ageInSeconds,
                 'age_label' => $this->formatSeconds($ageInSeconds),
                 'status_label' => 'atencao',
-                'message' => $this->buildHeartbeatWarningMessage($phase, $stage, false),
+                'message' => $this->buildHeartbeatWarningMessageWithOperation($phase, $stage, false, $operationLabel),
+                'operation_label' => $operationLabel,
                 'badge_classes' => 'border-amber-200 bg-amber-100 text-amber-800',
                 'panel_classes' => 'border-amber-200 bg-amber-50 text-amber-900',
                 'is_warning' => true,
@@ -123,7 +128,8 @@ class ExecutionStatusPanel extends Component
             'age_seconds' => $ageInSeconds,
             'age_label' => $this->formatSeconds($ageInSeconds),
             'status_label' => 'possivel estagnacao operacional',
-            'message' => $this->buildHeartbeatWarningMessage($phase, $stage, true),
+            'message' => $this->buildHeartbeatWarningMessageWithOperation($phase, $stage, true, $operationLabel),
+            'operation_label' => $operationLabel,
             'badge_classes' => 'border-rose-200 bg-rose-100 text-rose-700',
             'panel_classes' => 'border-rose-200 bg-rose-50 text-rose-900',
             'is_warning' => true,
@@ -174,6 +180,8 @@ class ExecutionStatusPanel extends Component
                 'user_message' => 'O frontend perdeu os sinais de vida da execucao e nao recebeu um encerramento formal do worker.',
                 'phase' => $this->progress['phase'] ?? 'monitoramento',
                 'stage' => $this->progress['stage'] ?? 'sem_heartbeat',
+                'current_operation' => $this->progress['current_operation'] ?? null,
+                'operation_label' => $this->resolveCurrentOperationLabel(),
                 'attempt' => $this->progress['attempt'] ?? null,
                 'queue_size' => $this->progress['queue_size'] ?? null,
                 'allocations' => $this->progress['allocations'] ?? null,
@@ -222,7 +230,7 @@ class ExecutionStatusPanel extends Component
             return [
                 'monitoring' => 30,
                 'warning' => 120,
-                'critical' => 360,
+                'critical' => 300,
             ];
         }
 
@@ -230,15 +238,15 @@ class ExecutionStatusPanel extends Component
             return [
                 'monitoring' => 20,
                 'warning' => 90,
-                'critical' => 240,
+                'critical' => 300,
             ];
         }
 
         if ($phase === 'evolving' || $phase === 'evolution') {
             return [
-                'monitoring' => 15,
-                'warning' => 45,
-                'critical' => 120,
+                'monitoring' => 30,
+                'warning' => 120,
+                'critical' => 300,
             ];
         }
 
@@ -270,20 +278,67 @@ class ExecutionStatusPanel extends Component
 
     private function buildHeartbeatWarningMessage(string $phase, string $stage, bool $critical): string
     {
+        return $this->buildHeartbeatWarningMessageWithOperation(
+            $phase,
+            $stage,
+            $critical,
+            $this->resolveCurrentOperationLabel()
+        );
+    }
+
+    private function resolveCurrentOperationLabel(): ?string
+    {
+        $operationLabel = $this->progress['operation_label'] ?? null;
+
+        if (is_string($operationLabel) && trim($operationLabel) !== '') {
+            return $operationLabel;
+        }
+
+        $stage = (string) ($this->progress['stage'] ?? '');
+
+        return match (true) {
+            $stage === 'building_offspring' => 'Montando descendentes da geracao',
+            $stage === 'evaluating_population' => 'Avaliando a nova populacao da geracao',
+            $stage === 'repair_runtime' => 'Reparando descendente durante a evolucao',
+            $stage === 'generation_started' => 'Preparando nova geracao',
+            default => null,
+        };
+    }
+
+    private function buildHeartbeatWarningMessageWithOperation(
+        string $phase,
+        string $stage,
+        bool $critical,
+        ?string $operationLabel
+    ): string {
         if ($phase === 'initial_population' && str_contains($stage, 'quality_gate_repair')) {
-            return $critical
+            $message = $critical
                 ? 'O solver esta ha bastante tempo reparando o candidato inicial sem novo heartbeat. Vale verificar se o worker travou ou se o reparo entrou em um caso muito caro.'
                 : 'O reparo do quality gate esta demorando mais que o normal. O solver ainda pode estar trabalhando, mas ja merece monitoramento.';
+
+            return $operationLabel !== null ? $message.' Operacao atual: '.$operationLabel.'.' : $message;
         }
 
         if ($phase === 'initial_population') {
-            return $critical
+            $message = $critical
                 ? 'A populacao inicial ficou tempo demais sem novo heartbeat. Isso costuma indicar tentativa muito cara ou travamento operacional.'
                 : 'A populacao inicial esta levando mais tempo do que o esperado para publicar novo heartbeat.';
+
+            return $operationLabel !== null ? $message.' Operacao atual: '.$operationLabel.'.' : $message;
         }
 
-        return $critical
+        if ($phase === 'evolution' || $phase === 'evolving') {
+            $message = $critical
+                ? 'A geracao atual ficou tempo demais sem novo heartbeat. Isso costuma indicar repair caro, avaliacao pesada ou ciclo de descendentes preso em um caso muito custoso.'
+                : 'A geracao atual esta demorando mais que o normal para publicar novo heartbeat.';
+
+            return $operationLabel !== null ? $message.' Operacao atual: '.$operationLabel.'.' : $message;
+        }
+
+        $message = $critical
             ? 'A execucao ficou tempo demais sem novo heartbeat. Verifique worker, fila e logs para confirmar se o solver ainda esta vivo.'
             : 'O heartbeat da execucao esta atrasado. Vale acompanhar os proximos ciclos antes de concluir que houve travamento.';
+
+        return $operationLabel !== null ? $message.' Operacao atual: '.$operationLabel.'.' : $message;
     }
 }

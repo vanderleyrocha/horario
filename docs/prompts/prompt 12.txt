@@ -1,0 +1,212 @@
+Atue como um Arquiteto de Software Sênior especializado em:
+
+- algoritmos genéticos aplicados a timetabling escolar,
+- otimização combinatória,
+- Laravel/PHP de alta performance,
+- análise de código legado,
+- profiling e diagnóstico de gargalos computacionais.
+
+Sua tarefa é realizar uma análise técnica completa do projeto localizado em:
+
+D:\laragon\www\horario
+
+## OBJETIVO PRINCIPAL
+
+Produzir um diagnóstico profundo do estado atual do projeto de geração de horários escolares baseado em algoritmo genético, identificando:
+
+1. o que já está implementado;
+2. a qualidade técnica da implementação atual;
+3. quais propostas já descritas na pasta `docs\prompts` já foram implementadas total ou parcialmente;
+4. o que ainda é viável implementar com alto impacto;
+5. quais ações priorizar para elevar o nível do solver, melhorar a qualidade das soluções e reduzir drasticamente o tempo de processamento.
+
+---
+
+## ESCOPO DA ANÁLISE
+
+Faça uma análise minuciosa dos seguintes elementos:
+
+### 1. Código-fonte do projeto
+Analise toda a arquitetura do projeto, com foco especial em:
+
+- modelagem do problema de geração de horários;
+- representação do indivíduo/cromossomo;
+- geração da população inicial;
+- função de fitness;
+- restrições duras e restrições suaves;
+- operadores genéticos (seleção, cruzamento, mutação, elitismo, repair, etc.);
+- estratégias de diversificação e intensificação;
+- mecanismos de convergência;
+- uso de heurísticas, seeds, construction methods e melhorias híbridas;
+- estrutura de execução do solver;
+- desempenho computacional;
+- pontos de acoplamento excessivo, duplicação, gargalos e trechos críticos.
+- telemetria e comunicação com o frontend
+- qualidade e relevância da informação apresentada ao usuário em tempo real da evolução do processamento do solver
+
+### 2. Pasta `docs\prompts`
+Analise cuidadosamente o conteúdo de todos os arquivos em:
+
+docs\prompts
+
+Para cada proposta, ideia, melhoria ou arquitetura sugerida nesses arquivos:
+
+- identifique se já foi implementada;
+- classifique como:
+  - já implementado,
+  - parcialmente implementado,
+  - não implementado,
+  - implementado de forma diferente;
+- aponte em quais arquivos/classes isso aparece;
+- avalie se a implementação está correta e suficiente;
+- diga se ainda vale a pena implementar ou refinar.
+
+### 3. Logs e evidências operacionais
+Analise logs, traces, arquivos de debug, outputs de execução e quaisquer registros relevantes que existam no projeto, buscando evidências sobre:
+
+- gargalos na geração da população inicial;
+- etapas que mais consomem tempo;
+- possíveis loops excessivos;
+- excesso de consultas ao banco;
+- avaliações de fitness muito custosas;
+- mutações/cruzamentos pouco eficientes;
+- baixa diversidade populacional;
+- estagnação evolutiva;
+- problemas de modelagem que dificultem convergência.
+
+### 4. Banco de dados
+Você pode acessar o banco de dados para entender melhor o caso real de teste.
+
+Use como referência principal:
+
+- `horario_id = 3`
+
+Analise especialmente:
+
+- configuração do horário
+- quantidade de turmas;
+- quantidade de aulas;
+- professores;
+- conflitos de disponibilidade;
+- carga horária;
+- restrições excessivas ou inconsistentes;
+- distribuição de aulas;
+- possíveis dados que estejam tornando o problema artificialmente difícil ou mal condicionado.
+
+Avalie se existem ajustes nos dados, nas configurações do horário ou na estratégia de construção inicial que poderiam melhorar muito o desempenho do solver.
+
+---
+
+## CONTEXTO DE DESEMPENHO ATUAL
+
+Considere como sintoma crítico observado:
+
+- a geração da população inicial está levando cerca de 30 minutos;
+- em muitos casos, mesmo após mais de 2 horas, o sistema ainda não consegue definir um melhor indivíduo satisfatório.
+
+Sua análise deve ser orientada a descobrir as causas concretas desse comportamento.
+
+---
+
+## CRITÉRIOS DE AVALIAÇÃO TÉCNICA
+
+Avalie se o projeto utiliza, de fato, boas práticas e técnicas modernas para um solver genético de timetabling, incluindo, quando aplicável:
+
+- representação eficiente do estado;
+- pré-processamento de restrições;
+- estruturas de dados adequadas para detecção de conflito em tempo constante ou próximo disso;
+- fitness incremental;
+- cache inteligente;
+- penalização bem calibrada;
+- geração de população inicial heurística em vez de puramente aleatória;
+- repair operators;
+- local search / memetic refinement;
+- controle de diversidade;
+- seleção apropriada;
+- mutação adaptativa;
+- elitismo balanceado;
+- paralelização quando viável;
+- profiling real dos gargalos;
+- separação clara entre domínio, solver e infraestrutura;
+- baixo acoplamento e alta testabilidade.
+
+Sempre que identificar deficiência, explique:
+
+1. o problema;
+2. por que isso prejudica a qualidade ou o desempenho;
+3. como corrigir;
+4. o impacto esperado da correção.
+
+---
+
+## FORMATO DA RESPOSTA
+
+Quero que você gere um relatório técnico muito bem estruturado, contendo obrigatoriamente as seções abaixo:
+
+### 1. Resumo executivo
+Visão geral objetiva do estado atual do projeto.
+
+### 2. O que já está implementado
+Mapeamento claro do que o projeto já possui hoje no solver.
+
+### 3. Avaliação da qualidade técnica atual
+Julgue se a implementação atual está:
+- boa,
+- razoável,
+- limitada,
+- ou criticamente deficiente,
+sempre com justificativas técnicas.
+
+### 4. Análise das propostas da pasta `docs\prompts`
+Monte uma tabela ou estrutura equivalente contendo:
+- proposta;
+- status de implementação;
+- arquivos relacionados;
+- observações;
+- prioridade futura.
+
+### 5. Diagnóstico dos gargalos de desempenho
+Explique os principais fatores que podem estar causando:
+- 30 minutos para população inicial;
+- mais de 2 horas sem convergência adequada.
+
+### 6. Diagnóstico do caso real `horario_id = 3`
+Explique se o problema está:
+- no algoritmo,
+- na modelagem,
+- nos dados,
+- nas restrições,
+- ou em uma combinação desses fatores.
+
+### 7. Melhorias recomendadas
+Liste as melhorias em ordem de prioridade, separando em:
+- ganhos rápidos,
+- melhorias estruturais,
+- melhorias avançadas no solver.
+
+### 8. Plano de ação passo a passo
+Monte um roadmap objetivo de implementação, em ordem ideal de execução, contendo para cada item:
+- ação;
+- motivo;
+- impacto esperado;
+- complexidade estimada;
+- prioridade.
+
+### 9. Conclusão final
+Diga com clareza:
+- o que manter,
+- o que refatorar,
+- o que substituir,
+- e qual deve ser a próxima etapa imediata.
+
+---
+
+## INSTRUÇÕES IMPORTANTES
+
+- Não faça uma análise superficial.
+- Baseie suas conclusões em evidências reais do código, dos prompts, dos logs e dos dados.
+- Sempre cite arquivos, classes, funções e trechos relevantes que sustentem suas conclusões.
+- Sempre diferencie claramente fatos observados no projeto de hipóteses ou inferências.
+- Seja rigoroso tecnicamente.
+- Se encontrar inconsistências arquiteturais, anti-patterns ou decisões que prejudiquem fortemente a performance, destaque isso com objetividade.
+- Foque em produzir um material que sirva como guia real de evolução do solver.

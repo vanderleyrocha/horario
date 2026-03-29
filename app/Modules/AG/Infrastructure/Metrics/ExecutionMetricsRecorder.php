@@ -9,6 +9,8 @@ class ExecutionMetricsRecorder
 {
     private ?int $executionId = null;
 
+    private ?int $horarioId = null;
+
     private array $buffer = [];
 
     private int $batchSize = 1;
@@ -24,6 +26,8 @@ class ExecutionMetricsRecorder
         ?int $executionId = null,
         array $statusContext = []
     ): int {
+        $this->horarioId = $horarioId;
+
         $payload = [
             'horario_id' => $horarioId,
             'start_time' => now(),
@@ -171,5 +175,10 @@ class ExecutionMetricsRecorder
         }
 
         return $this->executionId;
+    }
+
+    public function getHorarioId(): ?int
+    {
+        return $this->horarioId;
     }
 }

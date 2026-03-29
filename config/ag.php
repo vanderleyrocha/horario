@@ -12,5 +12,11 @@ return [
     'search_response_activation' => [
         'enable_temporary_intensive_alns' => env('AG_ENABLE_TEMPORARY_INTENSIVE_ALNS', false),
         'temporary_intensive_alns_cooldown' => (int) env('AG_TEMPORARY_INTENSIVE_ALNS_COOLDOWN', 2),
+        'enable_temporary_mutation_shock' => env('AG_ENABLE_TEMPORARY_MUTATION_SHOCK', false),
+        'temporary_mutation_shock_cooldown' => (int) env('AG_TEMPORARY_MUTATION_SHOCK_COOLDOWN', 2),
+        'temporary_mutation_shock_duration' => (int) env('AG_TEMPORARY_MUTATION_SHOCK_DURATION', 2),
+        'enable_temporary_selection_pressure_reduction' => env('AG_ENABLE_TEMPORARY_SELECTION_PRESSURE_REDUCTION', false),
+        'temporary_selection_pressure_reduction_cooldown' => (int) env('AG_TEMPORARY_SELECTION_PRESSURE_REDUCTION_COOLDOWN', 2),
+        'temporary_selection_pressure_reduction_duration' => (int) env('AG_TEMPORARY_SELECTION_PRESSURE_REDUCTION_DURATION', 2),
     ],
 ];

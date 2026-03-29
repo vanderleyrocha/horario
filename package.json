@@ -13,6 +13,7 @@
         "axios": "^1.7.4",
         "concurrently": "^9.0.1",
         "laravel-vite-plugin": "^2.0",
+        "mysql2": "^3.20.0",
         "tailwindcss": "^4.0.7",
         "vite": "^7.0.4"
     },
@@ -23,5 +24,24 @@
     },
     "devDependencies": {
         "chart.js": "^4.5.1"
-    }
+    },
+    "name": "horario",
+    "version": "1.0.0",
+    "description": "",
+    "main": "tailwind.config.js",
+    "directories": {
+        "doc": "docs",
+        "test": "tests"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vanderleyrocha/horario.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/vanderleyrocha/horario/issues"
+    },
+    "homepage": "https://github.com/vanderleyrocha/horario#readme"
 }

@@ -15,6 +15,26 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
     {
         $policyBuckets = [];
         $windowExecutionsCount = 0;
+        $worseningOccurrences = 0;
+        $improvingOccurrences = 0;
+        $activationTrendComparison = [
+            'worsening' => [
+                'occurrences' => 0,
+                'real_activation_occurrences' => 0,
+                'avg_success_rate_sum' => 0.0,
+                'avg_success_rate_count' => 0,
+                'avg_progress_score_sum' => 0.0,
+                'avg_progress_score_count' => 0,
+            ],
+            'improving' => [
+                'occurrences' => 0,
+                'real_activation_occurrences' => 0,
+                'avg_success_rate_sum' => 0.0,
+                'avg_success_rate_count' => 0,
+                'avg_progress_score_sum' => 0.0,
+                'avg_progress_score_count' => 0,
+            ],
+        ];
 
         foreach ($executions as $execution) {
             $windowExecutionsCount++;
@@ -47,6 +67,22 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
                 : (is_array($gate['blocking_reasons'] ?? null) ? array_values($gate['blocking_reasons']) : []);
             $landscapeState = $this->nullableString($execution->latestMetric?->landscape_state ?? ($observation['state'] ?? null));
             $landscapePhenomenon = $this->nullableString($execution->latestMetric?->landscape_phenomenon ?? ($observation['phenomenon'] ?? null));
+            $episodeTrend = is_array($observation['episode_trend'] ?? null)
+                ? $observation['episode_trend']
+                : [];
+            $episodeTrendDirection = $this->nullableString($episodeTrend['direction'] ?? null);
+            $realActivation = is_array($observation['alns_trigger']['real_activation'] ?? null)
+                ? $observation['alns_trigger']['real_activation']
+                : [];
+            $realActivationApplied = (bool) ($realActivation['applied'] ?? false);
+
+            if ($episodeTrendDirection === 'worsening') {
+                $worseningOccurrences++;
+            }
+
+            if ($episodeTrendDirection === 'improving') {
+                $improvingOccurrences++;
+            }
 
             foreach ($policyRows as $policyRow) {
                 if (! is_array($policyRow) || ! is_string($policyRow['policy'] ?? null) || $policyRow['policy'] === '') {
@@ -91,6 +127,38 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
                         $bucket['landscape_phenomenon_counts'][$landscapePhenomenon] = ($bucket['landscape_phenomenon_counts'][$landscapePhenomenon] ?? 0) + 1;
                     }
 
+                    if ($episodeTrendDirection !== null) {
+                        $bucket['trend_direction_counts'][$episodeTrendDirection] = ($bucket['trend_direction_counts'][$episodeTrendDirection] ?? 0) + 1;
+                    }
+
+                    if ($episodeTrendDirection === 'worsening') {
+                        $bucket['worsening_occurrences']++;
+                    }
+
+                    if ($episodeTrendDirection === 'improving') {
+                        $bucket['improving_occurrences']++;
+                    }
+
+                    if ($realActivationApplied) {
+                        $bucket['real_activation_occurrences']++;
+                    }
+
+                    if (
+                        $episodeTrendDirection !== null &&
+                        isset($activationTrendComparison[$episodeTrendDirection])
+                    ) {
+                        $activationTrendComparison[$episodeTrendDirection]['occurrences']++;
+
+                        if ($realActivationApplied) {
+                            $activationTrendComparison[$episodeTrendDirection]['real_activation_occurrences']++;
+                        }
+
+                        $activationTrendComparison[$episodeTrendDirection]['avg_success_rate_sum'] += (float) ($policyRow['success_rate'] ?? 0.0);
+                        $activationTrendComparison[$episodeTrendDirection]['avg_success_rate_count']++;
+                        $activationTrendComparison[$episodeTrendDirection]['avg_progress_score_sum'] += (float) ($policyRow['avg_progress_score'] ?? 0.0);
+                        $activationTrendComparison[$episodeTrendDirection]['avg_progress_score_count']++;
+                    }
+
                     foreach ($blockingReasons as $blockingReason) {
                         if (! is_string($blockingReason) || trim($blockingReason) === '') {
                             continue;
@@ -117,6 +185,9 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
             headline: $this->resolveHeadline($windowExecutionsCount, $policyRows),
             windowExecutionsCount: $windowExecutionsCount,
             policiesCount: count($policyRows),
+            worseningOccurrences: $worseningOccurrences,
+            improvingOccurrences: $improvingOccurrences,
+            activationTrendComparison: $this->finalizeActivationTrendComparison($activationTrendComparison),
             leadingPolicyByNearGate: $policyRows[0] ?? null,
             leadingPolicyByCandidateReady: $this->leadingPolicyByCandidateReady($policyRows),
             policyRows: $policyRows,
@@ -137,6 +208,9 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
             'best_by_success_count' => 0,
             'best_by_progress_count' => 0,
             'resolved_outcomes_total' => 0,
+            'worsening_occurrences' => 0,
+            'improving_occurrences' => 0,
+            'real_activation_occurrences' => 0,
             'avg_success_rate_sum' => 0.0,
             'avg_success_rate_count' => 0,
             'avg_progress_score_sum' => 0.0,
@@ -145,6 +219,7 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
             'near_gate_resolved_evidence_count' => 0,
             'landscape_state_counts' => [],
             'landscape_phenomenon_counts' => [],
+            'trend_direction_counts' => [],
             'blocking_reason_counts' => [],
             'basin_lock_confidence_sum' => 0.0,
             'basin_lock_confidence_count' => 0,
@@ -189,11 +264,15 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
                 'best_by_success_count' => (int) $bucket['best_by_success_count'],
                 'best_by_progress_count' => (int) $bucket['best_by_progress_count'],
                 'resolved_outcomes_total' => (int) $bucket['resolved_outcomes_total'],
+                'worsening_occurrences' => (int) $bucket['worsening_occurrences'],
+                'improving_occurrences' => (int) $bucket['improving_occurrences'],
+                'real_activation_occurrences' => (int) $bucket['real_activation_occurrences'],
                 'avg_success_rate' => $this->safeAverage($bucket['avg_success_rate_sum'], $bucket['avg_success_rate_count']),
                 'avg_progress_score' => $this->safeAverage($bucket['avg_progress_score_sum'], $bucket['avg_progress_score_count']),
                 'avg_near_gate_resolved_evidence' => $this->safeAverage($bucket['near_gate_resolved_evidence_sum'], $bucket['near_gate_resolved_evidence_count']),
                 'top_landscape_state' => $this->topKey($bucket['landscape_state_counts']),
                 'top_landscape_phenomenon' => $this->topKey($bucket['landscape_phenomenon_counts']),
+                'top_trend_direction' => $this->topKey($bucket['trend_direction_counts']),
                 'top_blocking_reason' => $this->topKey($bucket['blocking_reason_counts']),
                 'avg_basin_lock_confidence' => $this->safeAverage($bucket['basin_lock_confidence_sum'], $bucket['basin_lock_confidence_count']),
                 'avg_depth_score' => $this->safeAverage($bucket['depth_score_sum'], $bucket['depth_score_count']),
@@ -219,6 +298,47 @@ final class SearchResponseGlobalPolicyReadinessReportBuilder
         });
 
         return $rows;
+    }
+
+    /**
+     * @param  array<string, array<string, float|int>>  $comparison
+     * @return array<string, mixed>
+     */
+    private function finalizeActivationTrendComparison(array $comparison): array
+    {
+        $worsening = $comparison['worsening'];
+        $improving = $comparison['improving'];
+
+        $worseningPayload = [
+            'occurrences' => (int) $worsening['occurrences'],
+            'real_activation_occurrences' => (int) $worsening['real_activation_occurrences'],
+            'avg_success_rate' => $this->safeAverage($worsening['avg_success_rate_sum'], (int) $worsening['avg_success_rate_count']),
+            'avg_progress_score' => $this->safeAverage($worsening['avg_progress_score_sum'], (int) $worsening['avg_progress_score_count']),
+        ];
+        $improvingPayload = [
+            'occurrences' => (int) $improving['occurrences'],
+            'real_activation_occurrences' => (int) $improving['real_activation_occurrences'],
+            'avg_success_rate' => $this->safeAverage($improving['avg_success_rate_sum'], (int) $improving['avg_success_rate_count']),
+            'avg_progress_score' => $this->safeAverage($improving['avg_progress_score_sum'], (int) $improving['avg_progress_score_count']),
+        ];
+
+        $betterTrend = null;
+
+        if ($improvingPayload['avg_success_rate'] > $worseningPayload['avg_success_rate']) {
+            $betterTrend = 'improving';
+        } elseif ($improvingPayload['avg_success_rate'] < $worseningPayload['avg_success_rate']) {
+            $betterTrend = 'worsening';
+        } elseif ($improvingPayload['avg_progress_score'] > $worseningPayload['avg_progress_score']) {
+            $betterTrend = 'improving';
+        } elseif ($improvingPayload['avg_progress_score'] < $worseningPayload['avg_progress_score']) {
+            $betterTrend = 'worsening';
+        }
+
+        return [
+            'worsening' => $worseningPayload,
+            'improving' => $improvingPayload,
+            'better_trend' => $betterTrend,
+        ];
     }
 
     private function safeAverage(float|int $sum, int $count): float

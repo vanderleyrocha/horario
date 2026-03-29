@@ -29,6 +29,19 @@ it('builds a global policy readiness report across the latest execution window',
             'elite_similarity' => 0.87,
             'best_delta_window' => 0.02,
             'basin_of_attraction_lock_confidence' => 0.91,
+            'episode_trend' => [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'A sequencia recente aumentou a intensidade do landscape.',
+                'sequence' => ['plateau', 'local_minimum'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                ],
+            ],
             'search_response_readiness_dashboard' => [
                 'resolved_evidence_count' => 5,
                 'best_policy_by_success' => [
@@ -86,6 +99,19 @@ it('builds a global policy readiness report across the latest execution window',
             'elite_similarity' => 0.82,
             'best_delta_window' => 0.03,
             'basin_of_attraction_lock_confidence' => 0.78,
+            'episode_trend' => [
+                'direction' => 'improving',
+                'strength' => 'strong',
+                'headline' => 'Tendencia de melhora',
+                'detail' => 'Sequencia recente em recuperacao do landscape.',
+                'sequence' => ['deep_valley', 'local_minimum', 'recovered'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => false,
+                    'policy' => null,
+                ],
+            ],
             'search_response_readiness_dashboard' => [
                 'resolved_evidence_count' => 3,
                 'best_policy_by_success' => [
@@ -138,11 +164,18 @@ it('builds a global policy readiness report across the latest execution window',
     expect($report['status'])->toBe('candidate_ready')
         ->and($report['window_executions_count'])->toBe(3)
         ->and($report['policies_count'])->toBe(2)
+        ->and($report['worsening_occurrences'])->toBe(1)
+        ->and($report['improving_occurrences'])->toBe(1)
+        ->and($report['activation_trend_comparison']['worsening']['real_activation_occurrences'])->toBe(1)
+        ->and($report['activation_trend_comparison']['improving']['real_activation_occurrences'])->toBe(0)
         ->and($report['leading_policy_by_near_gate']['policy'])->toBe('basin_lock_escape')
         ->and($report['leading_policy_by_candidate_ready']['policy'])->toBe('basin_lock_escape')
         ->and($report['policy_rows'][0]['top_landscape_state'])->toBe('stagnation')
         ->and($report['policy_rows'][0]['top_landscape_phenomenon'])->toBe('deep_valley')
+        ->and($report['policy_rows'][0]['top_trend_direction'])->toBe('worsening')
+        ->and($report['policy_rows'][0]['real_activation_occurrences'])->toBe(1)
         ->and($report['policy_rows'][1]['top_blocking_reason'])->toBe('Need more resolved shadow outcomes.')
         ->and($report['policy_rows'][1]['near_gate_occurrences'])->toBe(1)
-        ->and($report['policy_rows'][1]['candidate_ready_occurrences'])->toBe(0);
+        ->and($report['policy_rows'][1]['candidate_ready_occurrences'])->toBe(0)
+        ->and($report['activation_trend_comparison']['better_trend'])->toBe('worsening');
 });

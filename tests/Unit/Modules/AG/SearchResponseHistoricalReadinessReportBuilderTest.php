@@ -23,6 +23,19 @@ it('builds a historical readiness report across executions', function (): void {
     $executionA->setRelation('latestMetric', new ScheduleGenerationMetric([
         'generation' => 30,
         'landscape_observation' => [
+            'episode_trend' => [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'A sequencia recente aumentou a intensidade do landscape.',
+                'sequence' => ['plateau', 'local_minimum'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                ],
+            ],
             'search_response_readiness_dashboard' => [
                 'status' => 'candidate_ready',
                 'headline' => 'Diagnostic candidate ready: basin_lock_escape',
@@ -80,6 +93,13 @@ it('builds a historical readiness report across executions', function (): void {
     $executionB->setRelation('latestMetric', new ScheduleGenerationMetric([
         'generation' => 24,
         'landscape_observation' => [
+            'episode_trend' => [
+                'direction' => 'improving',
+                'strength' => 'strong',
+                'headline' => 'Tendencia de melhora',
+                'detail' => 'Sequencia recente em recuperacao do landscape.',
+                'sequence' => ['deep_valley', 'local_minimum', 'recovered'],
+            ],
             'search_response_readiness_dashboard' => [
                 'status' => 'collecting_evidence',
                 'headline' => 'Collecting evidence before any real activation',
@@ -141,12 +161,18 @@ it('builds a historical readiness report across executions', function (): void {
         ->and($report['compared_executions_count'])->toBe(3)
         ->and($report['executions_with_readiness'])->toBe(2)
         ->and($report['candidate_ready_executions'])->toBe(1)
+        ->and($report['worsening_executions'])->toBe(1)
+        ->and($report['improving_executions'])->toBe(1)
+        ->and($report['real_activation_while_worsening'])->toBe(1)
+        ->and($report['real_activation_while_improving'])->toBe(0)
         ->and($report['best_execution_by_success']['execution_id'])->toBe(101)
         ->and($report['best_execution_by_success']['policy'])->toBe('basin_lock_escape')
         ->and($report['best_execution_by_progress']['execution_id'])->toBe(101)
         ->and($report['policy_rows'][0]['policy'])->toBe('basin_lock_escape')
         ->and($report['policy_rows'][0]['candidate_ready_executions'])->toBe(1)
+        ->and($report['policy_rows'][0]['worsening_executions'])->toBe(1)
         ->and($report['policy_rows'][1]['policy'])->toBe('deep_valley_probe')
         ->and($report['executions'][1]['blocking_reasons'][0])->toBe('Need more resolved shadow outcomes.')
+        ->and($report['executions'][0]['alns_real_activation_applied'])->toBeTrue()
         ->and($report['executions'][2]['has_readiness_signal'])->toBeFalse();
 });

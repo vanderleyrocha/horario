@@ -14,13 +14,17 @@ use App\Modules\AG\Domain\Intensification\LNS\Destroy\DestroyOperatorInterface;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Repair\RepairOperatorInterface;
 use App\Modules\AG\Domain\Landscape\LandscapeEngine;
+use App\Modules\AG\Domain\Metrics\GeneticDistance;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
 use App\Modules\AG\Domain\Operators\Crossover\CrossoverOperatorInterface;
 use App\Modules\AG\Domain\Operators\Elitism\ElitismStrategyInterface;
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
+use App\Modules\AG\Domain\Operators\Selection\FitnessSharing\FitnessSharingCalculator;
+use App\Modules\AG\Domain\Operators\Selection\FitnessSharing\SharingFunction;
 use App\Modules\AG\Domain\Operators\Selection\SelectionOperatorInterface;
+use App\Modules\AG\Domain\Operators\Selection\TournamentSelection;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
@@ -113,8 +117,17 @@ it('publishes the same structured progress payload for the frontend through the 
 
     $engine->run(4);
 
-    expect($progress->reports)->toHaveCount(1)
-        ->and($progress->reports[0])->toMatchArray([
+    $generationReport = collect($progress->reports)
+        ->first(fn (array $payload): bool => ($payload['best_fitness'] ?? null) !== null);
+    $operationalStages = collect($progress->reports)
+        ->map(fn (array $payload): string => (string) ($payload['stage'] ?? ''))
+        ->filter()
+        ->values()
+        ->all();
+
+    expect($progress->reports)->toHaveCount(3)
+        ->and($generationReport)->toBeArray()
+        ->and($generationReport)->toMatchArray([
             'phase' => 'evolution',
             'generation' => 0,
             'max_generations' => 1,
@@ -122,12 +135,50 @@ it('publishes the same structured progress payload for the frontend through the 
             'stagnation' => 0,
             'landscape_state' => 'unknown',
         ])
-        ->and($progress->reports[0])->toHaveKeys([
+        ->and($generationReport)->toHaveKeys([
             'best_fitness',
             'avg_fitness',
             'diversity',
             'entropy',
-        ]);
+        ])
+        ->and($operationalStages)->toContain('generation_started', 'evaluating_population');
+});
+
+it('logs the current long-running operation when a generation stage exceeds five minutes', function (): void {
+    Log::spy();
+
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        progress: makeCollectingProgressReporter()
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'reportOperationalHeartbeat');
+    $method->setAccessible(true);
+
+    $method->invoke(
+        $engine,
+        3,
+        'building_offspring',
+        'Montando descendentes da geracao',
+        microtime(true) - 301,
+        [
+            'population_target' => 20,
+            'offspring_built' => 11,
+        ],
+        true
+    );
+
+    Log::shouldHaveReceived('warning')
+        ->once()
+        ->withArgs(function (string $message, array $context): bool {
+            return $message === 'ga.execution.long_running_operation'
+                && ($context['stage'] ?? null) === 'building_offspring'
+                && ($context['operation_label'] ?? null) === 'Montando descendentes da geracao'
+                && ($context['heartbeat_policy_seconds'] ?? null) === 30
+                && ($context['log_threshold_seconds'] ?? null) === 300;
+        });
 });
 
 it('triggers alns adaptively in short runs and publishes trigger telemetry', function (): void {
@@ -217,6 +268,198 @@ it('activates temporary intensive alns via activation gate in opt-in mode before
         ->and($telemetry['alns_trigger_sources'] ?? [])->toContain('activation_gate');
 });
 
+it('arms a temporary mutation shock via activation gate and applies it on the next generation', function (): void {
+    config()->set('ag.search_response_activation.enable_temporary_mutation_shock', true);
+    config()->set('ag.search_response_activation.temporary_mutation_shock_cooldown', 2);
+    config()->set('ag.search_response_activation.temporary_mutation_shock_duration', 2);
+    $problem = makeStandaloneFakeProblem();
+
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        adaptiveMutation: new AdaptiveMutationController(baseRate: 0.1, amplification: 0.0, maxRate: 0.1),
+    );
+
+    $resolver = new ReflectionMethod(GeneticAlgorithmEngine::class, 'resolveRealMutationShockActivation');
+    $resolver->setAccessible(true);
+
+    $telemetry = $resolver->invoke(
+        $engine,
+        4,
+        [
+            'search_response_simulation' => [
+                'policy' => 'basin_lock_escape',
+                'would_escalate' => true,
+                'mutation_multiplier' => 3.0,
+            ],
+            'search_response_activation_gate' => [
+                'eligible_as_candidate' => true,
+                'candidate_policy' => 'basin_lock_escape',
+                'mode' => 'diagnostic_only',
+            ],
+        ],
+        true
+    );
+
+    expect($telemetry)->toMatchArray([
+        'mutation_shock_enabled' => true,
+        'mutation_shock_requested' => true,
+        'mutation_shock_applied' => true,
+        'mutation_shock_policy' => 'basin_lock_escape',
+        'mutation_shock_mode' => 'opt_in',
+        'mutation_shock_multiplier' => 3.0,
+        'mutation_shock_duration_generations' => 2,
+        'mutation_shock_effective_from_generation' => 5,
+    ]);
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'executeGenerationStep');
+    $method->setAccessible(true);
+
+    $step = $method->invoke($engine, $population, 4);
+
+    expect($step)->toMatchArray([
+        'mutation_shock_active' => true,
+        'mutation_shock_multiplier' => 3.0,
+        'mutation_rate_base' => 0.1,
+        'mutation_shock_remaining_generations_before' => 2,
+        'mutation_shock_remaining_generations_after' => 1,
+    ])
+        ->and(round((float) $step['mutation_rate_effective'], 6))->toBe(0.3)
+        ->and(round((float) $step['mutation_rate'], 6))->toBe(0.3);
+});
+
+it('applies reduced selection pressure from the landscape response to the real selector', function (): void {
+    $problem = makeStandaloneFakeProblem();
+    $selection = new TournamentSelection(
+        3,
+        new FitnessSharingCalculator(new GeneticDistance, new SharingFunction(sigma: 0.35, alpha: 1.0))
+    );
+
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        selection: $selection,
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $applySelectionPressure = new ReflectionMethod(GeneticAlgorithmEngine::class, 'applySelectionPressureMultiplier');
+    $applySelectionPressure->setAccessible(true);
+    $applySelectionPressure->invoke($engine, 0.8, 'landscape_response', 'premature_convergence');
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+
+    $executeGenerationStep = new ReflectionMethod(GeneticAlgorithmEngine::class, 'executeGenerationStep');
+    $executeGenerationStep->setAccessible(true);
+    $step = $executeGenerationStep->invoke($engine, $population, 4);
+
+    expect($step)->toMatchArray([
+        'selection_pressure_supported' => true,
+        'selection_pressure_source' => 'landscape_response',
+        'selection_pressure_state' => 'reduced',
+        'selection_pressure_base_tournament_size' => 3,
+        'selection_pressure_effective_tournament_size' => 2,
+        'selection_pressure_base_multiplier' => 0.8,
+        'selection_pressure_effective_multiplier' => 0.8,
+        'selection_pressure_reduction_active' => false,
+    ]);
+});
+
+it('arms a temporary selection pressure reduction via activation gate and applies it on the next generation', function (): void {
+    config()->set('ag.search_response_activation.enable_temporary_selection_pressure_reduction', true);
+    config()->set('ag.search_response_activation.temporary_selection_pressure_reduction_cooldown', 2);
+    config()->set('ag.search_response_activation.temporary_selection_pressure_reduction_duration', 2);
+
+    $problem = makeStandaloneFakeProblem();
+    $selection = new TournamentSelection(
+        3,
+        new FitnessSharingCalculator(new GeneticDistance, new SharingFunction(sigma: 0.35, alpha: 1.0))
+    );
+
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        selection: $selection,
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $resolver = new ReflectionMethod(GeneticAlgorithmEngine::class, 'resolveRealSelectionPressureReductionActivation');
+    $resolver->setAccessible(true);
+
+    $telemetry = $resolver->invoke(
+        $engine,
+        4,
+        [
+            'search_response_simulation' => [
+                'policy' => 'basin_lock_escape',
+                'would_escalate' => true,
+                'selection_pressure_multiplier' => 0.65,
+            ],
+            'search_response_activation_gate' => [
+                'eligible_as_candidate' => true,
+                'candidate_policy' => 'basin_lock_escape',
+                'mode' => 'diagnostic_only',
+            ],
+        ],
+        true
+    );
+
+    expect($telemetry)->toMatchArray([
+        'selection_pressure_real_enabled' => true,
+        'selection_pressure_real_requested' => true,
+        'selection_pressure_real_applied' => true,
+        'selection_pressure_real_policy' => 'basin_lock_escape',
+        'selection_pressure_real_mode' => 'opt_in',
+        'selection_pressure_real_multiplier' => 0.65,
+        'selection_pressure_real_duration_generations' => 2,
+        'selection_pressure_real_effective_from_generation' => 5,
+    ]);
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+
+    $executeGenerationStep = new ReflectionMethod(GeneticAlgorithmEngine::class, 'executeGenerationStep');
+    $executeGenerationStep->setAccessible(true);
+    $step = $executeGenerationStep->invoke($engine, $population, 4);
+
+    expect($step)->toMatchArray([
+        'selection_pressure_supported' => true,
+        'selection_pressure_source' => 'activation_gate',
+        'selection_pressure_state' => 'reduced',
+        'selection_pressure_base_tournament_size' => 3,
+        'selection_pressure_effective_tournament_size' => 2,
+        'selection_pressure_base_multiplier' => 1.0,
+        'selection_pressure_effective_multiplier' => 0.65,
+        'selection_pressure_reduction_active' => true,
+        'selection_pressure_reduction_multiplier' => 0.65,
+        'selection_pressure_reduction_policy' => 'basin_lock_escape',
+        'selection_pressure_reduction_remaining_generations_before' => 2,
+        'selection_pressure_reduction_remaining_generations_after' => 1,
+    ]);
+});
+
 it('applies an adaptive cooldown brake when recent alns outcomes have low return', function (): void {
     $repair = new class implements RepairOperatorInterface
     {
@@ -300,20 +543,22 @@ function makeStandaloneEngine(
     GeneticProblem $problem,
     MutationOperatorInterface $mutation,
     TerminationCriterionInterface $termination,
+    ?SelectionOperatorInterface $selection = null,
     ?ProgressReporterInterface $progress = null,
     ?AdaptiveLargeNeighborhoodSearch $lns = null,
     int $lnsFrequency = 50,
-    ?LandscapeEngine $landscapeEngine = null
+    ?LandscapeEngine $landscapeEngine = null,
+    ?AdaptiveMutationController $adaptiveMutation = null
 ): GeneticAlgorithmEngine {
     return new GeneticAlgorithmEngine(
         problem: $problem,
-        selection: makeFirstParentSelection(),
+        selection: $selection ?? makeFirstParentSelection(),
         crossover: makeCopyingCrossover(),
         mutation: $mutation,
         termination: $termination,
         metrics: new MetricsRecorder,
         elitism: makeNoElitism(),
-        adaptiveMutation: new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
+        adaptiveMutation: $adaptiveMutation ?? new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
         populationEvaluator: new PopulationFitnessEvaluator($problem),
         replacement: makeNoopReplacement(),
         hyperHeuristic: null,

@@ -91,9 +91,21 @@
             </div>
 
             <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Policies vistas</p>
-                <p class="mt-2 text-3xl font-semibold text-amber-950">{{ count($historicalReadinessReport['policy_rows'] ?? []) }}</p>
-                <p class="mt-1 text-sm text-amber-800">Policies comparadas na trilha shadow do SLAE.</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Execucoes em worsening</p>
+                <p class="mt-2 text-3xl font-semibold text-amber-950">{{ $historicalReadinessReport['worsening_executions'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-amber-800">Runs cuja tendencia recente estava piorando no trecho observado.</p>
+            </div>
+
+            <div class="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Execucoes em improving</p>
+                <p class="mt-2 text-3xl font-semibold text-sky-950">{{ $historicalReadinessReport['improving_executions'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-sky-800">Runs que conseguiram virar a tendencia antes da ativacao real.</p>
+            </div>
+
+            <div class="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-violet-700">Policies vistas</p>
+                <p class="mt-2 text-3xl font-semibold text-violet-950">{{ count($historicalReadinessReport['policy_rows'] ?? []) }}</p>
+                <p class="mt-1 text-sm text-violet-800">Policies comparadas na trilha shadow do SLAE.</p>
             </div>
         </div>
 
@@ -116,6 +128,7 @@
                                     <th class="px-4 py-3">Policy</th>
                                     <th class="px-4 py-3">Execucoes</th>
                                     <th class="px-4 py-3">Candidates</th>
+                                    <th class="px-4 py-3">Trend</th>
                                     <th class="px-4 py-3">Success</th>
                                     <th class="px-4 py-3">Progress</th>
                                 </tr>
@@ -126,6 +139,10 @@
                                         <td class="px-4 py-3 font-medium text-slate-900">{{ $policyRow['policy'] ?? '-' }}</td>
                                         <td class="px-4 py-3 text-slate-600">{{ $policyRow['executions_seen'] ?? 0 }}</td>
                                         <td class="px-4 py-3 text-slate-600">{{ $policyRow['candidate_ready_executions'] ?? 0 }}</td>
+                                        <td class="px-4 py-3 text-slate-600">
+                                            <p>worsening {{ $policyRow['worsening_executions'] ?? 0 }}</p>
+                                            <p class="mt-1 text-xs text-slate-500">improving {{ $policyRow['improving_executions'] ?? 0 }}</p>
+                                        </td>
                                         <td class="px-4 py-3 text-slate-600">
                                             {{ number_format(((float) ($policyRow['avg_success_rate'] ?? 0)) * 100, 1) }}%
                                         </td>
@@ -174,6 +191,10 @@
                 @php
                     $leadingPolicyByNearGate = $globalPolicyReadinessReport['leading_policy_by_near_gate'] ?? null;
                     $leadingPolicyByCandidateReady = $globalPolicyReadinessReport['leading_policy_by_candidate_ready'] ?? null;
+                    $activationTrendComparison = $globalPolicyReadinessReport['activation_trend_comparison'] ?? [];
+                    $worseningTrendStats = $activationTrendComparison['worsening'] ?? null;
+                    $improvingTrendStats = $activationTrendComparison['improving'] ?? null;
+                    $betterTrend = $activationTrendComparison['better_trend'] ?? null;
                 @endphp
 
                 <div class="grid gap-3 text-sm text-slate-600 lg:min-w-[24rem] lg:grid-cols-2">
@@ -251,6 +272,52 @@
                 </p>
                 <p class="mt-1 text-sm text-amber-800">Paisagem mais comum quando a policy lider se aproxima do gate real.</p>
             </div>
+
+            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-rose-700">Near gate em worsening</p>
+                <p class="mt-2 text-3xl font-semibold text-rose-950">{{ $globalPolicyReadinessReport['worsening_occurrences'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-rose-800">Ocorrencias em que a policy se aproximou do gate com tendencia piorando.</p>
+            </div>
+
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Near gate em improving</p>
+                <p class="mt-2 text-3xl font-semibold text-emerald-950">{{ $globalPolicyReadinessReport['improving_occurrences'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-emerald-800">Ocorrencias em que a policy se aproximou do gate ja virando a tendencia.</p>
+            </div>
+        </div>
+
+        <div class="grid gap-4 border-t border-slate-200 px-6 py-6 lg:grid-cols-3">
+            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-rose-700">ALNS real em worsening</p>
+                <p class="mt-2 text-3xl font-semibold text-rose-950">{{ $worseningTrendStats['real_activation_occurrences'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-rose-800">
+                    success {{ number_format(((float) ($worseningTrendStats['avg_success_rate'] ?? 0)) * 100, 1) }}%
+                    · progress {{ number_format((float) ($worseningTrendStats['avg_progress_score'] ?? 0), 2) }}
+                </p>
+            </div>
+
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">ALNS real em improving</p>
+                <p class="mt-2 text-3xl font-semibold text-emerald-950">{{ $improvingTrendStats['real_activation_occurrences'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-emerald-800">
+                    success {{ number_format(((float) ($improvingTrendStats['avg_success_rate'] ?? 0)) * 100, 1) }}%
+                    · progress {{ number_format((float) ($improvingTrendStats['avg_progress_score'] ?? 0), 2) }}
+                </p>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Melhor contexto para ativacao</p>
+                <p class="mt-2 text-xl font-semibold text-slate-950">
+                    @if ($betterTrend === 'improving')
+                        improving
+                    @elseif ($betterTrend === 'worsening')
+                        worsening
+                    @else
+                        inconclusivo
+                    @endif
+                </p>
+                <p class="mt-1 text-sm text-slate-600">Compara o desempenho medio do ALNS real entre tendencias opostas.</p>
+            </div>
         </div>
 
         <div class="overflow-x-auto border-t border-slate-200">
@@ -264,6 +331,8 @@
                             <th class="px-4 py-3">Near gate</th>
                             <th class="px-4 py-3">Candidate ready</th>
                             <th class="px-4 py-3">Landscape comum</th>
+                            <th class="px-4 py-3">Trend</th>
+                            <th class="px-4 py-3">ALNS real</th>
                             <th class="px-4 py-3">Sinais medios</th>
                             <th class="px-4 py-3">Bloqueio tipico</th>
                             <th class="px-4 py-3">Amostra</th>
@@ -297,6 +366,17 @@
                                     <p class="mt-1 text-xs text-slate-500">{{ $policyRow['top_landscape_phenomenon'] ?? '-' }}</p>
                                 </td>
                                 <td class="px-4 py-4 text-slate-600">
+                                    <p>{{ $policyRow['top_trend_direction'] ?? '-' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        worsening {{ $policyRow['worsening_occurrences'] ?? 0 }}
+                                        · improving {{ $policyRow['improving_occurrences'] ?? 0 }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>{{ $policyRow['real_activation_occurrences'] ?? 0 }} ativacoes</p>
+                                    <p class="mt-1 text-xs text-slate-500">quando a policy realmente entrou em modo live</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
                                     <p>bLock {{ number_format((float) ($policyRow['avg_basin_lock_confidence'] ?? 0), 2) }}</p>
                                     <p class="mt-1 text-xs text-slate-500">
                                         depth {{ number_format((float) ($policyRow['avg_depth_score'] ?? 0), 2) }}
@@ -313,6 +393,155 @@
                                     <p class="text-xs text-slate-500">
                                         {{ collect($policyRow['sample_execution_ids'] ?? [])->map(fn ($id) => '#' . $id)->implode(', ') ?: '-' }}
                                     </p>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </div>
+    </section>
+
+    <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 bg-slate-50 px-6 py-5">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Impacto Temporal do ALNS</p>
+                    <h2 class="mt-1 text-xl font-semibold text-slate-950">Impacto temporal da ativacao real</h2>
+                    <p class="mt-2 text-sm text-slate-600">
+                        {{ $activationImpactReport['headline'] ?? 'Nenhuma ativacao real do ALNS com janela suficiente foi encontrada.' }}
+                    </p>
+                </div>
+
+                <div class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-700">
+                    {{ str_replace('_', ' ', (string) ($activationImpactReport['status'] ?? 'idle')) }}
+                </div>
+            </div>
+        </div>
+
+        @php
+            $impactTrendComparison = $activationImpactReport['trend_comparison'] ?? [];
+            $impactWorsening = $impactTrendComparison['worsening'] ?? [];
+            $impactImproving = $impactTrendComparison['improving'] ?? [];
+            $betterTrendContext = $activationImpactReport['better_trend_context'] ?? null;
+        @endphp
+
+        <div class="grid gap-4 px-6 py-6 md:grid-cols-2 xl:grid-cols-5">
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ativacoes analisadas</p>
+                <p class="mt-2 text-3xl font-semibold text-slate-950">{{ $activationImpactReport['analyzed_activation_events'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-slate-600">Eventos com janela completa antes/depois para comparar efeito temporal.</p>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ativacoes descartadas</p>
+                <p class="mt-2 text-3xl font-semibold text-slate-950">{{ $activationImpactReport['ignored_edge_activation_events'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-slate-600">Eventos perto demais da borda da execucao para comparar janelas completas.</p>
+            </div>
+
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Impacto positivo</p>
+                <p class="mt-2 text-3xl font-semibold text-emerald-950">{{ $activationImpactReport['positive_impact_events'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-emerald-800">Ativacoes cujo pos-janela melhorou fitness e sinais do landscape.</p>
+            </div>
+
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Impacto misto</p>
+                <p class="mt-2 text-3xl font-semibold text-amber-950">{{ $activationImpactReport['mixed_impact_events'] ?? 0 }}</p>
+                <p class="mt-1 text-sm text-amber-800">Eventos em que parte dos sinais melhorou, mas sem resposta totalmente limpa.</p>
+            </div>
+
+            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-rose-700">Melhor contexto temporal</p>
+                <p class="mt-2 text-2xl font-semibold text-rose-950">{{ $betterTrendContext ?? 'indefinido' }}</p>
+                <p class="mt-1 text-sm text-rose-800">Compara se o ALNS real teve melhor resposta quando ativado em worsening ou improving.</p>
+            </div>
+        </div>
+
+        <div class="grid gap-4 border-t border-slate-200 px-6 py-6 lg:grid-cols-2">
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Ativacao em worsening</p>
+                <p class="mt-2 text-3xl font-semibold text-amber-950">{{ $impactWorsening['activation_events'] ?? 0 }}</p>
+                <div class="mt-3 space-y-1 text-sm text-amber-900">
+                    <p>Delta medio best fitness {{ number_format((float) ($impactWorsening['avg_best_fitness_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio avg fitness {{ number_format((float) ($impactWorsening['avg_avg_fitness_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio basin lock {{ number_format((float) ($impactWorsening['avg_basin_lock_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio depth {{ number_format((float) ($impactWorsening['avg_depth_delta'] ?? 0), 4) }}</p>
+                    <p>Taxa de impacto positivo {{ number_format(((float) ($impactWorsening['positive_impact_rate'] ?? 0)) * 100, 1) }}%</p>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Ativacao em improving</p>
+                <p class="mt-2 text-3xl font-semibold text-emerald-950">{{ $impactImproving['activation_events'] ?? 0 }}</p>
+                <div class="mt-3 space-y-1 text-sm text-emerald-900">
+                    <p>Delta medio best fitness {{ number_format((float) ($impactImproving['avg_best_fitness_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio avg fitness {{ number_format((float) ($impactImproving['avg_avg_fitness_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio basin lock {{ number_format((float) ($impactImproving['avg_basin_lock_delta'] ?? 0), 4) }}</p>
+                    <p>Delta medio depth {{ number_format((float) ($impactImproving['avg_depth_delta'] ?? 0), 4) }}</p>
+                    <p>Taxa de impacto positivo {{ number_format(((float) ($impactImproving['positive_impact_rate'] ?? 0)) * 100, 1) }}%</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto border-t border-slate-200">
+            @if (empty($activationImpactReport['events']))
+                <p class="px-6 py-8 text-sm text-slate-500">Nenhum evento com janela temporal completa foi consolidado ainda.</p>
+            @else
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        <tr>
+                            <th class="px-4 py-3">Execucao</th>
+                            <th class="px-4 py-3">Policy</th>
+                            <th class="px-4 py-3">Trend</th>
+                            <th class="px-4 py-3">Janela</th>
+                            <th class="px-4 py-3">Delta fitness</th>
+                            <th class="px-4 py-3">Delta landscape</th>
+                            <th class="px-4 py-3">Impacto</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        @foreach (($activationImpactReport['events'] ?? []) as $eventRow)
+                            @php
+                                $impactLabel = $eventRow['impact_label'] ?? 'mixed';
+                            @endphp
+                            <tr class="align-top">
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="font-semibold text-slate-950">#{{ $eventRow['execution_id'] ?? '-' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">g{{ $eventRow['activation_generation'] ?? '-' }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="font-medium text-slate-900">{{ $eventRow['policy'] ?? '-' }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p class="font-medium text-slate-900">{{ $eventRow['trend_headline'] ?? 'Tendencia indefinida' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">{{ $eventRow['trend_direction'] ?? 'indeterminate' }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>antes g{{ $eventRow['before_generations']['from'] ?? '-' }}-{{ $eventRow['before_generations']['to'] ?? '-' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">depois g{{ $eventRow['after_generations']['from'] ?? '-' }}-{{ $eventRow['after_generations']['to'] ?? '-' }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>best {{ number_format((float) ($eventRow['best_fitness_delta'] ?? 0), 4) }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">avg {{ number_format((float) ($eventRow['avg_fitness_delta'] ?? 0), 4) }}</p>
+                                </td>
+                                <td class="px-4 py-4 text-slate-600">
+                                    <p>bLock {{ number_format((float) ($eventRow['basin_lock_delta'] ?? 0), 4) }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        depth {{ number_format((float) ($eventRow['depth_delta'] ?? 0), 4) }}
+                                        · dBest {{ number_format((float) ($eventRow['best_delta_window_delta'] ?? 0), 4) }}
+                                        · turnover {{ number_format((float) ($eventRow['population_turnover_delta'] ?? 0), 4) }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span @class([
+                                        'inline-flex rounded-full px-3 py-1 text-xs font-semibold',
+                                        'bg-emerald-100 text-emerald-800' => $impactLabel === 'positive',
+                                        'bg-amber-100 text-amber-800' => $impactLabel === 'mixed',
+                                        'bg-rose-100 text-rose-800' => $impactLabel === 'negative',
+                                    ])>
+                                        {{ $impactLabel }}
+                                    </span>
                                 </td>
                             </tr>
                         @endforeach
@@ -355,6 +584,8 @@
                                 <th class="px-4 py-3">Readiness</th>
                                 <th class="px-4 py-3">Evidence</th>
                                 <th class="px-4 py-3">Gate</th>
+                                <th class="px-4 py-3">Trend</th>
+                                <th class="px-4 py-3">ALNS real</th>
                                 <th class="px-4 py-3">Best/Ultimo outcome</th>
                                 <th class="px-4 py-3">Bloqueios</th>
                                 <th class="px-4 py-3">Acoes</th>
@@ -370,6 +601,7 @@
                                     $hiddenBlockingReasons = max(count($executionRow['blocking_reasons'] ?? []) - count($blockingReasons), 0);
                                     $bestPolicySuccess = $executionRow['best_policy_by_success'] ?? null;
                                     $candidatePolicy = $executionRow['candidate_policy'] ?? null;
+                                    $episodeTrend = $executionRow['episode_trend'] ?? null;
                                 @endphp
                                 <tr class="align-top">
                                     <td class="px-4 py-4">
@@ -423,6 +655,21 @@
                                         @else
                                             <p class="font-medium text-slate-700">{{ $candidatePolicy ?? '-' }}</p>
                                             <p class="mt-1 text-xs text-slate-500">Ainda bloqueado para ativacao real</p>
+                                        @endif
+                                    </td>
+
+                                    <td class="px-4 py-4 text-slate-600">
+                                        <p class="font-medium text-slate-900">{{ $episodeTrend['headline'] ?? 'Tendencia indefinida' }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">{{ $episodeTrend['detail'] ?? 'Sem sequencia suficiente para comparacao.' }}</p>
+                                    </td>
+
+                                    <td class="px-4 py-4 text-slate-600">
+                                        @if (($executionRow['alns_real_activation_applied'] ?? false) === true)
+                                            <p class="font-medium text-emerald-800">{{ $executionRow['alns_real_activation_policy'] ?? 'ALNS live' }}</p>
+                                            <p class="mt-1 text-xs text-emerald-700">Ativacao adaptativa aplicada</p>
+                                        @else
+                                            <p class="font-medium text-slate-700">Nao aplicado</p>
+                                            <p class="mt-1 text-xs text-slate-500">A execucao nao entrou em ativacao real do ALNS</p>
                                         @endif
                                     </td>
 

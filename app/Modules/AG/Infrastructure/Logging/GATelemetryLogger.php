@@ -112,9 +112,26 @@ final class GATelemetryLogger
             'landscape_episode_duration' => isset($metrics['landscape_observation']['current_episode']['duration'])
                 ? (int) $metrics['landscape_observation']['current_episode']['duration']
                 : null,
+            'landscape_episode_start_generation' => isset($metrics['landscape_observation']['current_episode']['start_generation'])
+                ? (int) $metrics['landscape_observation']['current_episode']['start_generation']
+                : null,
+            'landscape_episode_last_generation' => isset($metrics['landscape_observation']['current_episode']['last_generation'])
+                ? (int) $metrics['landscape_observation']['current_episode']['last_generation']
+                : null,
+            'landscape_episode_peak_confidence' => isset($metrics['landscape_observation']['current_episode']['peak_confidence'])
+                ? round((float) $metrics['landscape_observation']['current_episode']['peak_confidence'], 6)
+                : null,
             'landscape_episode_peak_depth_score' => isset($metrics['landscape_observation']['current_episode']['peak_depth_score'])
                 ? round((float) $metrics['landscape_observation']['current_episode']['peak_depth_score'], 6)
                 : null,
+            'landscape_previous_episode_phenomenon' => $metrics['landscape_observation']['previous_episode']['phenomenon'] ?? null,
+            'landscape_previous_episode_duration' => isset($metrics['landscape_observation']['previous_episode']['duration'])
+                ? (int) $metrics['landscape_observation']['previous_episode']['duration']
+                : null,
+            'landscape_previous_episode_exit_mode' => $metrics['landscape_observation']['previous_episode']['exit_mode'] ?? null,
+            'landscape_episode_trend_direction' => $metrics['landscape_observation']['episode_trend']['direction'] ?? null,
+            'landscape_episode_trend_strength' => $metrics['landscape_observation']['episode_trend']['strength'] ?? null,
+            'landscape_episode_trend_headline' => $metrics['landscape_observation']['episode_trend']['headline'] ?? null,
             'landscape_basin_lock_confidence' => isset($metrics['landscape_observation']['basin_of_attraction_lock_confidence'])
                 ? round((float) $metrics['landscape_observation']['basin_of_attraction_lock_confidence'], 6)
                 : null,
@@ -129,6 +146,65 @@ final class GATelemetryLogger
             'search_response_activate_alns' => isset($metrics['landscape_observation']['search_response_simulation']['activate_alns'])
                 ? (bool) $metrics['landscape_observation']['search_response_simulation']['activate_alns']
                 : null,
+            'search_response_mutation_multiplier' => isset($metrics['landscape_observation']['search_response_simulation']['mutation_multiplier'])
+                ? round((float) $metrics['landscape_observation']['search_response_simulation']['mutation_multiplier'], 6)
+                : null,
+            'search_response_selection_pressure_multiplier' => isset($metrics['landscape_observation']['search_response_simulation']['selection_pressure_multiplier'])
+                ? round((float) $metrics['landscape_observation']['search_response_simulation']['selection_pressure_multiplier'], 6)
+                : null,
+            'selection_pressure_supported' => isset($metrics['landscape_observation']['selection_pressure']['supported'])
+                ? (bool) $metrics['landscape_observation']['selection_pressure']['supported']
+                : (isset($metrics['selection_pressure_supported']) ? (bool) $metrics['selection_pressure_supported'] : null),
+            'selection_pressure_source' => $metrics['landscape_observation']['selection_pressure']['source']
+                ?? ($metrics['selection_pressure_source'] ?? null),
+            'selection_pressure_state' => $metrics['landscape_observation']['selection_pressure']['state']
+                ?? ($metrics['selection_pressure_state'] ?? null),
+            'selection_pressure_base_multiplier' => isset($metrics['landscape_observation']['selection_pressure']['base_multiplier'])
+                ? round((float) $metrics['landscape_observation']['selection_pressure']['base_multiplier'], 6)
+                : (isset($metrics['selection_pressure_base_multiplier']) ? round((float) $metrics['selection_pressure_base_multiplier'], 6) : null),
+            'selection_pressure_effective_multiplier' => isset($metrics['landscape_observation']['selection_pressure']['effective_multiplier'])
+                ? round((float) $metrics['landscape_observation']['selection_pressure']['effective_multiplier'], 6)
+                : (isset($metrics['selection_pressure_effective_multiplier']) ? round((float) $metrics['selection_pressure_effective_multiplier'], 6) : null),
+            'selection_pressure_base_tournament_size' => isset($metrics['landscape_observation']['selection_pressure']['base_tournament_size'])
+                ? (int) $metrics['landscape_observation']['selection_pressure']['base_tournament_size']
+                : (isset($metrics['selection_pressure_base_tournament_size']) ? (int) $metrics['selection_pressure_base_tournament_size'] : null),
+            'selection_pressure_effective_tournament_size' => isset($metrics['landscape_observation']['selection_pressure']['effective_tournament_size'])
+                ? (int) $metrics['landscape_observation']['selection_pressure']['effective_tournament_size']
+                : (isset($metrics['selection_pressure_effective_tournament_size']) ? (int) $metrics['selection_pressure_effective_tournament_size'] : null),
+            'selection_pressure_real_reduction_applied' => isset($metrics['landscape_observation']['selection_pressure']['real_reduction']['applied'])
+                ? (bool) $metrics['landscape_observation']['selection_pressure']['real_reduction']['applied']
+                : (isset($metrics['selection_pressure_real_applied']) ? (bool) $metrics['selection_pressure_real_applied'] : null),
+            'selection_pressure_real_reduction_policy' => $metrics['landscape_observation']['selection_pressure']['real_reduction']['policy']
+                ?? ($metrics['selection_pressure_real_policy'] ?? null),
+            'selection_pressure_reduction_active' => isset($metrics['landscape_observation']['selection_pressure']['reduction_active'])
+                ? (bool) $metrics['landscape_observation']['selection_pressure']['reduction_active']
+                : (isset($metrics['selection_pressure_reduction_active']) ? (bool) $metrics['selection_pressure_reduction_active'] : null),
+            'selection_pressure_reduction_multiplier' => isset($metrics['landscape_observation']['selection_pressure']['reduction_multiplier'])
+                ? round((float) $metrics['landscape_observation']['selection_pressure']['reduction_multiplier'], 6)
+                : (isset($metrics['selection_pressure_reduction_multiplier']) ? round((float) $metrics['selection_pressure_reduction_multiplier'], 6) : null),
+            'mutation_shock_enabled' => isset($metrics['landscape_observation']['mutation_shock']['enabled'])
+                ? (bool) $metrics['landscape_observation']['mutation_shock']['enabled']
+                : (isset($metrics['mutation_shock_enabled']) ? (bool) $metrics['mutation_shock_enabled'] : null),
+            'mutation_shock_requested' => isset($metrics['landscape_observation']['mutation_shock']['requested'])
+                ? (bool) $metrics['landscape_observation']['mutation_shock']['requested']
+                : (isset($metrics['mutation_shock_requested']) ? (bool) $metrics['mutation_shock_requested'] : null),
+            'mutation_shock_applied' => isset($metrics['landscape_observation']['mutation_shock']['applied'])
+                ? (bool) $metrics['landscape_observation']['mutation_shock']['applied']
+                : (isset($metrics['mutation_shock_applied']) ? (bool) $metrics['mutation_shock_applied'] : null),
+            'mutation_shock_active' => isset($metrics['landscape_observation']['mutation_shock']['active'])
+                ? (bool) $metrics['landscape_observation']['mutation_shock']['active']
+                : (isset($metrics['mutation_shock_active']) ? (bool) $metrics['mutation_shock_active'] : null),
+            'mutation_shock_policy' => $metrics['landscape_observation']['mutation_shock']['policy']
+                ?? ($metrics['mutation_shock_policy'] ?? null),
+            'mutation_shock_multiplier' => isset($metrics['landscape_observation']['mutation_shock']['multiplier'])
+                ? round((float) $metrics['landscape_observation']['mutation_shock']['multiplier'], 6)
+                : (isset($metrics['mutation_shock_multiplier']) ? round((float) $metrics['mutation_shock_multiplier'], 6) : null),
+            'mutation_shock_effective_rate' => isset($metrics['landscape_observation']['mutation_shock']['effective_rate'])
+                ? round((float) $metrics['landscape_observation']['mutation_shock']['effective_rate'], 6)
+                : (isset($metrics['mutation_rate_effective']) ? round((float) $metrics['mutation_rate_effective'], 6) : null),
+            'mutation_shock_remaining_generations_after' => isset($metrics['landscape_observation']['mutation_shock']['remaining_generations_after'])
+                ? (int) $metrics['landscape_observation']['mutation_shock']['remaining_generations_after']
+                : (isset($metrics['mutation_shock_remaining_generations_after']) ? (int) $metrics['mutation_shock_remaining_generations_after'] : null),
             'search_response_audit_horizon' => isset($metrics['landscape_observation']['search_response_audit']['evaluation_horizon_generations'])
                 ? (int) $metrics['landscape_observation']['search_response_audit']['evaluation_horizon_generations']
                 : null,

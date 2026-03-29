@@ -5,6 +5,7 @@ namespace App\Modules\AG\UI\Livewire;
 use App\Jobs\GerarHorarioJob;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\Domain\Landscape\SearchResponseActivationImpactReportBuilder;
 use App\Modules\AG\Domain\Landscape\SearchResponseGlobalPolicyReadinessReportBuilder;
 use App\Modules\AG\Domain\Landscape\SearchResponseHistoricalReadinessReportBuilder;
 use Livewire\Attributes\Layout;
@@ -65,7 +66,12 @@ class ExecutionCenter extends Component
     public function getExecutionsProperty()
     {
         return ScheduleExecution::where('horario_id', $this->horario->id)
-            ->with('latestMetric')
+            ->with([
+                'latestMetric',
+                'metrics' => static fn ($query) => $query
+                    ->select(['id', 'execution_id', 'generation', 'best_fitness', 'avg_fitness', 'landscape_observation'])
+                    ->orderBy('generation'),
+            ])
             ->latest()
             ->limit(20)
             ->get();
@@ -85,12 +91,20 @@ class ExecutionCenter extends Component
             ->toArray();
     }
 
+    public function getActivationImpactReportProperty(): array
+    {
+        return (new SearchResponseActivationImpactReportBuilder)
+            ->build($this->executions, windowSize: 2)
+            ->toArray();
+    }
+
     public function render()
     {
         return view('modules.ag.livewire.algoritmo.execution-center', [
             'executions' => $this->executions,
             'historicalReadinessReport' => $this->historicalReadinessReport,
             'globalPolicyReadinessReport' => $this->globalPolicyReadinessReport,
+            'activationImpactReport' => $this->activationImpactReport,
         ]);
     }
 }

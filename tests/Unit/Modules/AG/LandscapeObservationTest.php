@@ -118,7 +118,9 @@ it('observes a deep valley after persistent plateau and convergence pressure', f
         ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeTrue()
         ->and($observation->searchResponseAudit)->toBeArray()
         ->and($observation->searchResponseAudit['would_trigger'] ?? null)->toBeTrue()
-        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBe(0.03);
+        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBe(0.03)
+        ->and($observation->toArray()['episode_trend']['direction'] ?? null)->toBe('worsening')
+        ->and($observation->toArray()['episode_trend']['strength'] ?? null)->toBe('moderate');
 });
 
 it('closes the previous episode with recovered exit mode when the landscape returns to neutral', function (): void {
@@ -187,7 +189,11 @@ it('closes the previous episode with recovered exit mode when the landscape retu
         ->and($observation->searchResponseSimulation['would_escalate'] ?? null)->toBeFalse()
         ->and($observation->searchResponseAudit)->toBeArray()
         ->and($observation->searchResponseAudit['would_trigger'] ?? null)->toBeFalse()
-        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBeNull();
+        ->and($observation->searchResponseAudit['target_best_delta_window'] ?? null)->toBeNull()
+        ->and($observation->toArray()['recent_episode_history'] ?? null)->toBeArray()
+        ->and($observation->toArray()['recent_episode_history'][0]['phenomenon'] ?? null)->toBe('local_minimum')
+        ->and($observation->toArray()['recent_episode_history'][0]['exit_mode'] ?? null)->toBe('recovered')
+        ->and($observation->toArray()['episode_trend']['direction'] ?? null)->toBe('indeterminate');
 });
 
 it('publishes a shadow outcome once the simulated response horizon expires', function (): void {

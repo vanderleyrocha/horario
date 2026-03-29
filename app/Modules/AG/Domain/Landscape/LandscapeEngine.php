@@ -143,6 +143,12 @@ final class LandscapeEngine
         $this->lastObservation = $this->lastObservation->withEpisodeContext(
             currentEpisode: $currentEpisode->toArray(),
             previousEpisode: $this->memory->lastCompletedEpisode()?->toArray(),
+            recentEpisodeHistory: $this->memory->recentCompletedEpisodes(),
+            episodeTrend: $this->resolveEpisodeTrend(
+                recentEpisodeHistory: $this->memory->recentCompletedEpisodes(),
+                currentEpisode: $currentEpisode->toArray(),
+                previousEpisode: $this->memory->lastCompletedEpisode()?->toArray(),
+            ),
             basinLockConfidence: $this->lastObservation->basinLockConfidence,
             basinLockDetected: $this->lastObservation->basinLockDetected
         );
@@ -203,5 +209,113 @@ final class LandscapeEngine
         );
 
         return $state;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $recentEpisodeHistory
+     * @param  array<string, mixed>|null  $currentEpisode
+     * @param  array<string, mixed>|null  $previousEpisode
+     * @return array<string, mixed>
+     */
+    private function resolveEpisodeTrend(array $recentEpisodeHistory, ?array $currentEpisode, ?array $previousEpisode): array
+    {
+        $completedHistory = array_values(array_filter(
+            $recentEpisodeHistory,
+            static fn (mixed $episode): bool => is_array($episode)
+        ));
+
+        $trendSequence = array_map(
+            static fn (array $episode): string => (string) ($episode['phenomenon'] ?? 'neutral'),
+            $completedHistory
+        );
+
+        $currentPhenomenon = (string) ($currentEpisode['phenomenon'] ?? '');
+        $previousPhenomenon = (string) ($previousEpisode['phenomenon'] ?? '');
+        $previousExitMode = (string) ($previousEpisode['exit_mode'] ?? '');
+
+        if ($currentPhenomenon !== '' && $currentPhenomenon !== LandscapePhenomenon::Neutral->value) {
+            $trendSequence[] = $currentPhenomenon;
+        }
+
+        $normalizedSequence = array_slice($trendSequence, -3);
+        $severitySequence = array_map(
+            fn (string $phenomenon): int => $this->episodeTrendSeverity($phenomenon),
+            $normalizedSequence
+        );
+
+        if (
+            count($normalizedSequence) >= 3 &&
+            $severitySequence[0] < $severitySequence[1] &&
+            $severitySequence[1] < $severitySequence[2]
+        ) {
+            return [
+                'direction' => 'worsening',
+                'strength' => 'strong',
+                'headline' => 'Tendencia de piora',
+                'detail' => 'Sequencia recente em agravamento do landscape.',
+                'sequence' => $normalizedSequence,
+            ];
+        }
+
+        if (
+            count($completedHistory) >= 2 &&
+            $previousPhenomenon !== '' &&
+            $previousExitMode === LandscapeEpisodeExitMode::Recovered->value
+        ) {
+            $recoveringSequence = [
+                (string) ($completedHistory[count($completedHistory) - 2]['phenomenon'] ?? ''),
+                $previousPhenomenon,
+                'recovered',
+            ];
+
+            return [
+                'direction' => 'improving',
+                'strength' => 'strong',
+                'headline' => 'Tendencia de melhora',
+                'detail' => 'Sequencia recente em recuperacao do landscape.',
+                'sequence' => array_values(array_filter($recoveringSequence, static fn (string $item): bool => $item !== '')),
+            ];
+        }
+
+        $lastSeverity = $severitySequence === [] ? null : $severitySequence[array_key_last($severitySequence)];
+        $previousSeverity = count($severitySequence) < 2 ? null : $severitySequence[count($severitySequence) - 2];
+
+        if ($lastSeverity !== null && $previousSeverity !== null && $lastSeverity > $previousSeverity) {
+            return [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'A sequencia recente aumentou a intensidade do landscape.',
+                'sequence' => $normalizedSequence,
+            ];
+        }
+
+        if ($lastSeverity !== null && $previousSeverity !== null && $lastSeverity < $previousSeverity) {
+            return [
+                'direction' => 'improving',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de melhora',
+                'detail' => 'A sequencia recente reduziu a intensidade do landscape.',
+                'sequence' => $normalizedSequence,
+            ];
+        }
+
+        return [
+            'direction' => 'indeterminate',
+            'strength' => 'none',
+            'headline' => 'Tendencia indefinida',
+            'detail' => 'Ainda nao ha sequencia suficiente para inferir direcao entre episodios.',
+            'sequence' => $normalizedSequence,
+        ];
+    }
+
+    private function episodeTrendSeverity(string $phenomenon): int
+    {
+        return match ($phenomenon) {
+            LandscapePhenomenon::Plateau->value => 1,
+            LandscapePhenomenon::LocalMinimum->value => 2,
+            LandscapePhenomenon::DeepValley->value => 3,
+            default => 0,
+        };
     }
 }

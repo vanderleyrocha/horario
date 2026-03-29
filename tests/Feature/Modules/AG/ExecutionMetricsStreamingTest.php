@@ -76,6 +76,28 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'active' => false,
                 'exit_mode' => 'phenomenon_shift',
             ],
+            'recent_episode_history' => [
+                [
+                    'phenomenon' => 'plateau',
+                    'start_generation' => 1,
+                    'last_generation' => 2,
+                    'duration' => 2,
+                    'peak_confidence' => 0.54,
+                    'peak_depth_score' => 0.50,
+                    'avg_population_turnover' => 0.34,
+                    'avg_elite_similarity' => 0.61,
+                    'stable_best_signature_rate' => 0.5,
+                    'active' => false,
+                    'exit_mode' => 'phenomenon_shift',
+                ],
+            ],
+            'episode_trend' => [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'A sequencia recente aumentou a intensidade do landscape.',
+                'sequence' => ['plateau', 'local_minimum'],
+            ],
             'basin_of_attraction_lock_confidence' => 0.77,
             'basin_of_attraction_lock_detected' => true,
             'search_response_simulation' => [
@@ -88,6 +110,35 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'selection_pressure_multiplier' => 0.65,
                 'diversification_boost' => 0.85,
                 'reason' => 'Persistent basin-of-attraction lock with stable elite signature and low turnover.',
+            ],
+            'selection_pressure' => [
+                'supported' => true,
+                'source' => 'activation_gate',
+                'landscape_state' => 'premature_convergence',
+                'base_multiplier' => 0.8,
+                'effective_multiplier' => 0.65,
+                'state' => 'reduced',
+                'base_tournament_size' => 3,
+                'effective_tournament_size' => 2,
+                'real_reduction' => [
+                    'enabled' => true,
+                    'requested' => true,
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                    'mode' => 'opt_in',
+                    'cooldown_generations' => 2,
+                    'duration_generations' => 2,
+                    'multiplier' => 0.65,
+                    'effective_from_generation' => 6,
+                    'reason' => 'Temporary selection pressure reduction armed via SearchResponseActivationGate.',
+                ],
+                'reduction_active' => true,
+                'reduction_multiplier' => 0.65,
+                'reduction_policy' => 'basin_lock_escape',
+                'reduction_reason' => 'Temporary selection pressure reduction armed via SearchResponseActivationGate.',
+                'reduction_activated_generation' => 5,
+                'remaining_generations_before' => 2,
+                'remaining_generations_after' => 1,
             ],
             'search_response_audit' => [
                 'policy' => 'basin_lock_escape',
@@ -338,6 +389,7 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['best_signature_changed'] ?? null)->toBeFalse()
         ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['episode_trend']['direction'] ?? null)->toBe('worsening')
         ->and($cachedMetric['landscape_observation']['alns_trigger']['effective_frequency'] ?? null)->toBe(3)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['base_cooldown_generations'] ?? null)->toBe(1)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['cooldown_brake']['applied'] ?? null)->toBeTrue()
@@ -350,6 +402,9 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['alns_trigger']['response']['destroy_ratio'] ?? null)->toBe(0.47)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['response']['recent_success_rate'] ?? null)->toBe(0.67)
         ->and($cachedMetric['landscape_observation']['search_response_simulation']['policy'] ?? null)->toBe('basin_lock_escape')
+        ->and($cachedMetric['landscape_observation']['selection_pressure']['effective_multiplier'] ?? null)->toBe(0.65)
+        ->and($cachedMetric['landscape_observation']['selection_pressure']['effective_tournament_size'] ?? null)->toBe(2)
+        ->and($cachedMetric['landscape_observation']['selection_pressure']['real_reduction']['applied'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['search_response_audit']['target_population_turnover'] ?? null)->toBe(0.45)
         ->and($cachedMetric['landscape_observation']['search_response_outcome']['progress_score'] ?? null)->toBe(0.67)
         ->and($cachedMetric['landscape_observation']['search_response_pending_audits'] ?? null)->toBe(2)
@@ -363,8 +418,12 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['best_delta_window'] ?? null)->toBe(-0.015)
         ->and($storedObservation['avg_delta_window'] ?? null)->toBe(-0.008)
         ->and($storedObservation['previous_episode']['exit_mode'] ?? null)->toBe('phenomenon_shift')
+        ->and($storedObservation['episode_trend']['headline'] ?? null)->toBe('Sinal de piora')
         ->and($storedObservation['basin_of_attraction_lock_confidence'] ?? null)->toBe(0.77)
         ->and($storedObservation['search_response_simulation']['activate_alns'] ?? null)->toBeTrue()
+        ->and($storedObservation['selection_pressure']['supported'] ?? null)->toBeTrue()
+        ->and($storedObservation['selection_pressure']['source'] ?? null)->toBe('activation_gate')
+        ->and($storedObservation['selection_pressure']['real_reduction']['policy'] ?? null)->toBe('basin_lock_escape')
         ->and($storedObservation['search_response_audit']['best_delta_window_gap'] ?? null)->toBe(0.045)
         ->and($storedObservation['search_response_audit']['evaluation_horizon_generations'] ?? null)->toBe(6)
         ->and($storedObservation['search_response_outcome']['resolved_generation'] ?? null)->toBe(11)

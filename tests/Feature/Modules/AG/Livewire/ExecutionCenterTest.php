@@ -1,9 +1,9 @@
 <?php
 
-use App\Modules\AG\UI\Livewire\ExecutionCenter;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
 use App\Models\ScheduleGenerationMetric;
+use App\Modules\AG\UI\Livewire\ExecutionCenter;
 use Livewire\Livewire;
 
 it('exibe o readiness historico entre execucoes no execution center', function (): void {
@@ -44,6 +44,19 @@ it('exibe o readiness historico entre execucoes no execution center', function (
             'elite_similarity' => 0.87,
             'best_delta_window' => 0.02,
             'basin_of_attraction_lock_confidence' => 0.91,
+            'episode_trend' => [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'A sequencia recente aumentou a intensidade do landscape.',
+                'sequence' => ['plateau', 'local_minimum'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                ],
+            ],
             'search_response_readiness_dashboard' => [
                 'status' => 'candidate_ready',
                 'headline' => 'Diagnostic candidate ready: basin_lock_escape',
@@ -120,6 +133,19 @@ it('exibe o readiness historico entre execucoes no execution center', function (
             'elite_similarity' => 0.82,
             'best_delta_window' => 0.03,
             'basin_of_attraction_lock_confidence' => 0.78,
+            'episode_trend' => [
+                'direction' => 'improving',
+                'strength' => 'strong',
+                'headline' => 'Tendencia de melhora',
+                'detail' => 'Sequencia recente em recuperacao do landscape.',
+                'sequence' => ['deep_valley', 'local_minimum', 'recovered'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => false,
+                    'policy' => null,
+                ],
+            ],
             'search_response_readiness_dashboard' => [
                 'status' => 'collecting_evidence',
                 'headline' => 'Collecting evidence before any real activation',
@@ -165,6 +191,139 @@ it('exibe o readiness historico entre execucoes no execution center', function (
         ],
     ]);
 
+    $impactExecution = ScheduleExecution::query()->create([
+        'horario_id' => $horario->id,
+        'status' => 'finished',
+        'start_time' => now()->subMinutes(30),
+        'end_time' => now()->subMinutes(26),
+        'generations' => 5,
+        'best_fitness' => 0.58,
+    ]);
+
+    ScheduleGenerationMetric::query()->create([
+        'execution_id' => $impactExecution->id,
+        'generation' => 1,
+        'best_fitness' => 0.40,
+        'avg_fitness' => 0.35,
+        'variance' => 0.03,
+        'diversity' => 0.22,
+        'entropy' => 0.48,
+        'mutation_rate' => 0.2,
+        'crossover_rate' => 0.8,
+        'operator_used' => 'epsilon_greedy',
+        'operator_reward' => 0.01,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'local_minimum',
+        'stagnation' => 2,
+        'landscape_observation' => [
+            'basin_of_attraction_lock_confidence' => 0.92,
+            'depth_score' => 0.84,
+            'best_delta_window' => 0.01,
+            'population_turnover' => 0.09,
+        ],
+    ]);
+
+    ScheduleGenerationMetric::query()->create([
+        'execution_id' => $impactExecution->id,
+        'generation' => 2,
+        'best_fitness' => 0.42,
+        'avg_fitness' => 0.37,
+        'variance' => 0.03,
+        'diversity' => 0.21,
+        'entropy' => 0.47,
+        'mutation_rate' => 0.2,
+        'crossover_rate' => 0.8,
+        'operator_used' => 'epsilon_greedy',
+        'operator_reward' => 0.01,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'local_minimum',
+        'stagnation' => 2,
+        'landscape_observation' => [
+            'basin_of_attraction_lock_confidence' => 0.90,
+            'depth_score' => 0.80,
+            'best_delta_window' => 0.02,
+            'population_turnover' => 0.10,
+        ],
+    ]);
+
+    ScheduleGenerationMetric::query()->create([
+        'execution_id' => $impactExecution->id,
+        'generation' => 3,
+        'best_fitness' => 0.44,
+        'avg_fitness' => 0.39,
+        'variance' => 0.03,
+        'diversity' => 0.2,
+        'entropy' => 0.46,
+        'mutation_rate' => 0.2,
+        'crossover_rate' => 0.8,
+        'operator_used' => 'epsilon_greedy',
+        'operator_reward' => 0.01,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'deep_valley',
+        'stagnation' => 3,
+        'landscape_observation' => [
+            'episode_trend' => [
+                'direction' => 'worsening',
+                'strength' => 'moderate',
+                'headline' => 'Sinal de piora',
+                'detail' => 'Ativacao ocorreu ainda em fase de piora.',
+                'sequence' => ['plateau', 'local_minimum'],
+            ],
+            'alns_trigger' => [
+                'real_activation' => [
+                    'applied' => true,
+                    'policy' => 'basin_lock_escape',
+                ],
+            ],
+        ],
+    ]);
+
+    ScheduleGenerationMetric::query()->create([
+        'execution_id' => $impactExecution->id,
+        'generation' => 4,
+        'best_fitness' => 0.55,
+        'avg_fitness' => 0.48,
+        'variance' => 0.02,
+        'diversity' => 0.26,
+        'entropy' => 0.52,
+        'mutation_rate' => 0.2,
+        'crossover_rate' => 0.8,
+        'operator_used' => 'epsilon_greedy',
+        'operator_reward' => 0.05,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'local_minimum',
+        'stagnation' => 1,
+        'landscape_observation' => [
+            'basin_of_attraction_lock_confidence' => 0.70,
+            'depth_score' => 0.56,
+            'best_delta_window' => 0.08,
+            'population_turnover' => 0.24,
+        ],
+    ]);
+
+    ScheduleGenerationMetric::query()->create([
+        'execution_id' => $impactExecution->id,
+        'generation' => 5,
+        'best_fitness' => 0.58,
+        'avg_fitness' => 0.50,
+        'variance' => 0.02,
+        'diversity' => 0.28,
+        'entropy' => 0.54,
+        'mutation_rate' => 0.2,
+        'crossover_rate' => 0.8,
+        'operator_used' => 'epsilon_greedy',
+        'operator_reward' => 0.05,
+        'landscape_state' => 'stagnation',
+        'landscape_phenomenon' => 'recovered',
+        'stagnation' => 0,
+        'landscape_observation' => [
+            'basin_of_attraction_lock_confidence' => 0.62,
+            'depth_score' => 0.48,
+            'best_delta_window' => 0.10,
+            'population_turnover' => 0.26,
+        ],
+    ]);
+
     Livewire::test(ExecutionCenter::class, ['horario' => $horario])
         ->assertSee('Readiness Historico')
         ->assertSee('Comparacao entre execucoes')
@@ -175,6 +334,21 @@ it('exibe o readiness historico entre execucoes no execution center', function (
         ->assertSee('Mais perto do gate')
         ->assertSee('stagnation')
         ->assertSee('deep_valley')
+        ->assertSee('Execucoes em worsening')
+        ->assertSee('Execucoes em improving')
+        ->assertSee('Near gate em worsening')
+        ->assertSee('Near gate em improving')
+        ->assertSee('ALNS real em worsening')
+        ->assertSee('ALNS real em improving')
+        ->assertSee('Melhor contexto para ativacao')
+        ->assertSee('Impacto temporal da ativacao real')
+        ->assertSee('Ativacoes analisadas')
+        ->assertSee('Melhor contexto temporal')
+        ->assertSee('Delta medio best fitness')
+        ->assertSee('Impacto')
+        ->assertSee('Sinal de piora')
+        ->assertSee('Tendencia de melhora')
+        ->assertSee('Ativacao adaptativa aplicada')
         ->assertSee('Need more resolved shadow outcomes.')
         ->assertSee('Abrir Dashboard')
         ->assertSee('Cancelar');

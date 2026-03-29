@@ -32,6 +32,24 @@ final class SearchResponseHistoricalReadinessReportBuilder
             $executionRows,
             static fn (array $row): bool => (bool) ($row['candidate_eligible'] ?? false)
         ));
+        $worseningExecutions = count(array_filter(
+            $executionRows,
+            static fn (array $row): bool => ($row['episode_trend']['direction'] ?? null) === 'worsening'
+        ));
+        $improvingExecutions = count(array_filter(
+            $executionRows,
+            static fn (array $row): bool => ($row['episode_trend']['direction'] ?? null) === 'improving'
+        ));
+        $realActivationWhileWorsening = count(array_filter(
+            $executionRows,
+            static fn (array $row): bool => ($row['episode_trend']['direction'] ?? null) === 'worsening'
+                && ($row['alns_real_activation_applied'] ?? false) === true
+        ));
+        $realActivationWhileImproving = count(array_filter(
+            $executionRows,
+            static fn (array $row): bool => ($row['episode_trend']['direction'] ?? null) === 'improving'
+                && ($row['alns_real_activation_applied'] ?? false) === true
+        ));
 
         $policyRows = $this->finalizePolicyRows($policyAggregates);
 
@@ -41,6 +59,10 @@ final class SearchResponseHistoricalReadinessReportBuilder
             comparedExecutionsCount: $comparedExecutionsCount,
             executionsWithReadiness: $executionsWithReadiness,
             candidateReadyExecutions: $candidateReadyExecutions,
+            worseningExecutions: $worseningExecutions,
+            improvingExecutions: $improvingExecutions,
+            realActivationWhileWorsening: $realActivationWhileWorsening,
+            realActivationWhileImproving: $realActivationWhileImproving,
             bestExecutionBySuccess: $this->bestExecutionBySuccess($executionRows),
             bestExecutionByProgress: $this->bestExecutionByProgress($executionRows),
             policyRows: $policyRows,
@@ -74,6 +96,12 @@ final class SearchResponseHistoricalReadinessReportBuilder
         $pendingAudits = (int) ($readiness['pending_audits'] ?? ($observation['search_response_pending_audits'] ?? 0));
         $candidateEligible = (bool) ($gate['eligible_as_candidate'] ?? false);
         $candidatePolicy = $this->nullableString($gate['candidate_policy'] ?? null);
+        $episodeTrend = is_array($observation['episode_trend'] ?? null)
+            ? $observation['episode_trend']
+            : [];
+        $realActivation = is_array($observation['alns_trigger']['real_activation'] ?? null)
+            ? $observation['alns_trigger']['real_activation']
+            : [];
         $readinessStatus = $this->nullableString($readiness['status'] ?? null)
             ?? ($candidateEligible ? 'candidate_ready' : ($resolvedEvidenceCount > 0 || $pendingAudits > 0 ? 'collecting_evidence' : 'idle'));
         $readinessHeadline = $this->nullableString($readiness['headline'] ?? null)
@@ -93,6 +121,9 @@ final class SearchResponseHistoricalReadinessReportBuilder
             'pending_audits' => $pendingAudits,
             'candidate_policy' => $candidatePolicy,
             'candidate_eligible' => $candidateEligible,
+            'episode_trend' => $episodeTrend !== [] ? $episodeTrend : null,
+            'alns_real_activation_applied' => (bool) ($realActivation['applied'] ?? false),
+            'alns_real_activation_policy' => $this->nullableString($realActivation['policy'] ?? null),
             'best_policy_by_success' => $bestBySuccess,
             'best_policy_by_progress' => $bestByProgress,
             'latest_outcome' => $latestOutcome !== [] ? $latestOutcome : null,
@@ -125,6 +156,8 @@ final class SearchResponseHistoricalReadinessReportBuilder
                 'policy' => $policy,
                 'executions_seen' => 0,
                 'candidate_ready_executions' => 0,
+                'worsening_executions' => 0,
+                'improving_executions' => 0,
                 'best_by_success_count' => 0,
                 'best_by_progress_count' => 0,
                 'resolved_outcomes_total' => 0,
@@ -149,6 +182,14 @@ final class SearchResponseHistoricalReadinessReportBuilder
 
             if (($executionRow['candidate_eligible'] ?? false) === true && ($executionRow['candidate_policy'] ?? null) === $policy) {
                 $bucket['candidate_ready_executions']++;
+            }
+
+            if (($executionRow['episode_trend']['direction'] ?? null) === 'worsening') {
+                $bucket['worsening_executions']++;
+            }
+
+            if (($executionRow['episode_trend']['direction'] ?? null) === 'improving') {
+                $bucket['improving_executions']++;
             }
 
             if (($bestPolicyBySuccess['policy'] ?? null) === $policy) {
@@ -182,6 +223,8 @@ final class SearchResponseHistoricalReadinessReportBuilder
                     'policy' => $bucket['policy'],
                     'executions_seen' => (int) $bucket['executions_seen'],
                     'candidate_ready_executions' => (int) $bucket['candidate_ready_executions'],
+                    'worsening_executions' => (int) $bucket['worsening_executions'],
+                    'improving_executions' => (int) $bucket['improving_executions'],
                     'best_by_success_count' => (int) $bucket['best_by_success_count'],
                     'best_by_progress_count' => (int) $bucket['best_by_progress_count'],
                     'resolved_outcomes_total' => (int) $bucket['resolved_outcomes_total'],
