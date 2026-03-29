@@ -1,14 +1,16 @@
 <?php
-// app/Models/RestricaoTempo.php
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class RestricaoTempo extends Model
 {
+    use HasFactory;
+
     protected $table = 'restricoes_tempo';
 
     protected $fillable = [
@@ -23,12 +25,13 @@ class RestricaoTempo extends Model
     ];
 
     protected $casts = [
+        'horario_id' => 'integer',
+        'entidade_id' => 'integer',
         'dia_semana' => 'integer',
         'tempo' => 'integer',
         'peso' => 'integer',
     ];
 
-    // Relacionamentos
     public function horario(): BelongsTo
     {
         return $this->belongsTo(Horario::class);
@@ -39,7 +42,6 @@ class RestricaoTempo extends Model
         return $this->morphTo();
     }
 
-    // Scopes
     public function scopeBloqueadas($query)
     {
         return $query->where('status', 'bloqueado');
@@ -70,7 +72,6 @@ class RestricaoTempo extends Model
         return $query->where('entidade_type', $type)->where('entidade_id', $id);
     }
 
-    // Métodos Auxiliares
     public function ehBloqueio(): bool
     {
         return $this->status === 'bloqueado';
@@ -83,7 +84,7 @@ class RestricaoTempo extends Model
 
     public function getPenalidade(): float
     {
-        return match($this->status) {
+        return match ($this->status) {
             'bloqueado' => 1000.0 * $this->peso,
             'preferencial' => 10.0 * $this->peso,
             default => 0.0,
@@ -94,11 +95,11 @@ class RestricaoTempo extends Model
     {
         $dias = [
             1 => 'Segunda-feira',
-            2 => 'Terça-feira',
+            2 => 'Terca-feira',
             3 => 'Quarta-feira',
             4 => 'Quinta-feira',
             5 => 'Sexta-feira',
-            6 => 'Sábado',
+            6 => 'Sabado',
         ];
 
         return $dias[$this->dia_semana] ?? 'Desconhecido';
@@ -106,10 +107,10 @@ class RestricaoTempo extends Model
 
     public function getEntidadeNome(): string
     {
-        return match($this->entidade_type) {
-            'App\Models\Professor' => 'Professor: ' . $this->entidade->nome,
-            'App\Models\Turma' => 'Turma: ' . $this->entidade->nome,
-            'App\Models\Disciplina' => 'Disciplina: ' . $this->entidade->nome,
+        return match ($this->entidade_type) {
+            Professor::class => 'Professor: '.$this->entidade->nome,
+            Turma::class => 'Turma: '.$this->entidade->nome,
+            Disciplina::class => 'Disciplina: '.$this->entidade->nome,
             default => 'Desconhecido',
         };
     }

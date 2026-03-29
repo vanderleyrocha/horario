@@ -23,6 +23,7 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
     public function report(array $data): void
     {
         $this->cacheReporter->report($data);
+        $this->touchExecutionHeartbeat();
 
         $isEvolvingPhase = isset($data['phase']) && in_array($data['phase'], ['evolving', 'alns_intensification'], true);
 
@@ -74,7 +75,24 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
 
     public function reportError(AGError $error): void
     {
-        $this->cacheReporter->reportError($error);
+        $this->cacheReporter->reportError($error, $this->dbRecorder->hasExecutionId() ? $this->dbRecorder->getExecutionId() : null);
         $this->dbRecorder->flush();
+    }
+
+    private function touchExecutionHeartbeat(): void
+    {
+        if (! $this->dbRecorder->hasExecutionId()) {
+            return;
+        }
+
+        $cacheKey = "ga_execution_touch_{$this->dbRecorder->getExecutionId()}";
+
+        if (Cache::has($cacheKey)) {
+            return;
+        }
+
+        $this->dbRecorder->touchExecution();
+
+        Cache::put($cacheKey, true, now()->addSeconds(10));
     }
 }

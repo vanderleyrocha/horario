@@ -1,11 +1,10 @@
 <?php
 
-// app/Models/User.php
-
 namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -35,9 +34,6 @@ class User extends Authenticatable implements MustVerifyEmail
         'two_factor_confirmed_at' => 'datetime',
     ];
 
-    /**
-     * Obter as iniciais do usuário
-     */
     public function initials(): string
     {
         $words = explode(' ', $this->name);
@@ -49,13 +45,12 @@ class User extends Authenticatable implements MustVerifyEmail
         return strtoupper(substr($this->name, 0, 2));
     }
 
-    // Relacionamentos com Horários
-    public function horarioscriados()
+    public function horarioscriados(): HasMany
     {
         return $this->hasMany(Horario::class, 'criado_por');
     }
 
-    public function horariosAtivados()
+    public function horariosAtivados(): HasMany
     {
         return $this->hasMany(Horario::class, 'ativado_por');
     }

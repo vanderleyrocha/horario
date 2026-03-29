@@ -177,20 +177,20 @@ const LANDSCAPE_STATE_SCALE = {
 
 const LANDSCAPE_LABELS = {
     0: "Desconhecido",
-    1: "Exploração",
-    2: "Exploração+",
+    1: "ExploraÃ§Ã£o",
+    2: "ExploraÃ§Ã£o+",
     3: "Controlado",
     4: "Equilibrado",
-    5: "Estagnação I",
-    6: "Estagnação II",
-    7: "Estagnação III",
-    8: "Convergência",
+    5: "EstagnaÃ§Ã£o I",
+    6: "EstagnaÃ§Ã£o II",
+    7: "EstagnaÃ§Ã£o III",
+    8: "ConvergÃªncia",
 }
 
 const LANDSCAPE_PHENOMENON_LABELS = {
     neutral: "Neutro",
     plateau: "Plateau",
-    local_minimum: "Mínimo local",
+    local_minimum: "MÃ­nimo local",
     deep_valley: "Vale profundo",
 }
 
@@ -481,6 +481,37 @@ function translateRepairEvent(value) {
     return map[normalized] ?? normalized.replaceAll("_", " ")
 }
 
+function setInitialRiskBadgeState(element, text, severity) {
+    if (!element) {
+        return
+    }
+
+    const severityClasses = {
+        neutral: ["border-slate-200", "bg-slate-50", "text-slate-700"],
+        low: ["border-emerald-200", "bg-emerald-50", "text-emerald-800"],
+        medium: ["border-amber-200", "bg-amber-50", "text-amber-900"],
+        high: ["border-rose-200", "bg-rose-50", "text-rose-900"],
+    }
+
+    Object.values(severityClasses).flat().forEach((className) => {
+        element.classList.remove(className)
+    })
+
+    if (!text) {
+        element.classList.add("hidden")
+        element.textContent = ""
+        element.removeAttribute("title")
+
+        return
+    }
+
+    const classes = severityClasses[severity] ?? severityClasses.neutral
+    classes.forEach((className) => element.classList.add(className))
+    element.classList.remove("hidden")
+    element.textContent = text
+    element.title = text
+}
+
 function syncOperatorChart() {
     if (!chartState.operatorChart) {
         return
@@ -517,8 +548,26 @@ function appendMetric(metric) {
 
     updateDashboardHeartbeatMonitor(metric)
 
+    if ((metric.phase ?? null) === "terminal") {
+        updateTerminalExecutionSummary(metric)
+        const terminalSummary = metric.terminal_summary ?? {}
+
+        if (terminalSummary && typeof terminalSummary === "object") {
+            updateInitialPopulationBottlenecks(
+                terminalSummary.initial_population_bottlenecks ?? {},
+            )
+        }
+
+        return
+    }
+
+    if ((metric.phase ?? null) === "monitoring") {
+        return
+    }
+
     if ((metric.phase ?? null) === "initial_population") {
         updateInitialPopulationObservationReadable(metric)
+        updateInitialPopulationBottlenecks(metric.initial_population_bottlenecks ?? {})
         return
     }
 
@@ -581,6 +630,166 @@ function appendMetric(metric) {
     updateSearchResponseReadiness(landscapeObservation)
 }
 
+function updateTerminalExecutionSummary(metric) {
+    const root = chartState.root
+
+    if (!root) {
+        return
+    }
+
+    const panel = root.querySelector("[data-terminal-summary-panel]")
+
+    if (!panel) {
+        return
+    }
+
+    const summary = metric.terminal_summary && typeof metric.terminal_summary === "object"
+        ? metric.terminal_summary
+        : {}
+    const title = root.querySelector("[data-terminal-summary-title]")
+    const message = root.querySelector("[data-terminal-summary-message]")
+    const status = root.querySelector("[data-terminal-summary-status]")
+    const phase = root.querySelector("[data-terminal-summary-phase]")
+    const stage = root.querySelector("[data-terminal-summary-stage]")
+    const attempt = root.querySelector("[data-terminal-summary-attempt]")
+    const queueSize = root.querySelector("[data-terminal-summary-queue-size]")
+    const hardConflicts = root.querySelector("[data-terminal-summary-hard-conflicts]")
+    const hardPenalty = root.querySelector("[data-terminal-summary-hard-penalty]")
+    const reason = root.querySelector("[data-terminal-summary-reason]")
+    const suggestions = root.querySelector("[data-terminal-summary-suggestions]")
+
+    panel.classList.remove("hidden")
+
+    if (title) {
+        title.textContent = String(summary.title ?? "Execucao interrompida")
+    }
+
+    if (message) {
+        message.textContent = String(summary.user_message ?? summary.reason ?? "A execucao foi encerrada.")
+    }
+
+    if (status) {
+        status.textContent = String(metric.execution_status ?? summary.execution_status ?? "desconhecido").replaceAll("_", " ")
+    }
+
+    if (phase) {
+        phase.textContent = String(summary.phase ?? metric.phase ?? "desconhecida").replaceAll("_", " ")
+    }
+
+    if (stage) {
+        stage.textContent = String(summary.stage ?? "desconhecida").replaceAll("_", " ")
+    }
+
+    if (attempt) {
+        attempt.textContent = summary.attempt ?? "-"
+    }
+
+    if (queueSize) {
+        queueSize.textContent = summary.queue_size ?? "-"
+    }
+
+    if (hardConflicts) {
+        hardConflicts.textContent = summary.hard_conflict_allocations ?? "-"
+    }
+
+    if (hardPenalty) {
+        hardPenalty.textContent = summary.hard_penalty !== undefined && summary.hard_penalty !== null
+            ? Number(summary.hard_penalty).toFixed(2)
+            : "-"
+    }
+
+    if (reason) {
+        reason.textContent = String(summary.reason ?? "Motivo tecnico indisponivel.")
+    }
+
+    if (suggestions) {
+        const items = Array.isArray(summary.suggestions) ? summary.suggestions : []
+
+        suggestions.innerHTML = items.length > 0
+            ? items.map((item) => `
+                <p class="rounded-lg border border-rose-200 bg-white/70 px-3 py-2 text-sm text-rose-800">
+                    ${String(item)}
+                </p>
+            `).join("")
+            : `
+                <p class="rounded-lg border border-rose-200 bg-white/70 px-3 py-2 text-sm text-rose-800">
+                    Nenhuma sugestao disponivel.
+                </p>
+            `
+    }
+}
+
+function formatDurationMilliseconds(value) {
+    const milliseconds = Number(value ?? 0)
+
+    if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+        return "--"
+    }
+
+    return formatElapsedSeconds(milliseconds / 1000)
+}
+
+function updateInitialPopulationBottlenecks(summary) {
+    const root = chartState.root
+
+    if (!root || !summary || typeof summary !== "object") {
+        return
+    }
+
+    const headline = root.querySelector("[data-initial-bottlenecks-headline]")
+    const failFastCount = root.querySelector("[data-bottleneck-fail-fast-count]")
+    const gateRejections = root.querySelector("[data-bottleneck-gate-rejections]")
+    const slowestAttempt = root.querySelector("[data-bottleneck-slowest-attempt]")
+    const peakHardConflicts = root.querySelector("[data-bottleneck-peak-hard-conflicts]")
+    const bottleneckList = root.querySelector("[data-bottleneck-list]")
+    const suggestionList = root.querySelector("[data-bottleneck-suggestions]")
+
+    if (
+        !headline ||
+        !failFastCount ||
+        !gateRejections ||
+        !slowestAttempt ||
+        !peakHardConflicts ||
+        !bottleneckList ||
+        !suggestionList
+    ) {
+        return
+    }
+
+    headline.textContent = String(summary.headline ?? "Aguardando dados para identificar os gargalos da populacao inicial.")
+    failFastCount.textContent = String(Number(summary.fail_fast_count ?? 0))
+    gateRejections.textContent = String(Number(summary.quality_gate_rejections ?? 0))
+    slowestAttempt.textContent = formatDurationMilliseconds(summary.slowest_attempt_ms)
+    peakHardConflicts.textContent = String(Number(summary.peak_hard_conflict_allocations ?? 0))
+
+    const likelyBottlenecks = Array.isArray(summary.likely_bottlenecks) ? summary.likely_bottlenecks : []
+    const optimizationSuggestions = Array.isArray(summary.optimization_suggestions) ? summary.optimization_suggestions : []
+
+    bottleneckList.innerHTML = likelyBottlenecks.length > 0
+        ? likelyBottlenecks.map((item) => `
+            <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                ${String(item)}
+            </p>
+        `).join("")
+        : `
+            <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
+                Ainda nao ha gargalos consolidados para esta execucao.
+            </p>
+        `
+
+    suggestionList.innerHTML = optimizationSuggestions.length > 0
+        ? optimizationSuggestions.map((item) => `
+            <p class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                ${String(item)}
+            </p>
+        `).join("")
+        : `
+            <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
+                As sugestoes aparecerao quando a execucao registrar tentativas suficientes.
+            </p>
+        `
+}
+
 function updateInitialPopulationObservationReadable(progress) {
     const root = chartState.root
 
@@ -592,6 +801,9 @@ function updateInitialPopulationObservationReadable(progress) {
     const attemptElement = root.querySelector("[data-initial-attempt]")
     const fillRatioElement = root.querySelector("[data-initial-fill-ratio]")
     const summaryElement = root.querySelector("[data-initial-summary]")
+    const hardBadgeElement = root.querySelector("[data-initial-hard-badge]")
+    const invalidBadgeElement = root.querySelector("[data-initial-invalid-badge]")
+    const penaltyBadgeElement = root.querySelector("[data-initial-penalty-badge]")
 
     if (!stageElement || !attemptElement || !fillRatioElement || !summaryElement) {
         return
@@ -611,11 +823,63 @@ function updateInitialPopulationObservationReadable(progress) {
     const repairInvalidAfter = Number(progress.repair_invalid_genes_after ?? 0)
     const hardPenalty = progress.hard_penalty ?? progress.repair_hard_penalty_after ?? null
     const message = String(progress.message ?? "")
+    const summaryParts = [
+        `Alocacoes ${allocations}/${queueSize || "-"}`,
+        `Forcadas ${forcedAllocations}`,
+    ]
+
+    if (repairEvent) {
+        summaryParts.push(`Reparo passe ${repairPass || "-"}: ${translateRepairEvent(repairEvent)}`)
+    }
+
+    if (repairTotal > 0) {
+        summaryParts.push(`Genes verificados ${repairProcessed}/${repairTotal}`)
+    }
+
+    if (message) {
+        summaryParts.push(message)
+    }
 
     stageElement.textContent = stage.replaceAll("_", " ")
     attemptElement.textContent = attempt > 0 ? String(attempt) : "-"
     fillRatioElement.textContent = `${(fillRatio * 100).toFixed(0)}%`
-    summaryElement.textContent = `aloc ${allocations}/${queueSize || "-"} | forçadas ${forcedAllocations} | hard ${hardConflictAllocations}${repairEvent ? ` | reparo p${repairPass} ${repairEvent}` : ""}${repairTotal > 0 ? ` ${repairProcessed}/${repairTotal}` : ""}${repairInvalidAfter > 0 ? ` | inválidos ${repairInvalidAfter}` : ""}${hardPenalty !== null ? ` | hp ${Number(hardPenalty).toFixed(2)}` : ""}${message ? ` | ${message}` : ""}`
+    summaryElement.textContent = summaryParts.join(" · ")
+    summaryElement.title = summaryParts.join(" · ")
+
+    const hardSeverity = hardConflictAllocations >= 10
+        ? "high"
+        : hardConflictAllocations >= 1
+            ? "medium"
+            : "low"
+    const invalidSeverity = repairInvalidAfter >= 10
+        ? "high"
+        : repairInvalidAfter >= 1
+            ? "medium"
+            : "low"
+    const numericHardPenalty = hardPenalty === null ? null : Number(hardPenalty)
+    const penaltySeverity = numericHardPenalty !== null && numericHardPenalty >= 100
+        ? "high"
+        : numericHardPenalty !== null && numericHardPenalty > 0
+            ? "medium"
+            : "low"
+
+    setInitialRiskBadgeState(
+        hardBadgeElement,
+        `Conflitos hard ${hardConflictAllocations}`,
+        hardSeverity,
+    )
+    setInitialRiskBadgeState(
+        invalidBadgeElement,
+        repairInvalidAfter > 0 ? `Invalidos ${repairInvalidAfter}` : "Sem invalidos apos reparo",
+        invalidSeverity,
+    )
+    setInitialRiskBadgeState(
+        penaltyBadgeElement,
+        numericHardPenalty !== null
+            ? `Penalidade hard ${numericHardPenalty.toFixed(2)}`
+            : "",
+        penaltySeverity,
+    )
 }
 
 function updateLandscapeObservation(phenomenon, observation) {
@@ -716,7 +980,7 @@ function updateSearchResponseReadiness(observation) {
     }
 
     const status = String(readiness.status ?? "ocioso")
-    const headline = String(readiness.headline ?? "Nenhuma evidência de prontidão coletada ainda")
+    const headline = String(readiness.headline ?? "Nenhuma evidÃªncia de prontidÃ£o coletada ainda")
     const resolvedEvidenceCount = Number(readiness.resolved_evidence_count ?? 0)
     const pendingAudits = Number(readiness.pending_audits ?? 0)
     const bestBySuccess = readiness.best_policy_by_success ?? null
@@ -732,29 +996,29 @@ function updateSearchResponseReadiness(observation) {
     pendingAuditsElement.textContent = String(pendingAudits)
     gateStatusElement.textContent = Boolean(activationGate?.eligible_as_candidate)
         ? "Candidata pronta"
-        : "Somente diagnóstico"
+        : "Somente diagnÃ³stico"
     gateCandidateElement.textContent = activationGate?.candidate_policy
         ? `Candidata: ${activationGate.candidate_policy}`
         : String(activationGate?.reason ?? "Nenhuma candidata ainda")
 
     bestOutcomeElement.textContent = bestBySuccess?.policy
         ? `${bestBySuccess.policy} | sucesso ${(Number(bestBySuccess.success_rate ?? 0) * 100).toFixed(0)}%`
-        : "Evidência insuficiente"
+        : "EvidÃªncia insuficiente"
     bestProgressElement.textContent = bestByProgress?.policy
         ? `${bestByProgress.policy} | progresso ${Number(bestByProgress.avg_progress_score ?? 0).toFixed(2)}`
-        : "Progresso indisponível"
+        : "Progresso indisponÃ­vel"
 
     latestOutcomeElement.textContent = latestOutcome?.policy
-        ? `${latestOutcome.policy} | ${Boolean(latestOutcome.targets_satisfied) ? "alvos atingidos" : "alvos não atingidos"}`
+        ? `${latestOutcome.policy} | ${Boolean(latestOutcome.targets_satisfied) ? "alvos atingidos" : "alvos nÃ£o atingidos"}`
         : "Nenhum resultado resolvido ainda"
     latestOutcomeDetailElement.textContent = latestOutcome?.policy
-        ? `Progresso ${Number(latestOutcome.progress_score ?? 0).toFixed(2)} | geração resolvida ${Number(latestOutcome.resolved_generation ?? 0)}`
+        ? `Progresso ${Number(latestOutcome.progress_score ?? 0).toFixed(2)} | geraÃ§Ã£o resolvida ${Number(latestOutcome.resolved_generation ?? 0)}`
         : "Aguardando o primeiro horizonte expirar"
 
     if (policyRows.length === 0) {
         policyRowsElement.innerHTML = `
             <tr>
-                <td colspan="5" class="py-4 text-sm text-slate-500">Nenhuma política avaliada ainda.</td>
+                <td colspan="5" class="py-4 text-sm text-slate-500">Nenhuma polÃ­tica avaliada ainda.</td>
             </tr>
         `
     } else {
@@ -843,8 +1107,8 @@ function updateInitialPopulationObservation(progress) {
     stageElement.textContent = stage.replaceAll("_", " ")
     attemptElement.textContent = attempt > 0 ? String(attempt) : "-"
     fillRatioElement.textContent = `${(fillRatio * 100).toFixed(0)}%`
-    summaryElement.textContent = summaryParts.join(" · ")
-    summaryElement.title = summaryParts.join(" · ")
+    summaryElement.textContent = summaryParts.join(" Â· ")
+    summaryElement.title = summaryParts.join(" Â· ")
 }
 
 function updateAllCharts() {
@@ -858,10 +1122,26 @@ function updateAllCharts() {
 
 function loadInitialMetrics() {
     const metrics = Array.isArray(window.solverMetrics) ? window.solverMetrics : []
+    const executionStatusContext = window.executionStatusContext && typeof window.executionStatusContext === "object"
+        ? window.executionStatusContext
+        : {}
 
     metrics.forEach((metric) => {
         appendMetric(metric)
     })
+
+    if (executionStatusContext.initial_population_bottlenecks) {
+        updateInitialPopulationBottlenecks(executionStatusContext.initial_population_bottlenecks)
+    }
+
+    if (Object.keys(executionStatusContext).length > 0) {
+        updateTerminalExecutionSummary({
+            phase: "terminal",
+            execution_status: executionStatusContext.execution_status ?? null,
+            terminal_summary: executionStatusContext,
+            timestamp: executionStatusContext.last_progress_timestamp ?? executionStatusContext.captured_at ?? null,
+        })
+    }
 
     updateAllCharts()
 }
@@ -895,11 +1175,11 @@ function initializeDashboard() {
     chartState.root = root
     chartState.executionId = window.executionId ?? null
     ensureHeartbeatTicker()
-    chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Melhor fitness", "Fitness médio"])
+    chartState.fitnessChart = createMultiLineChart(fitnessCanvas, ["Melhor fitness", "Fitness mÃ©dio"])
     chartState.diversityChart = createLineChart(diversityCanvas, "Diversidade")
     chartState.entropyChart = createLineChart(entropyCanvas, "Entropia")
-    chartState.mutationChart = createLineChart(mutationCanvas, "Taxa de mutação")
-    chartState.operatorChart = createBarChart(operatorCanvas, "Recompensa média por operador")
+    chartState.mutationChart = createLineChart(mutationCanvas, "Taxa de mutaÃ§Ã£o")
+    chartState.operatorChart = createBarChart(operatorCanvas, "Recompensa mÃ©dia por operador")
     chartState.landscapeChart = createBubbleChart(landscapeCanvas, "Estado do landscape")
 
     loadInitialMetrics()
@@ -933,3 +1213,4 @@ document.addEventListener("livewire:navigated", initializeDashboard)
 window.addEventListener("metrics-update", handleMetricEvent)
 document.addEventListener("metrics-update", handleMetricEvent)
 }
+

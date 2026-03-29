@@ -33,16 +33,17 @@ class ConfiguracaoHorario extends Model
     ];
 
     protected $casts = [
+        'horario_id' => 'integer',
+        'aulas_por_dia' => 'integer',
+        'dias_semana' => 'integer',
         'horario_inicio' => 'string',
         'horario_fim' => 'string',
+        'duracao_aula_minutos' => 'integer',
+        'duracao_intervalo_minutos' => 'integer',
         'horarios_intervalos' => 'array',
         'duracoes_intervalos' => 'array',
         'permitir_janelas' => 'boolean',
         'agrupar_disciplinas' => 'boolean',
-        'aulas_por_dia' => 'integer',
-        'dias_semana' => 'integer',
-        'duracao_aula_minutos' => 'integer',
-        'duracao_intervalo_minutos' => 'integer',
         'max_aulas_seguidas' => 'integer',
         'elitism_count' => 'integer',
         'target_fitness' => 'float',
@@ -67,11 +68,13 @@ class ConfiguracaoHorario extends Model
         for ($i = 1; $i < $tempo; $i++) {
             $currentHorario = $currentHorario->addMinutes($duracaoAula);
 
-            if (in_array($i, $horariosIntervalos, true)) {
-                $intervaloIndex = array_search($i, $horariosIntervalos, true);
-                $intervaloDuracao = (int) ($duracoesIntervalos[$intervaloIndex] ?? $duracaoIntervaloPadrao);
-                $currentHorario = $currentHorario->addMinutes($intervaloDuracao);
+            if (! in_array($i, $horariosIntervalos, true)) {
+                continue;
             }
+
+            $intervaloIndex = array_search($i, $horariosIntervalos, true);
+            $intervaloDuracao = (int) ($duracoesIntervalos[$intervaloIndex] ?? $duracaoIntervaloPadrao);
+            $currentHorario = $currentHorario->addMinutes($intervaloDuracao);
         }
 
         return $currentHorario->format('H:i');

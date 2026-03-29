@@ -37,7 +37,7 @@ class Manage extends Component
 
     public function render()
     {
-        return view('livewire.horarios.manage');
+        return view('modules.horarios.livewire.manage');
     }
 
     public function diagnosticoData(): array

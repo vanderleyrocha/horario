@@ -16,32 +16,38 @@ class Alocacao extends Model
     protected $fillable = [
         'horario_id',
         'execution_id',
+        'aula_id',
         'turma_id',
         'disciplina_id',
         'professor_id',
         'dia_semana',
         'tempo',
         'duracao_tempos',
+        'eh_manual',
+        'bloqueada',
         'horario_inicio',
         'horario_fim',
-        'aula_id',
-        'eh_manual',
-        'bloqueada'
     ];
 
     protected $casts = [
+        'horario_id' => 'integer',
+        'execution_id' => 'integer',
+        'aula_id' => 'integer',
+        'turma_id' => 'integer',
+        'disciplina_id' => 'integer',
+        'professor_id' => 'integer',
         'tempo' => 'integer',
         'duracao_tempos' => 'integer',
-        'horario_inicio' => 'datetime:H:i',
-        'horario_fim' => 'datetime:H:i',
+        'horario_inicio' => 'string',
+        'horario_fim' => 'string',
         'eh_manual' => 'boolean',
-        'bloqueada' => 'boolean'
+        'bloqueada' => 'boolean',
     ];
 
     protected static function booted(): void
     {
         static::saving(function (self $alocacao): void {
-            if (is_null($alocacao->execution_id)) {
+            if ($alocacao->execution_id === null) {
                 return;
             }
 
@@ -55,13 +61,13 @@ class Alocacao extends Model
 
             if (! $execution) {
                 throw ValidationException::withMessages([
-                    'execution_id' => 'A execução informada para a alocação não existe.',
+                    'execution_id' => 'A execucao informada para a alocacao nao existe.',
                 ]);
             }
 
             if ((int) $execution->horario_id !== (int) $alocacao->horario_id) {
                 throw ValidationException::withMessages([
-                    'execution_id' => 'A execução informada pertence a outro horário.',
+                    'execution_id' => 'A execucao informada pertence a outro horario.',
                 ]);
             }
         });
@@ -77,6 +83,11 @@ class Alocacao extends Model
         return $this->belongsTo(ScheduleExecution::class, 'execution_id');
     }
 
+    public function aula(): BelongsTo
+    {
+        return $this->belongsTo(Aula::class);
+    }
+
     public function turma(): BelongsTo
     {
         return $this->belongsTo(Turma::class);
@@ -90,11 +101,6 @@ class Alocacao extends Model
     public function professor(): BelongsTo
     {
         return $this->belongsTo(Professor::class);
-    }
-
-    public function aula(): BelongsTo
-    {
-        return $this->belongsTo(Aula::class);
     }
 
     public function scopeManuais($query)

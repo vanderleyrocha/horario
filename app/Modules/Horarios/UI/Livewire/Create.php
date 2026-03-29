@@ -50,6 +50,6 @@ class Create extends Component {
     }
 
     public function render() {
-        return view('livewire.horarios.create');
+        return view('modules.horarios.livewire.create');
     }
 }

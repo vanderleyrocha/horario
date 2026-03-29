@@ -2,33 +2,47 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Turma extends Model
 {
     use HasFactory;
 
+    protected $table = 'turmas';
+
     protected $fillable = [
-        'id',
         'nome',
         'codigo',
-        'turno',
         'serie',
+        'turno',
         'numero_alunos',
         'ano',
         'ativa',
     ];
 
     protected $casts = [
+        'serie' => 'integer',
+        'numero_alunos' => 'integer',
+        'ano' => 'integer',
         'ativa' => 'boolean',
     ];
 
     public function alocacoes(): HasMany
     {
         return $this->hasMany(Alocacao::class);
+    }
+
+    public function restricoesTempo(): MorphMany
+    {
+        return $this->morphMany(RestricaoTempo::class, 'entidade');
+    }
+
+    public function aulas(): HasMany
+    {
+        return $this->hasMany(Aula::class)->orderBy('disciplina_id');
     }
 
     public function scopeAtiva($query)
@@ -43,24 +57,15 @@ class Turma extends Model
             'vespertino' => 'Vespertino (13:00 - 18:00)',
             'noturno' => 'Noturno (19:00 - 23:00)',
             'integral' => 'Integral (07:00 - 18:00)',
-            default => ucfirst($this->turno),
+            default => ucfirst((string) $this->turno),
         };
-    }
-
-    public function restricoesTempo(): MorphMany
-    {
-        return $this->morphMany(RestricaoTempo::class, 'entidade');
-    }
-
-    public function aulas(): HasMany
-    {
-        return $this->hasMany(Aula::class)->orderBy("disciplina_id");
     }
 
     public function getAulasCountAttribute(): int
     {
         $aulas = $this->aulas()->get();
-        $totalTemposNecessarios = $aulas->sum(function ($aula) {
+
+        return $aulas->sum(function (Aula $aula): int {
             return $aula->aulas_semana * match ($aula->tipo) {
                 'simples' => 1,
                 'dupla' => 2,
@@ -68,7 +73,5 @@ class Turma extends Model
                 default => 1,
             };
         });
-
-        return $totalTemposNecessarios;
     }
 }

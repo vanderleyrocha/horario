@@ -4,7 +4,7 @@ namespace App\Modules\Horarios\UI\Livewire;
 
 use App\Models\ConfiguracaoHorario;
 use App\Models\Horario;
-use App\Traits\ComDadosComuns;
+use App\Modules\Horarios\Support\ComDadosComuns;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Layout;
@@ -99,9 +99,9 @@ class Configurar extends Component
 
     public function render()
     {
-        Log::info('Renderizando view livewire.horarios.configurar via app\\Livewire\\Horarios\\Configurar.php');
+        Log::info('Renderizando view modules.horarios.livewire.configurar via app\\Livewire\\Horarios\\Configurar.php');
 
-        return view('livewire.horarios.configurar');
+        return view('modules.horarios.livewire.configurar');
     }
 
     public function proximaEtapa(): void

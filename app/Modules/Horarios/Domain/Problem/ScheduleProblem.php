@@ -58,6 +58,21 @@ final class ScheduleProblem implements GeneticProblem
 
     private array $lastRepairTelemetry = [];
 
+    /**
+     * @var list<array<string, mixed>>
+     */
+    private array $initialPopulationAttemptHistory = [];
+
+    /**
+     * @var array<string, int>
+     */
+    private array $initialPopulationCounters = [
+        'fail_fast' => 0,
+        'quality_gate_rejected' => 0,
+        'construct_failed' => 0,
+        'quality_gate_passed' => 0,
+    ];
+
     public function __construct(private readonly ScheduleData $data, private readonly EvaluationContextBuilder $contextBuilder, private readonly FitnessEvaluator $fitnessEvaluator, private readonly GreedyRepairOperator $repairOperator, private readonly ?ProgressReporterInterface $progress = null, private readonly ?int $executionId = null) {}
 
     public function createIndividual(): Cromossomo
@@ -70,6 +85,7 @@ final class ScheduleProblem implements GeneticProblem
 
         for ($attempt = 1; $attempt <= self::MAX_BUILD_ATTEMPTS; $attempt++) {
             $this->assertNotCancelled();
+            $attemptStartedAt = microtime(true);
             $teacherBusy = [];
             $classBusy = [];
             $assignedGenes = [];
@@ -105,6 +121,17 @@ final class ScheduleProblem implements GeneticProblem
 
                 if ($failFast['should_fail_fast']) {
                     $this->lastBuildFailure = $failFast['message'];
+                    $this->initialPopulationCounters['fail_fast']++;
+                    $this->recordInitialPopulationAttempt(
+                        attempt: $attempt,
+                        outcome: 'fail_fast',
+                        telemetry: $telemetry,
+                        attemptStartedAt: $attemptStartedAt,
+                        extra: [
+                            'message' => $this->lastBuildFailure,
+                            'fail_fast_limit' => $failFast['fail_fast_limit'],
+                        ]
+                    );
 
                     Log::warning('schedule.initial_population.quality_gate.fail_fast', [
                         'attempt' => $attempt,
@@ -150,6 +177,18 @@ final class ScheduleProblem implements GeneticProblem
                 );
 
                 if ($qualityGate['passes']) {
+                    $this->initialPopulationCounters['quality_gate_passed']++;
+                    $this->recordInitialPopulationAttempt(
+                        attempt: $attempt,
+                        outcome: 'quality_gate_passed',
+                        telemetry: $telemetry,
+                        attemptStartedAt: $attemptStartedAt,
+                        extra: [
+                            'hard_penalty' => $qualityGate['hard_penalty'],
+                            'soft_penalty' => $qualityGate['soft_penalty'],
+                            'score' => $qualityGate['score'],
+                        ]
+                    );
                     $this->reportInitialPopulationProgress([
                         'stage' => 'grasp_completed',
                         'attempt' => $attempt,
@@ -179,6 +218,20 @@ final class ScheduleProblem implements GeneticProblem
 
                     return $candidate;
                 }
+
+                $this->initialPopulationCounters['quality_gate_rejected']++;
+                $this->recordInitialPopulationAttempt(
+                    attempt: $attempt,
+                    outcome: 'quality_gate_rejected',
+                    telemetry: $telemetry,
+                    attemptStartedAt: $attemptStartedAt,
+                    extra: [
+                        'hard_penalty' => $qualityGate['hard_penalty'],
+                        'soft_penalty' => $qualityGate['soft_penalty'],
+                        'score' => $qualityGate['score'],
+                        'message' => $this->lastBuildFailure,
+                    ]
+                );
 
                 if (
                     $bestRejectedAttempt === null ||
@@ -213,6 +266,17 @@ final class ScheduleProblem implements GeneticProblem
                     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                     'message' => $this->lastBuildFailure,
                 ]);
+            } else {
+                $this->initialPopulationCounters['construct_failed']++;
+                $this->recordInitialPopulationAttempt(
+                    attempt: $attempt,
+                    outcome: 'construct_failed',
+                    telemetry: $telemetry,
+                    attemptStartedAt: $attemptStartedAt,
+                    extra: [
+                        'message' => $this->lastBuildFailure,
+                    ]
+                );
             }
 
             // Log::warning('schedule.initial_population.retry', [
@@ -750,10 +814,14 @@ final class ScheduleProblem implements GeneticProblem
             return;
         }
 
+        $bottlenecks = $this->buildInitialPopulationBottleneckSummary();
+
         $this->progress->report(array_merge([
             'phase' => 'initial_population',
             'execution_id' => $this->executionId,
-        ], $payload));
+        ], $payload, $bottlenecks === [] ? [] : [
+            'initial_population_bottlenecks' => $bottlenecks,
+        ]));
     }
 
     private function reportRepairProgress(string $source, array $telemetry): void
@@ -897,6 +965,131 @@ final class ScheduleProblem implements GeneticProblem
             'swaps' => $telemetry['swaps'] ?? 0,
             'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
             'pass_count' => count($telemetry['passes'] ?? []),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $telemetry
+     * @param  array<string, mixed>  $extra
+     */
+    private function recordInitialPopulationAttempt(
+        int $attempt,
+        string $outcome,
+        array $telemetry,
+        float $attemptStartedAt,
+        array $extra = []
+    ): void {
+        $this->initialPopulationAttemptHistory[] = array_merge([
+            'attempt' => $attempt,
+            'outcome' => $outcome,
+            'duration_ms' => (int) round(max(0, microtime(true) - $attemptStartedAt) * 1000),
+            'allocations' => (int) ($telemetry['allocations'] ?? 0),
+            'queue_size' => (int) ($telemetry['queue_size'] ?? 0),
+            'forced_allocations' => (int) ($telemetry['forced_allocations'] ?? 0),
+            'hard_conflict_allocations' => (int) ($telemetry['hard_conflict_allocations'] ?? 0),
+            'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
+        ], $extra);
+
+        if (count($this->initialPopulationAttemptHistory) > self::MAX_BUILD_ATTEMPTS) {
+            $this->initialPopulationAttemptHistory = array_slice(
+                $this->initialPopulationAttemptHistory,
+                -1 * self::MAX_BUILD_ATTEMPTS
+            );
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildInitialPopulationBottleneckSummary(): array
+    {
+        $hardestLessons = array_slice($this->cachedDiagnostics['diagnostics'] ?? [], 0, 3);
+        $attempts = $this->initialPopulationAttemptHistory;
+
+        if ($hardestLessons === [] && $attempts === []) {
+            return [];
+        }
+
+        $durationValues = array_map(
+            static fn (array $attempt): int => (int) ($attempt['duration_ms'] ?? 0),
+            $attempts
+        );
+        $forcedValues = array_map(
+            static fn (array $attempt): int => (int) ($attempt['forced_allocations'] ?? 0),
+            $attempts
+        );
+        $hardConflictValues = array_map(
+            static fn (array $attempt): int => (int) ($attempt['hard_conflict_allocations'] ?? 0),
+            $attempts
+        );
+        $latestAttempt = $attempts === [] ? null : $attempts[array_key_last($attempts)];
+        $queueSize = (int) ($latestAttempt['queue_size'] ?? 0);
+
+        $likelyBottlenecks = [];
+
+        if ($this->initialPopulationCounters['fail_fast'] > 0) {
+            $likelyBottlenecks[] = 'Conflitos hard estao estourando o fail-fast logo nas tentativas iniciais.';
+        }
+
+        if (($durationValues !== []) && max($durationValues) >= 180000) {
+            $likelyBottlenecks[] = 'Algumas tentativas de construcao estao caras demais e ficam muito tempo sem chegar a um candidato aceitavel.';
+        }
+
+        if (($forcedValues !== []) && max($forcedValues) >= 6) {
+            $likelyBottlenecks[] = 'A construcao esta recorrendo a muitas alocacoes forcadas, sinal de baixa flexibilidade real durante a montagem.';
+        }
+
+        if (($hardConflictValues !== []) && max($hardConflictValues) >= 6) {
+            $likelyBottlenecks[] = 'A fila de aulas mais criticas esta convergindo para colisoes cedo demais, antes do repair conseguir ajudar.';
+        }
+
+        if ($hardestLessons !== []) {
+            $likelyBottlenecks[] = 'As aulas mais dificeis concentram muitas ocorrencias para poucos dias/slots realmente seguros.';
+        }
+
+        $optimizationSuggestions = [];
+
+        if ($this->initialPopulationCounters['fail_fast'] > 0) {
+            $optimizationSuggestions[] = 'Introduzir construcao por arrependimento (regret-based insertion) para priorizar as aulas que mais perdem qualidade quando o melhor slot some.';
+            $optimizationSuggestions[] = 'Adicionar memoria de nogoods para evitar recombinar os mesmos conflitos hard entre professor, turma e bloco de tempo.';
+        }
+
+        if (($durationValues !== []) && max($durationValues) >= 180000) {
+            $optimizationSuggestions[] = 'Trocar parte do GRASP puro por seeds parciais viaveis com repair incremental, em vez de reiniciar a tentativa inteira do zero.';
+        }
+
+        if (($forcedValues !== []) && max($forcedValues) >= 6) {
+            $optimizationSuggestions[] = 'Reordenar dinamicamente a fila a cada bloco de alocacoes usando pressao de conflito atual, nao apenas a dificuldade estatica calculada no inicio.';
+        }
+
+        $optimizationSuggestions[] = 'Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.';
+
+        return [
+            'headline' => $likelyBottlenecks[0] ?? 'Sem gargalo dominante identificado ainda.',
+            'queue_size' => $queueSize,
+            'attempts_recorded' => count($attempts),
+            'fail_fast_count' => $this->initialPopulationCounters['fail_fast'],
+            'quality_gate_rejections' => $this->initialPopulationCounters['quality_gate_rejected'],
+            'construct_failures' => $this->initialPopulationCounters['construct_failed'],
+            'quality_gate_passed' => $this->initialPopulationCounters['quality_gate_passed'],
+            'latest_attempt' => $latestAttempt,
+            'slowest_attempt_ms' => $durationValues === [] ? null : max($durationValues),
+            'avg_attempt_ms' => $durationValues === [] ? null : (int) round(array_sum($durationValues) / count($durationValues)),
+            'peak_forced_allocations' => $forcedValues === [] ? 0 : max($forcedValues),
+            'peak_hard_conflict_allocations' => $hardConflictValues === [] ? 0 : max($hardConflictValues),
+            'hardest_lessons' => array_map(
+                static fn (array $lesson): array => [
+                    'lesson_id' => $lesson['lesson_id'],
+                    'candidate_slots' => $lesson['candidate_slots'],
+                    'weekly_occurrences' => $lesson['weekly_occurrences'],
+                    'required_slots' => $lesson['required_slots'],
+                    'professor_available_days' => $lesson['professor_available_days'],
+                    'class_available_days' => $lesson['class_available_days'],
+                ],
+                $hardestLessons
+            ),
+            'likely_bottlenecks' => array_values(array_unique($likelyBottlenecks)),
+            'optimization_suggestions' => array_values(array_unique($optimizationSuggestions)),
         ];
     }
 

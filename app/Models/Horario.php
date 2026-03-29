@@ -1,14 +1,12 @@
 <?php
 
-// app/Models/Horario.php - Adicionar este método para evitar conflito
-
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Horario extends Model
 {
@@ -20,13 +18,10 @@ class Horario extends Model
         'nome',
         'ano',
         'semestre',
-        'status',
+        'configuracao',
         'fitness_score',
-        'configuracao', // JSON para parâmetros do algoritmo
-        'gerado_em',
-        'criado_por',
-        'ativado_por',
-        'ativado_em',
+        'diagnostico_json',
+        'indice_risco',
         'geracoes_executadas',
         'geracoes_sem_melhoria',
         'melhor_fitness',
@@ -36,46 +31,56 @@ class Horario extends Model
         'conflitos_soft',
         'detalhes_conflitos',
         'tempo_processamento_segundos',
+        'criado_por',
+        'ativado_por',
+        'ativado_em',
+        'status',
+        'gerado_em',
     ];
 
     protected $casts = [
-        'gerado_em' => 'datetime',
-        'ativado_em' => 'datetime',
-        'configuracao' => 'array', // Converte JSON do BD para Array PHP automaticamente
-        'historico_fitness' => 'array',
-        'detalhes_conflitos' => 'array',
+        'ano' => 'integer',
+        'semestre' => 'integer',
+        'configuracao' => 'array',
         'fitness_score' => 'float',
-        'melhor_fitness' => 'float',
-        'fitness_medio' => 'float',
+        'diagnostico_json' => 'array',
+        'indice_risco' => 'integer',
         'geracoes_executadas' => 'integer',
         'geracoes_sem_melhoria' => 'integer',
+        'melhor_fitness' => 'float',
+        'fitness_medio' => 'float',
+        'historico_fitness' => 'array',
         'conflitos_hard' => 'integer',
         'conflitos_soft' => 'integer',
+        'detalhes_conflitos' => 'array',
         'tempo_processamento_segundos' => 'integer',
+        'criado_por' => 'integer',
+        'ativado_por' => 'integer',
+        'ativado_em' => 'datetime',
+        'gerado_em' => 'datetime',
     ];
 
-
-    protected static function booted()
+    protected static function booted(): void
     {
-        static::creating(function ($horario) {
-            if (empty($horario->configuracao)) {
-                $horario->configuracao = [
-                    'geracoes' => 500,
-                    'populacao' => 100,
-                    'taxa_mutacao' => 0.3,
-                    'taxa_crossover' => 0.7
-                ];
+        static::creating(function (self $horario): void {
+            if (! empty($horario->configuracao)) {
+                return;
             }
+
+            $horario->configuracao = [
+                'geracoes' => 500,
+                'populacao' => 100,
+                'taxa_mutacao' => 0.3,
+                'taxa_crossover' => 0.7,
+            ];
         });
     }
 
-    // Relacionamentos
     public function alocacoes(): HasMany
     {
         return $this->hasMany(Alocacao::class);
     }
 
-    // Usar um nome diferente para o relacionamento para evitar conflito
     public function configuracaoHorario(): HasOne
     {
         return $this->hasOne(ConfiguracaoHorario::class);
@@ -101,22 +106,6 @@ class Horario extends Model
         return $this->belongsTo(User::class, 'ativado_por');
     }
 
-    // Scopes
-    public function scopeAtivo($query)
-    {
-        return $query->where('status', 'ativo');
-    }
-
-    public function scopePorAno($query, $ano)
-    {
-        return $query->where('ano', $ano);
-    }
-
-    public function scopePorSemestre($query, $semestre)
-    {
-        return $query->where('semestre', $semestre);
-    }
-
     public function executions(): HasMany
     {
         return $this->hasMany(ScheduleExecution::class);
@@ -124,7 +113,21 @@ class Horario extends Model
 
     public function lastExecution(): HasOne
     {
-        return $this->hasOne(ScheduleExecution::class)
-            ->latestOfMany();
+        return $this->hasOne(ScheduleExecution::class)->latestOfMany();
+    }
+
+    public function scopeAtivo($query)
+    {
+        return $query->where('status', 'ativo');
+    }
+
+    public function scopePorAno($query, int $ano)
+    {
+        return $query->where('ano', $ano);
+    }
+
+    public function scopePorSemestre($query, int $semestre)
+    {
+        return $query->where('semestre', $semestre);
     }
 }

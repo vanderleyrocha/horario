@@ -7,7 +7,7 @@ use App\Models\Horario;
 use App\Models\Aula;
 use Livewire\Component;
 use Livewire\WithPagination;
-use App\Traits\ComDadosComuns;
+use App\Modules\Horarios\Support\ComDadosComuns;
 
 class GerenciarAulas extends Component {
     use WithPagination;
@@ -189,7 +189,7 @@ class GerenciarAulas extends Component {
     }
 
     public function render() {
-        return view('livewire.horarios.gerenciar-aulas', [
+        return view('modules.horarios.livewire.gerenciar-aulas', [
             'aulas' => $this->aulas,
             'professores' => $this->professores,
             'disciplinas' => $this->disciplinas,

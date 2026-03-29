@@ -31,6 +31,7 @@ class ScheduleGenerationMetric extends Model
     ];
 
     protected $casts = [
+        'execution_id' => 'integer',
         'generation' => 'integer',
         'best_fitness' => 'float',
         'avg_fitness' => 'float',

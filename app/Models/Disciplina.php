@@ -11,8 +11,9 @@ class Disciplina extends Model
 {
     use HasFactory;
 
+    protected $table = 'disciplinas';
+
     protected $fillable = [
-        'id',
         'nome',
         'codigo',
         'carga_horaria_semanal',
@@ -22,17 +23,13 @@ class Disciplina extends Model
     ];
 
     protected $casts = [
+        'carga_horaria_semanal' => 'integer',
         'ativa' => 'boolean',
     ];
 
     public function alocacoes(): HasMany
     {
         return $this->hasMany(Alocacao::class);
-    }
-
-    public function scopeAtiva($query)
-    {
-        return $query->where('ativa', true);
     }
 
     public function restricoesTempo(): MorphMany
@@ -43,5 +40,10 @@ class Disciplina extends Model
     public function aulas(): HasMany
     {
         return $this->hasMany(Aula::class);
+    }
+
+    public function scopeAtiva($query)
+    {
+        return $query->where('ativa', true);
     }
 }

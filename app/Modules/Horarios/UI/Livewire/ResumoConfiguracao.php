@@ -118,8 +118,8 @@ class ResumoConfiguracao extends Component {
     }
 
     public function render() {
-        Log::info("Renderizando view livewire.horarios.resumo-configuracao via app\Livewire\Horarios\ResumoConfiguracao.php");
-        return view('livewire.horarios.resumo-configuracao', [
+        Log::info("Renderizando view modules.horarios.livewire.resumo-configuracao via app\Livewire\Horarios\ResumoConfiguracao.php");
+        return view('modules.horarios.livewire.resumo-configuracao', [
             'estatisticas' => $this->estatisticas,
             'restricoes' => $this->restricoes,
             'aulasPorTurma' => $this->aulasPorTurma,

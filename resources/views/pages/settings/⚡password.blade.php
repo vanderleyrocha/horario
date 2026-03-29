@@ -1,6 +1,6 @@
 <?php
 
-use App\Concerns\PasswordValidationRules;
+use App\Support\Auth\PasswordValidationRules;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;

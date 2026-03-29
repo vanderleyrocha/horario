@@ -14,7 +14,6 @@ class Professor extends Model
     protected $table = 'professores';
 
     protected $fillable = [
-        'id',
         'nome',
         'nome_abreviado',
         'email',
@@ -26,17 +25,13 @@ class Professor extends Model
 
     protected $casts = [
         'dias_disponiveis' => 'array',
+        'carga_horaria_maxima' => 'integer',
         'ativo' => 'boolean',
     ];
 
     public function alocacoes(): HasMany
     {
         return $this->hasMany(Alocacao::class);
-    }
-
-    public function scopeAtivo($query)
-    {
-        return $query->where('ativo', true);
     }
 
     public function restricoesTempo(): MorphMany
@@ -47,5 +42,10 @@ class Professor extends Model
     public function aulas(): HasMany
     {
         return $this->hasMany(Aula::class);
+    }
+
+    public function scopeAtivo($query)
+    {
+        return $query->where('ativo', true);
     }
 }

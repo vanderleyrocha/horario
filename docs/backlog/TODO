@@ -1,0 +1,1204 @@
+
+
+🚀 Próximas Melhorias Sugeridas
+1. Melhorias no Algoritmo 🎯
+[ ] Considerar especialização de professores por disciplina
+[ ] Adicionar peso às restrições (configurável)
+[ ] Implementar estratégias de mutação adaptativa
+[ ] Permitir restrições customizadas por usuário
+[ ] Adicionar seleção de salas/ambientes
+2. Visualização de Dados 📊
+[ ] Gráfico de evolução do fitness
+[ ] Relatório de conflitos encontrados
+[ ] Visualização de carga horária por professor
+[ ] Mapa de calor de ocupação de horários
+3. Funcionalidades Extras ✨
+[ ] Edição manual de alocações (drag & drop)
+[ ] Exportação para PDF profissional
+[ ] Exportação para Excel
+[ ] Impressão de horários por turma/professor
+[ ] Envio de horários por email
+4. Notificações 🔔
+[ ] Notificação quando geração terminar
+[ ] Alertas de conflitos detectados
+[ ] Lembretes de atualizações pendentes
+5. Multi-tenancy 🏢
+[ ] Suporte a múltiplas escolas
+[ ] Gerenciamento de usuários e permissões
+[ ] Dashboard administrativo
+6. Performance ⚡
+[ ] Cache de horários mais acessados
+[ ] Otimização de queries N+1
+[ ] Indexação de tabelas
+[ ] Laravel Echo para WebSockets (tempo real)
+7. Testes 🧪
+[ ] Testes unitários do algoritmo
+[ ] Testes de integração
+[ ] Testes de performance
+8. Documentação 📚
+[ ] Manual do usuário
+[ ] Documentação técnica da API
+[ ] Guia de contribuição
+
+
+
+✨ Processamento assíncrono com Jobs/Queue
+📊 Visualização gráfica da evolução
+🎯 Permitir restrições customizadas
+👨‍🏫 Considerar especialização de professores
+🏢 Gerenciar salas e capacidade
+✏️ Edição manual de alocações
+📄 Exportar para PDF/Excel
+
+🔔 Notificações quando terminar
+📡 Laravel Echo/WebSockets para tempo real
+📊 Dashboard de jobs em execução
+⏸️ Cancelamento de jobs em andamento
+
+
+💡 O Que Você Gostaria de Implementar Agora?
+Escolha uma opção ou sugira algo:
+
+A) Refatorar o Algoritmo Genético para usar as novas configurações
+
+B) Melhorar a visualização dos horários gerados
+
+C) Implementar edição manual com drag & drop
+
+D) Criar relatórios e estatísticas avançadas
+
+
+Early stopping por convergência
+Penalidade adaptativa por geração
+Profiling real com métricas por regra
+
+
+Adicionar índice de severidade numérico
+Calcular limite real de professor baseado em disponibilidade individual
+Criar painel Livewire com:
+barra de saturação
+tabela de turmas críticas
+tabela de professores críticos
+bloco visual de gargalo estrutural
+
+🔬 Diagnóstico de Gargalo Probabilístico
+📊 Painel visual de inviabilidade
+⚙️ Índice matemático de dificuldade do cenário
+🧠 Heurística adaptativa antes de abortar
+
+Tabs com animação e persistência local
+Permissões por aba (RBAC)
+Breadcrumb dinâmico
+Indicadores de status por aba
+Transformar módulo Horários em pacote Laravel interno
+
+
+
+🏗 Próximo Nível (Recomendado)
+Podemos evoluir para:
+Tabs com animação e persistência local
+Permissões por aba (RBAC)
+Breadcrumb dinâmico
+Indicadores de status por aba
+Transformar módulo Horários em pacote Laravel interno
+
+Se quiser, posso agora:
+Implementar controle de permissão por aba
+Criar Sidebar fixa estilo SaaS profissional
+Criar Dashboard Analítico do Horário
+Organizar estrutura de pastas por domínio (DDD real)
+Qual nível de maturidade você quer agora para o sistema?
+
+Implementar registro de execução (ExecutionLog)
+Implementar painel de convergência
+Criar sistema de versionamento de horário
+Implementar paralelização de avaliação de fitness
+Implementar detecção automática de inviabilidade estrutural pré-GA
+
+A) Persistência completa do resultado (versão do horário)
+B) Painel visual de convergência (métricas por geração)
+C) Otimização de performance (avaliar fitness em paralelo)
+D) Sistema de logs estruturados por execução
+
+
+B) Evolua para WebSocket em vez de polling
+C) Implementar persistência de execução no banco (ExecutionLog)
+D) Melhorar barra de progresso para refletir fitness real
+
+Persistir execução no banco (ExecutionLog)
+Implementar painel de convergência
+Adicionar diversidade genética real
+Paralelizar avaliação de fitness
+Implementar WebSocket real-time
+
+A) Criar ExecutionLog no banco para salvar cada execução
+B) Implementar painel visual de convergência no frontend
+C) Melhorar cálculo de percentual baseado em fitness real
+D) Otimizar performance da avaliação
+
+
+📊 Painel gráfico de convergência (Livewire + Chart.js)
+📉 Detector de estagnação visual
+📈 Indicador de diversidade genética
+🧠 Ajuste automático de mutação baseado em métricas
+
+
+🔬 Critério híbrido de convergência (diversidade genética)
+📊 Terminação baseada em variância
+🧠 Adaptive termination inteligente
+🚀 Paralelização por ilha genética
+
+
+🔬 Otimização matemática da convergência
+📊 Métrica de diversidade genética
+🚀 Paralelização futura
+🧠 Engine multi-estratégia
+
+Implementar cálculo matemático formal do RiskIndex
+Implementar prevenção automática antes de rodar o AG
+
+
+com a criação de ProgressReporterInterface depois poderemos trocar facilmente:
+CacheProgressReporter
+→ DatabaseProgressReporter
+→ WebSocketProgressReporter
+→ EventProgressReporter
+Sem tocar na engine.
+
+
+4️⃣ Conectar o processo ao Livewire Manage
+
+5️⃣ Garantir persistência da solução final e métricas da execução
+
+1 — Integrar SimilarityReplacement no IslandModelEngine
+2 — Introduzir Large Neighborhood Search (LNS)
+3 — LNS Destrutivo Baseado em Conflitos
+4 — Diversidade genética avançada
+5 — Persistência científica das métricas
+6 — Integração avançada com Livewire
+7 — Melhorias científicas futuras (alto impacto)
+
+Se quiser, posso também te entregar
+
+Nos próximos passos posso detalhar:
+
+1️⃣ Arquitetura completa do módulo LNS
+2️⃣ Implementação real de ConflictDestroyOperator
+3️⃣ Heurística GreedyRebuildOperator otimizada
+4️⃣ Refatoração ideal do IslandModelEngine
+5️⃣ Modelo matemático formal do RiskIndex
+6️⃣ Estratégia científica de tuning de parâmetros
+
+Se quiser, posso também montar um blueprint completo do solver de timetabling nível ITC, baseado na sua arquitetura atual.
+Isso provavelmente elevará seu projeto para um nível extremamente avançado de engenharia evolutiva.
+
+verificar a necessidade de ajustes no código do arquivo app\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine.php possibilitando
+alternar entre
+WorstIndividualReplacement
+SimilarityReplacement
+CrowdingReplacement
+
+PRIORIDADE 1 — Integrar Replacement corretamente
+    1️⃣ remover interface duplicada
+    2️⃣ mover Replacement para Operators
+    3️⃣ injetar ReplacementStrategy na engine
+PRIORIDADE 2 — Consolidar IslandModelEngine
+Verificar se ele suporta:
+    migration policy
+    replacement strategy
+    elitism
+    via interfaces.
+PRIORIDADE 3 — Formalizar ExecutionMetrics
+PRIORIDADE 4 — somente então implementar LNS
+
+a ser implementado
+IslandModelCoordinator
+FitnessEvaluatorInterface
+CrowdingReplacement
+PopulationStatistics
+AsyncFitnessEvaluator
+
+
+├── Intensification
+│   │
+│   │   ├── LNS
+│   │   │   ├── LargeNeighborhoodSearch
+│   │   │   ├── DestroyOperatorInterface
+│   │   │   ├── RepairOperatorInterface
+│   │   │   ├── ConflictDestroyOperator
+│   │   │   └── GreedyRebuildOperator
+│   │
+│   │   └── LocalSearch
+│   │       ├── LocalSearchStrategyInterface
+│   │       └── HillClimbingSearch
+├── Diversity
+│   │   ├── HammingDistanceCalculator
+│   │   ├── PopulationEntropyCalculator
+│   │   ├── DiversityCalculatorInterface
+│   │   └── FitnessSharing
+
+21 — Ordem correta de implementação no seu projeto
+
+Não implemente tudo de uma vez.
+
+Ordem ideal:
+
+1️⃣ integrar SimilarityReplacement
+2️⃣ estabilizar IslandModelEngine
+3️⃣ criar módulo LNS básico
+DestroyOperatorInterface
+ConflictDestroyOperator
+GreedyRebuildOperator
+LargeNeighborhoodSearch
+4️⃣ integrar na engine
+5️⃣ depois adicionar:
+RegretInsertion
+Adaptive LNS
+
+Conflict Graph + Kempe Chain Moves
+Delta Fitness Evaluation (fitness incremental)
+arquitetura completa do Rule Dependency Graph
+
+No ultimo chat ...
+
+1. Integração correta de SimilarityReplacement no IslandModel
+2. Introdução de LNS híbrido com GA
+3. Conflict-based LNS (state-of-the-art)
+4. Ajustes arquiteturais necessários
+5. Integração científica com Livewire + persistência de métricas
+    Criar módulo:
+        AG
+        └ Infrastructure
+            └ Metrics
+                └ ExecutionMetricsRecorder
+
+    Estrutura recomendada
+    Tabela:
+    schedule_executions
+    Campos:
+        id
+        start_time
+        end_time
+        population_size
+        generations
+        parameters_json
+        best_fitness
+
+    Tabela:
+    schedule_generation_metrics
+    Campos:
+        execution_id
+        generation
+        best_fitness
+        avg_fitness
+        variance
+        diversity
+        entropy
+        mutation_rate
+        stagnation
+        Coleta
+
+    A cada geração:
+        MetricsRecorder → DTO
+        DTO:
+        GenerationMetrics
+
+6 — Integração avançada com Livewire
+    Hoje você já tem:
+    ProgressReporterInterface
+    Excelente design.
+    Expandir estrutura de progresso
+    DTO:
+        EvolutionProgress
+    Campos:
+        phase
+        generation
+        maxGenerations
+        bestFitness
+        avgFitness
+        diversity
+        entropy
+        mutationRate
+        stagnation
+        elapsedTime
+        Frontend pode mostrar
+
+    gráficos em tempo real:
+        fitness curve
+        diversity curve
+        entropy curve
+
+7 — Melhorias científicas futuras (alto impacto)
+    Depois dessas evoluções você estará muito próximo de solvers acadêmicos.
+    Melhorias futuras:
+    1️⃣ Adaptive LNS
+        Escolher dinamicamente:
+        destroy operators
+    2️⃣ Multi-armed bandit para operadores
+        Generalizar AOS:
+        crossover
+        mutation
+        LNS destroy
+    3️⃣ Memetic Algorithm
+        GA + local search intensivo
+    4️⃣ Hyper-heuristic layer
+        Escolher heurísticas dinamicamente.
+
+
+1. Papel de cada componente
+    Rule Dependency Graph (RDG)
+        Responsável por decidir QUAIS regras precisam ser recalculadas.
+    Fluxo:
+        mutation
+        ↓
+        AffectedRegion
+        ↓
+        RuleDependencyGraph
+        ↓
+        regras afetadas
+
+    Incremental Rule Evaluation
+        Responsável por COMO recalcular a regra rapidamente.
+    Fluxo:
+        regra afetada
+        ↓
+        evaluateIncremental()
+        ↓
+        penalty
+
+2. Arquitetura correta
+    Uma regra incremental continua declarando dependências.
+        RuleDependencyGraph
+            ↓
+        seleciona WindowPenaltyRule
+            ↓
+        DeltaFitnessEvaluator
+            ↓
+        evaluateIncremental()
+
+    Ou seja:
+        RDG → seleção
+        Incremental → cálculo rápido
+
+
+
+Incremental Workload Evaluation
+
+
+analise a estrutura do solver e verifique se o Modelo Matemático do RiskIndex está totalmente implementado e sendo usado pelo solver.
+Observe especialmente a pasta app\Modules\Horarios\Domain\Risk
+
+
+Em um dos últmos chats pedi pra você verificar od arquivos:
+app\Modules\AG\Application\IslandModelCoordinator.php
+app\Modules\AG\Domain\ConflictGraph\ConflictEdge.php
+app\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface.php
+app\Modules\AG\Domain\HyperHeuristic\OperatorSelectionStrategy.php
+app\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelector.php
+app\Modules\AG\Domain\Metrics\PopulationStatistics.php
+app\Modules\AG\Domain\Operators\Replacement\CrowdingReplacement.php
+app\Modules\AG\Domain\Termination\FitnessThresholdCriterion.php
+app\Modules\AG\Domain\Termination\MaxGenerationsCriterion.php
+app\Modules\AG\Domain\Termination\VarianceBasedTerminationCriterion.php
+app\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator.php
+app\Modules\Horarios\Domain\Risk\RiskClassification.php
+app\Modules\Horarios\Domain\Risk\SaturationCalculator.php
+app\Modules\Horarios\Domain\Risk\StructuralEntropyCalculator.php
+app\Modules\Horarios\Domain\Services\ScheduleRandomGenerator.php
+app\Modules\Horarios\Domain\Services\ScheduleRepairService.php
+identificando a qual funcionalidade cada um pertence e se esta funcionalidade está ou não totalmente implementada e integrada ao solver.
+
+O Diagnóstico geral foi este abaixo:
+
+Dos 16 arquivos, 8 estão vazios (0 bytes) e 2 são stubs parciais.
+O solver hoje roda por outras peças: RunGeneticAlgorithm.php, IslandModelEngine.php, MaxGenerationsOrFitnessCriterion.php, PopulationFitnessEvaluator.php, ScheduleProblem.php, GreedyRepairOperator.php.
+IslandModelCoordinator.php
+Função: coordenação de ilhas (aplicação).
+Status: não implementado.
+Pertence a: island model/orquestração.
+Viabilidade/melhoria: alta, mas hoje já existe coordenação em IslandModelEngine; ganho real viria se virar coordenador assíncrono e de migração adaptativa.
+
+ConflictEdge.php
+Função: representar aresta de conflito.
+Status: não implementado.
+Pertence a: grafo de conflitos.
+Viabilidade/melhoria: média-alta; útil para arestas com peso/tipo (professor/turma), melhorando mutação/crossover guiado por conflito.
+
+FitnessEvaluatorInterface.php
+Função: contrato de avaliação de fitness.
+Status: não implementado.
+Pertence a: avaliação de fitness.
+Viabilidade/melhoria: alta; melhora testabilidade e pluga melhor avaliador assíncrono.
+
+OperatorSelectionStrategy.php
+Função: contrato de seleção de operadores HH.
+Status: implementado e em uso (com EpsilonGreedy, Softmax, UCB1, controlador HH).
+Pertence a: hiper-heurística.
+Observação: implementação parcialmente consistente; Softmax/UCB1 esperam campo reward, mas o tracker entrega score/uses em OperatorPerformanceTracker.php. Hoje funciona porque está usando Epsilon-Greedy.
+
+OperatorSelector.php
+Função: seleção de operadores ALNS.
+Status: stub parcial (só namespace).
+Pertence a: ALNS.
+Viabilidade/melhoria: alta; hoje isso é feito por RouletteWheelSelector.php. Consolidar evitaria duplicidade.
+
+PopulationStatistics.php
+Função: métricas agregadas (best/avg/var/div/entropy).
+Status: implementado, mas não integrado no fluxo principal.
+Pertence a: métricas/telemetria.
+Viabilidade/melhoria: alta; pode alimentar terminação por convergência e controle adaptativo.
+
+CrowdingReplacement.php
+Função: substituição nichada por indivíduo mais similar.
+Status: implementado e em uso via AdaptiveNichingReplacement.php.
+Pertence a: replacement/diversidade.
+Viabilidade/melhoria: já traz ganho de diversidade; pode evoluir com limiar adaptativo baseado em entropia real.
+
+FitnessThresholdCriterion.php
+Status: não implementado.
+Pertence a: terminação.
+Viabilidade/melhoria: média; hoje já coberto parcialmente por MaxGenerationsOrFitnessCriterion.
+
+MaxGenerationsCriterion.php
+Status: não implementado.
+Pertence a: terminação.
+Viabilidade/melhoria: média-baixa (baixo ganho isolado; já existe critério combinado).
+
+VarianceBasedTerminationCriterion.php
+Status: não implementado.
+Pertence a: terminação por convergência.
+Viabilidade/melhoria: alta; bom ganho para parar cedo quando população estagna.
+
+AsyncFitnessEvaluator.php
+Status: não implementado.
+Pertence a: paralelização de avaliação.
+Viabilidade/melhoria: alta e de maior impacto em tempo de execução; hoje PopulationFitnessEvaluator.php é sequencial.
+
+RiskClassification.php
+Função: classificar índice de risco.
+Status: implementado.
+Pertence a: análise de viabilidade/risco.
+Uso: via FeasibilityReport.php.
+
+SaturationCalculator.php
+Função: saturação global e sobrecargas.
+Status: implementado.
+Pertence a: análise estrutural pré-solver.
+
+StructuralEntropyCalculator.php
+Função: entropia estrutural normalizada.
+Status: implementado.
+Pertence a: análise estrutural pré-solver.
+
+ScheduleRandomGenerator.php
+Status: não implementado.
+Pertence a: geração inicial de solução.
+Viabilidade/melhoria: média; hoje essa função está de fato no ScheduleProblem::createIndividual().
+
+ScheduleRepairService.php
+Status: não implementado.
+Pertence a: reparo de solução.
+Viabilidade/melhoria: média; hoje já existe reparo em GreedyRepairOperator.
+
+Conclusão objetiva
+
+Funcionalidade central do solver está operacional, mas há um bloco grande de arquitetura planejada não consolidada.
+Melhor ROI para evolução do solver:
+Implementar AsyncFitnessEvaluator + FitnessEvaluatorInterface e ligar em PopulationFitnessEvaluator.
+Implementar VarianceBasedTerminationCriterion e combinar com critério atual.
+Integrar PopulationStatistics na decisão de terminação/adaptação.
+Consolidar hiper-heurística (contrato de stats único para Epsilon/Softmax/UCB1).
+Limpar stubs/legado (ou implementar de fato) para reduzir ambiguidade arquitetural.
+
+E esta foi a proposta de intervenção:
+
+1. Implementar FitnessEvaluatorInterface + AsyncFitnessEvaluator (prioridade máxima)
+    Hoje a avaliação da população está sequencial.
+    Esse é o maior gargalo do solver.
+    Comece criando interface, depois dois adapters: síncrono (atual) e assíncrono (novo), com fallback automático para síncrono.
+2. Acoplar isso em PopulationFitnessEvaluator
+    Trocar o loop direto por estratégia pluggável (sync/async).
+    Adicionar testes de equivalência: mesmo fitness no modo sync e async para a mesma população.
+3. Implementar VarianceBasedTerminationCriterion
+    Evita gastar gerações quando a população já convergiu.
+    Use junto com o critério atual (MaxGenerationsOrFitnessCriterion) em um critério híbrido.
+4. Integrar PopulationStatistics no fluxo real
+    Usar best/avg/variance/diversity/entropy para decisão de parada e tuning da mutação.
+    Hoje essa classe existe, mas está subaproveitada.
+5. Consolidar stubs e duplicidades
+    OperatorSelector (ALNS), ScheduleRandomGenerator, ScheduleRepairService, IslandModelCoordinator.
+    Ou implementa com uso real, ou remove para reduzir dívida técnica e confusão.
+6. Depois disso, evoluir qualidade de solução
+    Pesos adaptativos de operadores (HH/ALNS) com contrato de estatística único.
+    ConflictEdge com peso/tipo para mutações/crossover orientados por conflito.
+
+Ordem prática de execução:
+    1. Interface + async fitness
+    2. Integração no evaluator
+    3. Critério de terminação por variância
+    4. Integrar PopulationStatistics
+    5. Limpeza/implementação de stubs
+
+Verifique o que já foi feito da sua proposta de intervenção e defina um plano para darmos continuidade às intervenções necessárias.
+
+
+
+Implementei o relatório histórico global por policy no ExecutionCenter, desacoplado de uma execução específica. Agora o painel responde qual policy mais frequentemente chega perto do gate real na janela recente de execuções e em quais condições de landscape isso costuma acontecer.
+
+A base analítica ficou em SearchResponseGlobalPolicyReadinessReport.php e SearchResponseGlobalPolicyReadinessReportBuilder.php. Esse builder agrega, por policy:
+
+near_gate_occurrences
+candidate_ready_occurrences
+médias de success_rate e progress_score
+contexto típico de landscape (top_landscape_state, top_landscape_phenomenon)
+sinais médios como basin_lock_confidence, depth_score, population_turnover, elite_similarity e best_delta_window
+bloqueio dominante e amostra de execuções
+Pluguei isso em ExecutionCenter.php e renderizei a nova seção em execution-center.blade.php, ao lado do readiness histórico por execução. O relatório usa a latestMetric de cada execução, então continua eficiente e sem consultas por geração.
+
+Também adicionei cobertura em SearchResponseGlobalPolicyReadinessReportBuilderTest.php e ampliei ExecutionCenterTest.php para validar o painel novo.
+
+Validação:
+php artisan test --compact tests\Unit\AG\SearchResponseGlobalPolicyReadinessReportBuilderTest.php tests\Unit\AG\SearchResponseHistoricalReadinessReportBuilderTest.php tests\Feature\Livewire\Algoritmo\ExecutionCenterTest.php tests\Unit\AG\SearchResponseReadinessDashboardBuilderTest.php tests\Feature\Algoritmo\ExecutionMetricsStreamingTest.php
+6 passed
+
+vendor\bin\pint --test ...
+PASS
+
+Próximo passo que eu sugiro: transformar esse relatório global em uma série temporal por policy, para mostrar se near_gate, candidate_ready e os sinais de landscape estão melhorando ou piorando ao longo das execuções, em vez de só olhar o agregado atual.
+
+
+
+Sim. Há espaço claro para melhorar o código, e o diagnóstico aponta uma causa principal bem específica.
+
+Nos logs em [ga-2026-03-28.log](d:/laragon/www/horario/storage/logs/ga-2026-03-28.log) e [laravel.log](d:/laragon/www/horario/storage/logs/laravel.log), e nas métricas da `schedule_execution` `id=1`, o padrão foi este:
+- 20 gerações registradas
+- `best_fitness = 0.0` em todas
+- `avg_fitness = 0.0` em todas
+- `variance = 0.0` em todas
+- diversidade e entropia altas quase o tempo todo
+- ALNS nunca disparou
+- reparo final falhou 3 vezes com exatamente o mesmo resultado: `hard_penalty = 122`, `soft_penalty = 389.5`, `score = 0`
+
+Também confirmei que o `horario_id=3` é estruturalmente viável pelo analisador: `is_feasible = true`, `global_saturation = 100`, sem overloads e sem déficit de blocos. Então o problema não é inviabilidade do horário; é o pipeline de construção/evolução/reparo.
+
+**Diagnóstico**
+O gargalo principal está em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135). Hoje, qualquer indivíduo inviável com penalidade alta cai praticamente no mesmo `fitness = 0`. Como a população inteira ficou nessa faixa, o GA perdeu gradiente: seleção, crossover, mutação, HH e SLAE ficaram sem sinal útil. A alta diversidade mostra que os cromossomos eram diferentes, mas todos igualmente ruins para a função objetivo.
+
+O segundo gargalo está em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41). A construção GRASP aceita um cromossomo assim que termina de alocar tudo, mesmo com `forced_allocations` e `hard_conflict_allocations`. O diagnóstico preventivo atual em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L296) só barra casos muito óbvios; ele não rejeita indivíduos estruturalmente “completos”, mas já muito inviáveis.
+
+O terceiro gargalo é o reparo. [GreedyRepairOperator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Repair/GreedyRepairOperator.php#L13) faz só relocação gulosa, em até 3 passes, sem swap, sem kick-chain e sem rebuild parcial. E em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L220), o reparo final repete 3 vezes o mesmo operador determinístico; os logs mostram que isso não muda nada.
+
+**Intervenções que devem ser feitas**
+1. Corrigir a função de fitness para preservar gradiente entre inviáveis.
+Aplicar isso em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135). Soluções viáveis devem continuar sempre acima das inviáveis, mas as inviáveis não podem colapsar todas em `0`. Esse é o ajuste de maior impacto.
+
+2. Endurecer a geração inicial com gate de qualidade.
+Em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41), depois de montar o indivíduo, avaliar imediatamente e rejeitar/reconstruir quando o `hardPenalty` passar de um limiar. Também limitar `hard_conflict_allocations` e tornar o `fallback` menos cego em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L468).
+
+3. Fortalecer o reparo.
+Evoluir [GreedyRepairOperator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Repair/GreedyRepairOperator.php#L13) para reparar conflitos hard por prioridade, com swap entre genes, ejection chain ou destroy-and-rebuild local. Repetir 3 vezes o mesmo reparo determinístico, como hoje em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L220), não traz ganho real.
+
+4. Fazer o ALNS realmente acontecer.
+Hoje o engine é criado com `lnsFrequency: 50` em [RunGeneticAlgorithm.php](d:/laragon/www/horario/app/Modules/AG/Application/RunGeneticAlgorithm.php#L200), mas a execução tinha só 20 gerações. Resultado: `alns_triggered_count = 0`. Isso precisa virar frequência adaptativa ou baseada em percentual do orçamento de gerações.
+
+5. Persistir telemetria da população inicial.
+Hoje [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L548) reporta progresso, mas não estamos guardando em banco o que mais importa para depuração: `forced_allocations`, `hard_conflict_allocations`, `hardPenalty` inicial mínimo/médio/máximo. Sem isso, a execução “nasce ruim” e só descobrimos no fim.
+
+6. Aproveitar ou consolidar o legado de geração populacional.
+[PopulationGenerator.php](d:/laragon/www/horario/app/Modules/AG/Infrastructure/Population/PopulationGenerator.php#L28) já tem ideias úteis de fail-fast estrutural e tentativas controladas, mas não está no caminho principal. Vale integrar esses conceitos ao `ScheduleProblem` ou remover a duplicidade.
+
+**Ordem recomendada**
+1. `FitnessEvaluator` com gradiente entre inviáveis
+2. Gate de qualidade na `createIndividual()`
+3. Reparo hard mais forte
+4. ALNS com frequência alcançável
+5. Telemetria persistida da população inicial
+
+**Testes que passam a ser necessários**
+- garantir que dois inviáveis com penalidades diferentes tenham fitness diferente, mantendo qualquer viável acima deles
+- garantir que `createIndividual()` rejeite cromossomos com `hardPenalty` excessivo
+- garantir que o reparo reduza `hardPenalty` ou pare cedo quando não houver melhora
+- garantir que o ALNS dispare em execuções curtas
+- teste de integração com seed fixa validando que um caso estruturalmente viável consiga produzir ao menos um indivíduo viável no pipeline
+
+Se quiser, eu seguiria agora pela intervenção de maior ROI: corrigir o gradiente lexicográfico em [FitnessEvaluator.php](d:/laragon/www/horario/app/Modules/AG/Domain/Fitness/FitnessEvaluator.php#L135) e, na mesma etapa, adicionar o gate de qualidade na geração inicial em [ScheduleProblem.php](d:/laragon/www/horario/app/Modules/Horarios/Domain/Problem/ScheduleProblem.php#L41).
+
+
+
+ Plano Revisado Por Etapas
+
+  1. Fase 0: congelar convenção-alvo
+     Definir a convenção antes de mover qualquer coisa:
+
+  - app/Livewire fica só para UI global do app.
+  - app/Modules/*/UI/Livewire fica para UI de domínio.
+  - resources/views/livewire fica só para views globais.
+  - resources/views/modules/*/livewire fica para views dos módulos.
+  - routes/web.php vira agregador.
+  - Pastas vazias de tentativa manual só serão removidas no fim.
+
+  Pastas a criar primeiro:
+
+  app/Modules/AG/UI/Livewire
+  app/Modules/AG/UI/Http/Controllers
+  resources/views/modules/ag/livewire
+  resources/views/modules/horarios/livewire
+  routes/web
+  docs/architecture
+  docs/diagnostics
+  docs/prompts
+  docs/runbooks
+  docs/backlog
+  database/imports
+  database/sql
+  scripts/maintenance
+  tests/Feature/Modules/AG
+  tests/Feature/Modules/AG/Livewire
+  tests/Feature/Modules/Horarios
+  tests/Feature/Modules/Horarios/Livewire
+  tests/Unit/Modules/AG
+  tests/Unit/Modules/Horarios
+
+  2. Fase 1: limpar a raiz
+     Mover primeiro tudo que não afeta runtime.
+
+  Arquivos a mover:
+
+  clear_queue.bat -> scripts/maintenance/clear_queue.bat
+  optimize -> scripts/maintenance/optimize
+  Comandos especiais.txt -> docs/runbooks/comandos-especiais.txt
+  contexto do projeto.txt -> docs/architecture/contexto-do-projeto.txt
+  Diagnostico do projeto gpt 2026-03-10.txt -> docs/diagnostics/diagnostico-do-projeto-gpt-
+  2026-03-10.txt
+  prompt 01.txt -> docs/prompts/prompt-01.txt
+  prompt 02.txt -> docs/prompts/prompt-02.txt
+  prompt 03.txt -> docs/prompts/prompt-03.txt
+  prompt 04.txt -> docs/prompts/prompt-04.txt
+  prompt 05.txt -> docs/prompts/prompt-05.txt
+  prompt 06.txt -> docs/prompts/prompt-06.txt
+  prompt 07.txt -> docs/prompts/prompt-07.txt
+  prompt 08.txt -> docs/prompts/prompt-08.txt
+  prompt 09.txt -> docs/prompts/prompt-09.txt
+  prompt 10.txt -> docs/prompts/prompt-10.txt
+  prompt 11.txt -> docs/prompts/prompt-11.txt
+  prompts.txt -> docs/prompts/prompts.txt
+  rotas.txt -> docs/architecture/rotas.txt
+  query.sql -> database/sql/query.sql
+  turmas.sql -> database/sql/turmas.sql
+  professor_turma.csv -> database/imports/professor_turma.csv
+  TODO -> docs/backlog/TODO
+
+  Sem mover:
+
+  composer.json
+  composer.lock
+  package.json
+  package-lock.json
+  artisan
+  vite.config.js
+  phpunit.xml
+  tailwind.config.js
+  boost.json
+  GEMINI.md
+  .env
+  .env.example
+
+  3. Fase 2: modularizar a UI do solver
+     Aqui está a principal correção estrutural real do projeto.
+
+  Classes a mover:
+
+  app/Livewire/Ag/DiagnosticoInviabilidade.php -> app/Modules/AG/UI/Livewire/
+  DiagnosticoInviabilidade.php
+  app/Livewire/Algoritmo/ExecutionCenter.php -> app/Modules/AG/UI/Livewire/
+  ExecutionCenter.php
+  app/Livewire/Algoritmo/ExecutionDashboard.php -> app/Modules/AG/UI/Livewire/
+  ExecutionDashboard.php
+  app/Livewire/Algoritmo/ExecutionMetricsStream.php -> app/Modules/AG/UI/Livewire/
+  ExecutionMetricsStream.php
+  app/Livewire/Algoritmo/ExecutionStatusPanel.php -> app/Modules/AG/UI/Livewire/
+  ExecutionStatusPanel.php
+  app/Http/Controllers/ExecutionLogViewerController.php -> app/Modules/AG/UI/Http/
+  Controllers/ExecutionLogViewerController.php
+
+  Permanecem globais:
+
+  app/Livewire/Dashboard.php
+  app/Livewire/Actions/Logout.php
+  app/Livewire/Auth/Login.php
+  app/Livewire/Auth/UserManager.php
+  app/Livewire/Layout/Navbar.php
+  app/Livewire/Layout/Sidebar.php
+  app/Http/Controllers/Controller.php
+  app/Http/Controllers/TesteController.php
+
+  4. Fase 3: alinhar as views do solver e de Horarios com os módulos
+     O backend já está modular em Horarios; as views ainda não.
+
+  Views de AG a mover:
+
+  resources/views/livewire/ag/diagnostico-inviabilidade.blade.php -> resources/views/modules/
+  ag/livewire/diagnostico-inviabilidade.blade.php
+  resources/views/livewire/algoritmo/execution-center.blade.php -> resources/views/modules/
+  ag/livewire/execution-center.blade.php
+  resources/views/livewire/algoritmo/execution-dashboard.blade.php -> resources/views/
+  modules/ag/livewire/execution-dashboard.blade.php
+  resources/views/livewire/algoritmo/execution-status-panel.blade.php -> resources/views/
+  modules/ag/livewire/execution-status-panel.blade.php
+  resources/views/livewire/algoritmo/metrics-stream.blade.php -> resources/views/modules/ag/
+  livewire/metrics-stream.blade.php
+
+  Views de Horarios a mover:
+
+  resources/views/livewire/horarios/configurar.blade.php -> resources/views/modules/horarios/
+  livewire/configurar.blade.php
+  resources/views/livewire/horarios/create.blade.php -> resources/views/modules/horarios/
+  livewire/create.blade.php
+  resources/views/livewire/horarios/gerenciar-aulas.blade.php -> resources/views/modules/
+  horarios/livewire/gerenciar-aulas.blade.php
+  resources/views/livewire/horarios/gerenciar-restricoes.blade.php -> resources/views/
+  modules/horarios/livewire/gerenciar-restricoes.blade.php
+  resources/views/livewire/horarios/index.blade.php -> resources/views/modules/horarios/
+  livewire/index.blade.php
+  resources/views/livewire/horarios/manage.blade.php -> resources/views/modules/horarios/
+  livewire/manage.blade.php
+  resources/views/livewire/horarios/resumo-configuracao.blade.php -> resources/views/modules/
+  horarios/livewire/resumo-configuracao.blade.php
+  resources/views/livewire/horarios/show.blade.php -> resources/views/modules/horarios/
+  livewire/show.blade.php
+  resources/views/livewire/horarios/aulas/edit.blade.php -> resources/views/modules/horarios/
+  livewire/aulas/edit.blade.php
+  resources/views/livewire/horarios/aulas/index.blade.php -> resources/views/modules/
+  horarios/livewire/aulas/index.blade.php
+  resources/views/livewire/horarios/disciplinas/create.blade.php -> resources/views/modules/
+  horarios/livewire/disciplinas/create.blade.php
+  resources/views/livewire/horarios/disciplinas/edit.blade.php -> resources/views/modules/
+  horarios/livewire/disciplinas/edit.blade.php
+  resources/views/livewire/horarios/disciplinas/index.blade.php -> resources/views/modules/
+  horarios/livewire/disciplinas/index.blade.php
+  resources/views/livewire/horarios/partials/etapa-configuracao-algoritmo-genetico.blade.php
+  -> resources/views/modules/horarios/livewire/partials/etapa-configuracao-algoritmo-
+  genetico.blade.php
+  resources/views/livewire/horarios/partials/etapa-configuracao-basica.blade.php ->
+  resources/views/modules/horarios/livewire/partials/etapa-configuracao-basica.blade.php
+  resources/views/livewire/horarios/partials/modal-aula.blade.php -> resources/views/modules/
+  horarios/livewire/partials/modal-aula.blade.php
+  resources/views/livewire/horarios/professores/create.blade.php -> resources/views/modules/
+  horarios/livewire/professores/create.blade.php
+  resources/views/livewire/horarios/professores/edit.blade.php -> resources/views/modules/
+  horarios/livewire/professores/edit.blade.php
+  resources/views/livewire/horarios/professores/index.blade.php -> resources/views/modules/
+  horarios/livewire/professores/index.blade.php
+  resources/views/livewire/horarios/tabs/overview.blade.php -> resources/views/modules/
+  horarios/livewire/tabs/overview.blade.php
+  resources/views/livewire/horarios/turmas/aulas.blade.php -> resources/views/modules/
+  horarios/livewire/turmas/aulas.blade.php
+  resources/views/livewire/horarios/turmas/create.blade.php -> resources/views/modules/
+  horarios/livewire/turmas/create.blade.php
+  resources/views/livewire/horarios/turmas/edit.blade.php -> resources/views/modules/
+  horarios/livewire/turmas/edit.blade.php
+  resources/views/livewire/horarios/turmas/index.blade.php -> resources/views/modules/
+  horarios/livewire/turmas/index.blade.php
+
+  Views globais que ficam onde estão:
+
+  resources/views/livewire/dashboard.blade.php
+  resources/views/livewire/auth/login.blade.php
+  resources/views/livewire/auth/user-manager.blade.php
+  resources/views/livewire/layout/navbar.blade.php
+  resources/views/livewire/layout/sidebar.blade.php
+
+  5. Fase 4: quebrar as rotas por responsabilidade
+     Hoje a dependência maior está centralizada em routes/web.php. O plano revisado é extrair     conteúdo, não mover endpoints de forma arbitrária.
+
+  Arquivos a criar:
+
+  routes/web/auth.php
+  routes/web/algoritmo.php
+  routes/web/horarios.php
+  routes/web/dev.php
+
+  Extração planejada:
+
+  - auth.php: login, users, perfil, configuracoes
+  - algoritmo.php: todas as rotas /algoritmo/* e logs
+  - horarios.php: rotas /horarios/*, mais CRUDs relacionados a aulas, turmas, professores,
+    disciplinas se vocês quiserem agrupamento por domínio
+  - dev.php: /teste/alocacoes
+  - web.php: /home, /, require dos arquivos acima, e require settings.php
+
+  6. Fase 5: reespelhar os testes pela arquitetura real
+     Como Horarios continua modular e AG passará a ser modular também, os testes devem
+     refletir isso.
+
+  Arquivos a mover:
+
+  tests/Feature/Algoritmo/ExecutionLogViewerTest.php -> tests/Feature/Modules/AG/
+  ExecutionLogViewerTest.php
+  tests/Feature/Algoritmo/ExecutionMetricsStreamingTest.php -> tests/Feature/Modules/AG/
+  ExecutionMetricsStreamingTest.php
+
+  tests/Feature/Livewire/Algoritmo/ExecutionCenterTest.php -> tests/Feature/Modules/AG/
+  Livewire/ExecutionCenterTest.php
+  tests/Feature/Livewire/Algoritmo/ExecutionDashboardHeartbeatTest.php -> tests/Feature/
+  Modules/AG/Livewire/ExecutionDashboardHeartbeatTest.php
+  tests/Feature/Livewire/Algoritmo/ExecutionDashboardTest.php -> tests/Feature/Modules/AG/
+  Livewire/ExecutionDashboardTest.php
+  tests/Feature/Livewire/Algoritmo/ExecutionStatusPanelTest.php -> tests/Feature/Modules/AG/
+  Livewire/ExecutionStatusPanelTest.php
+
+  tests/Unit/AG/AlnsTelemetryTest.php -> tests/Unit/Modules/AG/AlnsTelemetryTest.php
+  tests/Unit/AG/FitnessEvaluationPipelineTest.php -> tests/Unit/Modules/AG/
+  FitnessEvaluationPipelineTest.php
+  tests/Unit/AG/FitnessEvaluatorLexicographicTest.php -> tests/Unit/Modules/AG/
+  FitnessEvaluatorLexicographicTest.php
+  tests/Unit/AG/GeneticAlgorithmEngineStandaloneTest.php -> tests/Unit/Modules/AG/
+  GeneticAlgorithmEngineStandaloneTest.php
+  tests/Unit/AG/GreedyRepairOperatorTest.php -> tests/Unit/Modules/AG/
+  GreedyRepairOperatorTest.php
+  tests/Unit/AG/HyperHeuristicContractTest.php -> tests/Unit/Modules/AG/
+  HyperHeuristicContractTest.php
+  tests/Unit/AG/LandscapeObservationTest.php -> tests/Unit/Modules/AG/
+  LandscapeObservationTest.php
+  tests/Unit/AG/MetricsRecorderTest.php -> tests/Unit/Modules/AG/MetricsRecorderTest.php
+  tests/Unit/AG/SearchResponseActivationGateTest.php -> tests/Unit/Modules/AG/
+  SearchResponseActivationGateTest.php
+  tests/Unit/AG/SearchResponseGlobalPolicyReadinessReportBuilderTest.php -> tests/Unit/
+  Modules/AG/SearchResponseGlobalPolicyReadinessReportBuilderTest.php
+  tests/Unit/AG/SearchResponseHistoricalReadinessReportBuilderTest.php -> tests/Unit/Modules/
+  AG/SearchResponseHistoricalReadinessReportBuilderTest.php
+  tests/Unit/AG/SearchResponseOutcomeTrackerTest.php -> tests/Unit/Modules/AG/
+  SearchResponseOutcomeTrackerTest.php
+  tests/Unit/AG/SearchResponsePolicyTest.php -> tests/Unit/Modules/AG/
+  SearchResponsePolicyTest.php
+  tests/Unit/AG/SearchResponseReadinessDashboardBuilderTest.php -> tests/Unit/Modules/AG/
+  SearchResponseReadinessDashboardBuilderTest.php
+  tests/Unit/AG/VarianceBasedTerminationCriterionTest.php -> tests/Unit/Modules/AG/
+  VarianceBasedTerminationCriterionTest.php
+
+  tests/Feature/Horarios/AlocacaoExecutionIntegrityTest.php -> tests/Feature/Modules/
+  Horarios/AlocacaoExecutionIntegrityTest.php
+  tests/Feature/Horarios/DirectCrudPagesTest.php -> tests/Feature/Modules/Horarios/
+  DirectCrudPagesTest.php
+  tests/Feature/Horarios/ManagePageTest.php -> tests/Feature/Modules/Horarios/
+  ManagePageTest.php
+  tests/Feature/Horarios/PersistBestSolutionServiceTest.php -> tests/Feature/Modules/
+  Horarios/PersistBestSolutionServiceTest.php
+
+  tests/Feature/Livewire/Horarios/ConfigurarTest.php -> tests/Feature/Modules/Horarios/
+  Livewire/ConfigurarTest.php
+  tests/Feature/Livewire/Horarios/IndexTest.php -> tests/Feature/Modules/Horarios/Livewire/
+  IndexTest.php
+  tests/Feature/Livewire/Horarios/ResumoConfiguracaoTest.php -> tests/Feature/Modules/
+  Horarios/Livewire/ResumoConfiguracaoTest.php
+  tests/Feature/Livewire/Horarios/ShowTest.php -> tests/Feature/Modules/Horarios/Livewire/
+  ShowTest.php
+
+  tests/Unit/Horarios/RiskIndexCalculatorTest.php -> tests/Unit/Modules/Horarios/
+  RiskIndexCalculatorTest.php
+  tests/Unit/Horarios/ScheduleFeasibilityAnalyzerTest.php -> tests/Unit/Modules/Horarios/
+  ScheduleFeasibilityAnalyzerTest.php
+  tests/Unit/Horarios/ScheduleProblemInitialQualityGateTest.php -> tests/Unit/Modules/
+  Horarios/ScheduleProblemInitialQualityGateTest.php
+
+  Permanecem globais:
+
+  tests/Pest.php
+  tests/TestCase.php
+  tests/Feature/DashboardTest.php
+  tests/Feature/ExampleTest.php
+  tests/Feature/Auth/*
+  tests/Feature/Routes/RouteNamesTest.php
+  tests/Feature/Settings/*
+  tests/Feature/Livewire/Layout/SidebarNavigationTest.php
+  tests/Unit/ExampleTest.php
+  tests/Unit/Models/ModelSchemaAlignmentTest.php
+
+  7. Fase 6: limpar a migração manual incompleta
+     Só depois de tudo ajustado.
+
+  Diretórios vazios candidatos à remoção:
+
+  app/Livewire/Aulas
+  app/Livewire/Disciplinas
+  app/Livewire/Professores
+  app/Livewire/Turmas
+
+  Se, até lá, algum arquivo novo nascer nessas pastas, a equipe precisa decidir se ele volta
+  para app/Modules/Horarios/UI/Livewire ou se abandona a convenção modular. Hoje, pelo estado
+  real do projeto, o caminho correto é manter Horarios dentro de módulo.
+
+  8. Fase 7: opcional, consolidar utilitários genéricos
+     Ainda não é urgente, mas pode ser a última etapa.
+
+  Arquivos candidatos:
+
+  app/Helpers/DateTimeHelper.php -> app/Support/DateTime/DateTimeHelper.php
+  app/Traits/ComDadosComuns.php -> app/Support/Data/ComDadosComuns.php
+  app/Concerns/PasswordValidationRules.php -> app/Support/Auth/PasswordValidationRules.php
+  app/Concerns/ProfileValidationRules.php -> app/Support/Auth/ProfileValidationRules.php
+  app/Http/Controllers/TesteController.php -> app/Http/Controllers/Dev/TesteController.php
+
+  Ordem recomendada
+
+  1. Fase 0
+  2. Fase 1
+  3. Fase 2
+  4. Fase 3
+  5. Fase 4
+  6. Fase 5
+  7. Fase 6
+  8. Fase 7
+
+  O que mudou em relação ao plano anterior
+
+  - Não faz sentido planejar migração de Horarios do módulo para app/Livewire; isso não
+    aconteceu de fato.
+  - As novas pastas em app/Livewire entram como resíduo de tentativa manual, não como nova
+    arquitetura.
+  - A limpeza da raiz agora inclui também Comandos especiais.txt.
+  - O plano fica mais conservador: primeiro consolidar AG, depois alinhar views, depois
+    limpar sobras.
+
+  Se quiser, no próximo passo eu transformo esse plano revisado em um checklist operacional
+  de execução fase a fase, com critérios de pronto e pontos de verificação entre etapas.
+
+
+Checklist Operacional
+
+  A sequência abaixo transforma o plano revisado em execução controlada, com critério de
+  pronto ao final de cada fase e um ponto de verificação antes de seguir.
+
+  Fase 0
+  Objetivo: preparar o destino e congelar a convenção.
+
+  Checklist:
+
+  - Criar as pastas-alvo de documentação, scripts, views modulares, rotas segmentadas e
+    testes modulares.
+  - Registrar a convenção oficial:
+      - app/Livewire só para UI global.
+      - app/Modules/*/UI/Livewire para UI de domínio.
+      - resources/views/livewire só para views globais.
+      - resources/views/modules/*/livewire para views de módulos.
+      - routes/web.php como agregador.
+  - Confirmar com a equipe que Horarios continuará modular.
+  - Confirmar com a equipe que AG será consolidado como módulo.
+
+  Critério de pronto:
+
+  - Todas as pastas de destino existem.
+  - A convenção está definida por escrito em algum documento interno.
+
+  Ponto de verificação:
+
+  - Ninguém da equipe está criando arquivos novos em app/Livewire/Aulas, Disciplinas,
+    Professores ou Turmas.
+
+  Fase 1
+  Objetivo: limpar a raiz do repositório sem impacto funcional.
+
+  Checklist:
+
+  - Mover utilitários para scripts/maintenance.
+  - Mover prompts e notas para docs/.
+  - Mover SQL auxiliar para database/sql.
+  - Mover CSV de importação para database/imports.
+  - Manter na raiz apenas arquivos de boot, build, ambiente e configuração do projeto.
+
+  Critério de pronto:
+
+  - A raiz contém apenas arquivos operacionais do projeto.
+  - Todos os arquivos soltos de documentação e apoio saíram da raiz.
+
+  Ponto de verificação:
+
+  - composer install, npm install, artisan, Vite e testes continuam encontrando seus arquivos
+    de configuração na raiz.
+
+  Fase 2
+  Objetivo: consolidar a UI do solver dentro de app/Modules/AG.
+
+  Checklist:
+
+  - Mover classes Livewire de app/Livewire/Ag para app/Modules/AG/UI/Livewire.
+  - Mover classes Livewire de app/Livewire/Algoritmo para app/Modules/AG/UI/Livewire.
+  - Mover ExecutionLogViewerController para app/Modules/AG/UI/Http/Controllers.
+  - Atualizar namespaces, imports e referências de rota.
+  - Confirmar que Dashboard, Auth, Layout e Actions continuam em app/Livewire.
+
+  Critério de pronto:
+
+  - Não existe mais classe de solver em app/Livewire/Ag ou app/Livewire/Algoritmo.
+  - Todas as rotas do solver referenciam classes em App\Modules\AG\UI\....
+
+  Ponto de verificação:
+
+  - php artisan route:list funciona.
+  - Não há erro de autoload.
+  - As páginas de solver carregam.
+
+  Fase 3
+  Objetivo: alinhar as views de AG e Horarios com a arquitetura modular.
+
+  Checklist:
+
+  - Mover views de resources/views/livewire/ag para resources/views/modules/ag/livewire.
+  - Mover views de resources/views/livewire/algoritmo para resources/views/modules/ag/
+    livewire.
+  - Mover toda a árvore de resources/views/livewire/horarios para resources/views/modules/
+    horarios/livewire.
+  - Atualizar chamadas de view() e convenções Livewire onde necessário.
+  - Manter em resources/views/livewire apenas:
+      - dashboard.blade.php
+      - auth/*
+      - layout/*
+
+  Critério de pronto:
+
+  - Não existem mais views de domínio em resources/views/livewire/ag, algoritmo ou horarios.
+  - As views globais restantes em resources/views/livewire são apenas as do app.
+
+  Ponto de verificação:
+
+  - Todas as páginas Livewire renderizam sem erro de “view not found”.
+  - Os componentes Horarios e AG continuam localizando suas views corretamente.
+
+  Fase 4
+  Objetivo: quebrar as rotas por responsabilidade.
+
+  Checklist:
+
+  - Criar routes/web/auth.php.
+  - Criar routes/web/algoritmo.php.
+  - Criar routes/web/horarios.php.
+  - Criar routes/web/dev.php.
+  - Reduzir routes/web.php a agregador.
+  - Extrair as rotas existentes para os arquivos novos sem mudar comportamento.
+  - Manter settings.php separado como já está.
+
+  Critério de pronto:
+
+  - routes/web.php só agrega rotas centrais e requires.
+  - Rotas estão segmentadas por contexto funcional.
+
+  Ponto de verificação:
+
+  - php artisan route:list mostra o mesmo conjunto de rotas esperado.
+  - Os nomes de rota não mudaram sem intenção explícita.
+
+  Fase 5
+  Objetivo: reespelhar os testes pela arquitetura modular.
+
+  Checklist:
+
+  - Mover testes de Feature/Algoritmo para Feature/Modules/AG.
+  - Mover testes de Feature/Livewire/Algoritmo para Feature/Modules/AG/Livewire.
+  - Mover testes de Unit/AG para Unit/Modules/AG.
+  - Mover testes de Feature/Horarios para Feature/Modules/Horarios.
+  - Mover testes de Feature/Livewire/Horarios para Feature/Modules/Horarios/Livewire.
+  - Mover testes de Unit/Horarios para Unit/Modules/Horarios.
+  - Manter globais:
+      - Auth
+      - Settings
+      - Routes
+      - Dashboard
+      - Layout
+      - Models
+      - base do Pest
+
+  Critério de pronto:
+
+  - A pasta tests reflete a arquitetura alvo.
+  - Não há testes de módulo espalhados fora de Modules.
+
+  Ponto de verificação:
+
+  - A suíte de testes roda.
+  - Não há imports quebrados por namespace, caminho ou references a views antigas.
+
+  Fase 6
+  Objetivo: remover resíduos da migração manual incompleta.
+
+  Checklist:
+
+  - Verificar se app/Livewire/Aulas está vazio.
+  - Verificar se app/Livewire/Disciplinas está vazio.
+  - Verificar se app/Livewire/Professores está vazio.
+  - Verificar se app/Livewire/Turmas está vazio.
+  - Remover apenas diretórios realmente vazios.
+
+  Critério de pronto:
+
+  - Não existem pastas vazias em app/Livewire que contradigam a convenção adotada.
+
+  Checklist:
+
+  - Revisar Helpers, Traits e Concerns.
+  - Mover utilitários realmente compartilhados para app/Support.
+  - Mover TesteController para app/Http/Controllers/Dev se ele continuar existindo.
+  - Evitar criar novo “depósito genérico” em Support.
+
+  Critério de pronto:
+
+  - Cada utilitário restante tem responsabilidade clara.
+  - Helpers, Traits e Concerns deixam de ser gavetas difusas.
+
+  Ponto de verificação:
+
+  - Nenhuma regra de negócio de módulo foi parar em Support.
+
+  Checklist de Controle Entre Fases
+  Execute isso ao fim de cada fase:
+
+  - composer dump-autoload
+  - php artisan route:list
+  - php artisan test ou pelo menos a suíte afetada
+  - Verificação manual das telas afetadas
+  - Revisão rápida de imports quebrados
+  - Revisão rápida de git diff para confirmar que só houve a mudança da fase
+
+  Critério Global de Encerramento
+  A migração estará concluída quando:
+
+  - AG e Horarios estiverem organizados como módulos completos.
+  - app/Livewire contiver apenas UI global.
+  - resources/views/livewire contiver apenas views globais.
+  - A raiz estiver limpa.
+  - As rotas estiverem segmentadas.
+  - Os testes refletirem a arquitetura final.
+  - Não restarem diretórios vazios ou duplicação estrutural causada pela tentativa manual.
+
+  Se quiser, o próximo passo é converter isso em um roteiro de execução prático da Fase 1,
+  com a ordem exata dos movimentos e a validação após cada bloco.
+
+
+  Approaching rate limits
+  Switch to gpt-5.1-codex-mini for lower credit usage?
+
+› 1. Switch to gpt-5.1-codex-mini           Optimized for codex. Cheaper, faster, but less
+                                            capable.
+  2. Keep current model
+  3. Keep current model (never show again)
+
+
+Gargalos da populacao inicial
+    Diagnostico da construcao inicial
+    Conflitos hard estao estourando o fail-fast logo nas tentativas iniciais.
+
+Principais gargalos
+    Conflitos hard estao estourando o fail-fast logo nas tentativas iniciais.
+    Algumas tentativas de construcao estao caras demais e ficam muito tempo sem chegar a um candidato aceitavel.
+    A construcao esta recorrendo a muitas alocacoes forcadas, sinal de baixa flexibilidade real durante a montagem.
+    A fila de aulas mais criticas esta convergindo para colisoes cedo demais, antes do repair conseguir ajudar.
+    As aulas mais dificeis concentram muitas ocorrencias para poucos dias/slots realmente seguros.
+
+Sugestoes de melhoria
+    Introduzir construcao por arrependimento (regret-based insertion) para priorizar as aulas que mais perdem qualidade quando o melhor slot some.
+    Adicionar memoria de nogoods para evitar recombinar os mesmos conflitos hard entre professor, turma e bloco de tempo.
+    Trocar parte do GRASP puro por seeds parciais viaveis com repair incremental, em vez de reiniciar a tentativa inteira do zero.
+    Reordenar dinamicamente a fila a cada bloco de alocacoes usando pressao de conflito atual, nao apenas a dificuldade estatica calculada no inicio.
+    Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.
+
+
+

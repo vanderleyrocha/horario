@@ -419,6 +419,6 @@ class Show extends Component
 
     public function render()
     {
-        return view('livewire.horarios.show');
+        return view('modules.horarios.livewire.show');
     }
 }

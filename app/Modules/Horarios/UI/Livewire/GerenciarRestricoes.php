@@ -209,7 +209,7 @@ class GerenciarRestricoes extends Component {
     }
 
     public function render() {
-        return view('livewire.horarios.gerenciar-restricoes', [
+        return view('modules.horarios.livewire.gerenciar-restricoes', [
             'entidades' => $this->entidades,
         ]);
     }

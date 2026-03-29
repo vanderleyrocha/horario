@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Evolution\IslandModel;
 
-use App\Helpers\DateTimeHelper;
+use App\Support\DateTimeHelper;
 use App\Modules\AG\Application\GeneticAlgorithmEngine;
 use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;

@@ -130,7 +130,7 @@ class Index extends Component
             ->orderBy('id')
             ->paginate(10);
 
-        return view('livewire.horarios.index', [
+        return view('modules.horarios.livewire.index', [
             'horarios' => $horarios,
         ]);
     }

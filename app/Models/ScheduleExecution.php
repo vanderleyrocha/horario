@@ -24,19 +24,22 @@ class ScheduleExecution extends Model
         'generations',
         'generations_without_improvement',
         'parameters_json',
+        'status_context_json',
         'best_fitness',
         'avg_fitness',
         'execution_time_ms',
     ];
 
     protected $casts = [
+        'horario_id' => 'integer',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
-        'parameters_json' => 'array',
         'population_size' => 'integer',
         'island_count' => 'integer',
         'generations' => 'integer',
         'generations_without_improvement' => 'integer',
+        'parameters_json' => 'array',
+        'status_context_json' => 'array',
         'best_fitness' => 'float',
         'avg_fitness' => 'float',
         'execution_time_ms' => 'integer',

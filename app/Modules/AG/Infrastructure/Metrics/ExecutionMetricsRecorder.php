@@ -13,12 +13,16 @@ class ExecutionMetricsRecorder
 
     private int $batchSize = 1;
 
+    /**
+     * @param  array<string, mixed>  $statusContext
+     */
     public function startExecution(
         int $horarioId,
         int $populationSize,
         int $generations,
         array $parameters,
-        ?int $executionId = null
+        ?int $executionId = null,
+        array $statusContext = []
     ): int {
         $payload = [
             'horario_id' => $horarioId,
@@ -27,6 +31,7 @@ class ExecutionMetricsRecorder
             'population_size' => $populationSize,
             'generations' => $generations,
             'parameters_json' => json_encode($parameters),
+            'status_context_json' => $statusContext === [] ? null : json_encode($statusContext),
             'updated_at' => now(),
         ];
 
@@ -77,7 +82,10 @@ class ExecutionMetricsRecorder
         $this->buffer = [];
     }
 
-    public function finishExecution(float $bestFitness): void
+    /**
+     * @param  array<string, mixed>  $statusContext
+     */
+    public function finishExecution(float $bestFitness, array $statusContext = []): void
     {
         if ($this->executionId === null) {
             return;
@@ -90,12 +98,16 @@ class ExecutionMetricsRecorder
             ->update([
                 'status' => 'finished',
                 'best_fitness' => $bestFitness,
+                'status_context_json' => $statusContext === [] ? null : json_encode($statusContext),
                 'end_time' => now(),
                 'updated_at' => now(),
             ]);
     }
 
-    public function failExecution(): void
+    /**
+     * @param  array<string, mixed>  $statusContext
+     */
+    public function failExecution(array $statusContext = []): void
     {
         if ($this->executionId === null) {
             return;
@@ -107,12 +119,16 @@ class ExecutionMetricsRecorder
             ->where('id', $this->executionId)
             ->update([
                 'status' => 'failed',
+                'status_context_json' => $statusContext === [] ? null : json_encode($statusContext),
                 'end_time' => now(),
                 'updated_at' => now(),
             ]);
     }
 
-    public function cancelExecution(): void
+    /**
+     * @param  array<string, mixed>  $statusContext
+     */
+    public function cancelExecution(array $statusContext = []): void
     {
         if ($this->executionId === null) {
             return;
@@ -124,7 +140,21 @@ class ExecutionMetricsRecorder
             ->where('id', $this->executionId)
             ->update([
                 'status' => 'cancelled',
+                'status_context_json' => $statusContext === [] ? null : json_encode($statusContext),
                 'end_time' => now(),
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function touchExecution(): void
+    {
+        if ($this->executionId === null) {
+            return;
+        }
+
+        DB::table('schedule_executions')
+            ->where('id', $this->executionId)
+            ->update([
                 'updated_at' => now(),
             ]);
     }
