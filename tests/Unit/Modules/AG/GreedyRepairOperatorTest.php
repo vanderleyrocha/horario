@@ -93,6 +93,39 @@ it('captures compact repair telemetry with hard penalty reduction per pass', fun
         ->and($telemetry['passes'])->toHaveCount(1);
 });
 
+it('aborts the repair early when no progress is made under an explicit no-progress budget', function (): void {
+    $chromosome = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+        new Gene(2, 1, 2, 1, 1, 1, 1),
+    ]);
+
+    $events = [];
+    $repair = new GreedyRepairOperator;
+
+    $repair->repair(
+        $chromosome,
+        makeSwapScheduleData(),
+        static fn (): array => [
+            'hard_penalty' => 20.0,
+            'soft_penalty' => 5.0,
+            'score' => 0.0,
+        ],
+        function (array $payload) use (&$events): void {
+            $events[] = $payload['event'] ?? null;
+        },
+        [
+            'max_passes_without_progress' => 1,
+        ]
+    );
+
+    $telemetry = $repair->lastTelemetry();
+
+    expect($telemetry['aborted'])->toBeTrue()
+        ->and($telemetry['abort_reason'])->toBe('no_progress')
+        ->and($telemetry['passes_without_progress'])->toBe(1)
+        ->and($events)->toContain('repair_aborted');
+});
+
 function makeRelocationScheduleData(): ScheduleData
 {
     $timeSlots = [

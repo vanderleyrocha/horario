@@ -49,6 +49,17 @@ final class GATelemetryLogger
             'alns_effective_frequency' => isset($metrics['landscape_observation']['alns_trigger']['effective_frequency'])
                 ? (int) $metrics['landscape_observation']['alns_trigger']['effective_frequency']
                 : (isset($metrics['alns_effective_frequency']) ? (int) $metrics['alns_effective_frequency'] : null),
+            'alns_base_cooldown_generations' => isset($metrics['landscape_observation']['alns_trigger']['base_cooldown_generations'])
+                ? (int) $metrics['landscape_observation']['alns_trigger']['base_cooldown_generations']
+                : (isset($metrics['alns_base_cooldown_generations']) ? (int) $metrics['alns_base_cooldown_generations'] : null),
+            'alns_cooldown_generations' => isset($metrics['landscape_observation']['alns_trigger']['cooldown_generations'])
+                ? (int) $metrics['landscape_observation']['alns_trigger']['cooldown_generations']
+                : (isset($metrics['alns_cooldown_generations']) ? (int) $metrics['alns_cooldown_generations'] : null),
+            'alns_cooldown_brake_applied' => isset($metrics['landscape_observation']['alns_trigger']['cooldown_brake']['applied'])
+                ? (bool) $metrics['landscape_observation']['alns_trigger']['cooldown_brake']['applied']
+                : (isset($metrics['alns_cooldown_brake_applied']) ? (bool) $metrics['alns_cooldown_brake_applied'] : null),
+            'alns_cooldown_brake_reason' => $metrics['landscape_observation']['alns_trigger']['cooldown_brake']['reason']
+                ?? ($metrics['alns_cooldown_brake_reason'] ?? null),
             'alns_real_activation_applied' => isset($metrics['landscape_observation']['alns_trigger']['real_activation']['applied'])
                 ? (bool) $metrics['landscape_observation']['alns_trigger']['real_activation']['applied']
                 : null,

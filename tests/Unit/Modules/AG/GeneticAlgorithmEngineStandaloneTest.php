@@ -10,8 +10,8 @@ use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\FitnessResult;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelectionStrategy;
-use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Destroy\DestroyOperatorInterface;
+use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Repair\RepairOperatorInterface;
 use App\Modules\AG\Domain\Landscape\LandscapeEngine;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
@@ -26,7 +26,6 @@ use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
 use App\Modules\AG\Support\AGError;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 use Tests\TestCase;
 
 uses(TestCase::class);
@@ -218,6 +217,85 @@ it('activates temporary intensive alns via activation gate in opt-in mode before
         ->and($telemetry['alns_trigger_sources'] ?? [])->toContain('activation_gate');
 });
 
+it('applies an adaptive cooldown brake when recent alns outcomes have low return', function (): void {
+    $repair = new class implements RepairOperatorInterface
+    {
+        public function repair(PartialSolution $partial): Cromossomo
+        {
+            $candidate = new Cromossomo(array_merge($partial->assigned(), $partial->unassigned()));
+            $candidate->setFitness(4.0);
+
+            return $candidate;
+        }
+
+        public function getName(): string
+        {
+            return 'AdaptiveRepair';
+        }
+    };
+
+    $lns = new AdaptiveLargeNeighborhoodSearch(
+        destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
+        repairOperators: [$repair],
+        selector: makeStandaloneFixedAlnsSelectionStrategy([
+            'AdaptiveDestroy', 'AdaptiveRepair',
+            'AdaptiveDestroy', 'AdaptiveRepair',
+            'AdaptiveDestroy', 'AdaptiveRepair',
+        ])
+    );
+
+    $solution = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+        new Gene(2, 1, 1, 2, 1, 2, 1),
+        new Gene(3, 1, 1, 3, 1, 3, 1),
+        new Gene(4, 1, 1, 4, 1, 4, 1),
+    ]);
+    $solution->setFitness(4.0);
+
+    $lns->improve($solution, ['trigger' => ['alns_trigger_reason' => 'budget_interval']]);
+    $lns->improve($solution, ['trigger' => ['alns_trigger_reason' => 'budget_interval']]);
+    $lns->improve($solution, ['trigger' => ['alns_trigger_reason' => 'budget_interval']]);
+
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 5),
+        lns: $lns,
+        lnsFrequency: 50,
+    );
+
+    $lastAlnsGeneration = new ReflectionProperty(GeneticAlgorithmEngine::class, 'lastAlnsGeneration');
+    $lastAlnsGeneration->setAccessible(true);
+    $lastAlnsGeneration->setValue($engine, 1);
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'buildAlnsTriggerTelemetry');
+    $method->setAccessible(true);
+
+    $telemetry = $method->invoke(
+        $engine,
+        2,
+        'premature_convergence',
+        [
+            'phenomenon' => 'neutral',
+            'basin_of_attraction_lock_detected' => false,
+        ],
+        false
+    );
+
+    expect($telemetry)->toMatchArray([
+        'alns_triggered' => false,
+        'alns_trigger_reason' => 'cooldown_recent_low_return',
+        'alns_base_cooldown_generations' => 1,
+        'alns_cooldown_generations' => 4,
+        'alns_cooldown_brake_applied' => true,
+        'alns_cooldown_brake_extra_generations' => 3,
+    ])
+        ->and($telemetry['alns_cooldown_brake_reason'] ?? null)->toBe('Recent ALNS outcomes are consistently negative or null.')
+        ->and($telemetry['alns_recent_effectiveness_sample_size'] ?? null)->toBe(3)
+        ->and($telemetry['alns_recent_effectiveness_mean_improvement'] ?? null)->toBe(0.0)
+        ->and($telemetry['alns_recent_effectiveness_success_rate'] ?? null)->toBe(0.0);
+});
+
 function makeStandaloneEngine(
     GeneticProblem $problem,
     MutationOperatorInterface $mutation,
@@ -233,7 +311,7 @@ function makeStandaloneEngine(
         crossover: makeCopyingCrossover(),
         mutation: $mutation,
         termination: $termination,
-        metrics: new MetricsRecorder(),
+        metrics: new MetricsRecorder,
         elitism: makeNoElitism(),
         adaptiveMutation: new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
         populationEvaluator: new PopulationFitnessEvaluator($problem),
@@ -365,7 +443,7 @@ function makeNoopReplacement(): ReplacementStrategyInterface
 
 function makeStandaloneTerminationCriterion(int $maxGenerationExclusive): TerminationCriterionInterface
 {
-    return new class ($maxGenerationExclusive) implements TerminationCriterionInterface
+    return new class($maxGenerationExclusive) implements TerminationCriterionInterface
     {
         public function __construct(private readonly int $maxGenerationExclusive) {}
 
@@ -403,7 +481,7 @@ function makeCollectingProgressReporter()
 
 function makeStandaloneFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectionStrategy
 {
-    return new class ($selectionOrder) implements OperatorSelectionStrategy
+    return new class($selectionOrder) implements OperatorSelectionStrategy
     {
         public function __construct(private array $selectionOrder) {}
 
@@ -428,7 +506,7 @@ function makeStandaloneFixedAlnsSelectionStrategy(array $selectionOrder): Operat
 
 function makeStandaloneFakeDestroyOperator(string $name): DestroyOperatorInterface
 {
-    return new class ($name) implements DestroyOperatorInterface
+    return new class($name) implements DestroyOperatorInterface
     {
         public function __construct(private readonly string $name) {}
 
@@ -446,7 +524,7 @@ function makeStandaloneFakeDestroyOperator(string $name): DestroyOperatorInterfa
 
 function makeStandaloneFakeRepairOperator(string $name): RepairOperatorInterface
 {
-    return new class ($name) implements RepairOperatorInterface
+    return new class($name) implements RepairOperatorInterface
     {
         public function __construct(private readonly string $name) {}
 

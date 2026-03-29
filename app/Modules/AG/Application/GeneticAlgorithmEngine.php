@@ -499,7 +499,14 @@ final class GeneticAlgorithmEngine
             $effectiveFrequency = min($baseFrequency, $budgetFrequency);
         }
 
-        $cooldown = max(1, (int) floor($effectiveFrequency / 2));
+        $recentEffectiveness = $this->lns?->recentEffectiveness() ?? [
+            'sample_size' => 0,
+            'mean_improvement' => 0.0,
+            'success_rate' => 0.0,
+        ];
+        $baseCooldown = max(1, (int) floor($effectiveFrequency / 2));
+        $cooldownBrake = $this->adaptiveAlnsCooldownBrake($recentEffectiveness);
+        $cooldown = $baseCooldown + (int) ($cooldownBrake['extra_generations'] ?? 0);
         $generationsSinceLastTrigger = $this->lastAlnsGeneration === null
             ? null
             : $generation - $this->lastAlnsGeneration;
@@ -538,15 +545,22 @@ final class GeneticAlgorithmEngine
             'alns_budget_frequency' => $budgetFrequency,
             'alns_landscape_frequency' => $landscapeFrequency,
             'alns_effective_frequency' => $effectiveFrequency,
+            'alns_base_cooldown_generations' => $baseCooldown,
             'alns_cooldown_generations' => $cooldown,
+            'alns_cooldown_brake_applied' => (bool) ($cooldownBrake['applied'] ?? false),
+            'alns_cooldown_brake_extra_generations' => (int) ($cooldownBrake['extra_generations'] ?? 0),
+            'alns_cooldown_brake_reason' => $cooldownBrake['reason'] ?? null,
             'alns_generations_since_last_trigger' => $generationsSinceLastTrigger,
             'alns_landscape_pressure' => $landscapePressure,
             'alns_trigger_eligible' => $eligible,
             'alns_triggered' => $triggered,
             'alns_trigger_reason' => $triggered
                 ? implode('+', $triggerSources)
-                : ($cooldownSatisfied ? ($landscapePressure ? 'waiting_interval' : 'not_due') : 'cooldown'),
+                : ($cooldownSatisfied ? ($landscapePressure ? 'waiting_interval' : 'not_due') : (($cooldownBrake['applied'] ?? false) ? 'cooldown_recent_low_return' : 'cooldown')),
             'alns_trigger_sources' => $triggerSources,
+            'alns_recent_effectiveness_sample_size' => (int) ($recentEffectiveness['sample_size'] ?? 0),
+            'alns_recent_effectiveness_mean_improvement' => (float) ($recentEffectiveness['mean_improvement'] ?? 0.0),
+            'alns_recent_effectiveness_success_rate' => (float) ($recentEffectiveness['success_rate'] ?? 0.0),
             'alns_real_activation_enabled' => $realActivation['enabled'] ?? false,
             'alns_real_activation_requested' => $realActivation['requested'] ?? false,
             'alns_real_activation_applied' => $realActivation['applied'] ?? false,
@@ -568,6 +582,47 @@ final class GeneticAlgorithmEngine
         };
 
         return max(2, (int) ceil($maxGenerations / ($targetTriggers + 1)));
+    }
+
+    /**
+     * @param  array<string, float|int>  $recentEffectiveness
+     * @return array{applied: bool, extra_generations: int, reason: ?string}
+     */
+    private function adaptiveAlnsCooldownBrake(array $recentEffectiveness): array
+    {
+        $sampleSize = (int) ($recentEffectiveness['sample_size'] ?? 0);
+        $meanImprovement = (float) ($recentEffectiveness['mean_improvement'] ?? 0.0);
+        $successRate = (float) ($recentEffectiveness['success_rate'] ?? 0.0);
+
+        if ($sampleSize < 3) {
+            return [
+                'applied' => false,
+                'extra_generations' => 0,
+                'reason' => null,
+            ];
+        }
+
+        if ($meanImprovement <= -5.0 || ($meanImprovement <= 0.0 && $successRate <= 0.15)) {
+            return [
+                'applied' => true,
+                'extra_generations' => 3,
+                'reason' => 'Recent ALNS outcomes are consistently negative or null.',
+            ];
+        }
+
+        if ($meanImprovement <= 0.0 || $successRate <= 0.34) {
+            return [
+                'applied' => true,
+                'extra_generations' => 2,
+                'reason' => 'Recent ALNS outcomes show low return for the current search pattern.',
+            ];
+        }
+
+        return [
+            'applied' => false,
+            'extra_generations' => 0,
+            'reason' => null,
+        ];
     }
 
     /**
@@ -621,13 +676,24 @@ final class GeneticAlgorithmEngine
             'budget_frequency' => $alnsTrigger['alns_budget_frequency'] ?? null,
             'landscape_frequency' => $alnsTrigger['alns_landscape_frequency'] ?? null,
             'effective_frequency' => $alnsTrigger['alns_effective_frequency'] ?? null,
+            'base_cooldown_generations' => $alnsTrigger['alns_base_cooldown_generations'] ?? null,
             'cooldown_generations' => $alnsTrigger['alns_cooldown_generations'] ?? null,
+            'cooldown_brake' => [
+                'applied' => $alnsTrigger['alns_cooldown_brake_applied'] ?? false,
+                'extra_generations' => $alnsTrigger['alns_cooldown_brake_extra_generations'] ?? 0,
+                'reason' => $alnsTrigger['alns_cooldown_brake_reason'] ?? null,
+            ],
             'generations_since_last_trigger' => $alnsTrigger['alns_generations_since_last_trigger'] ?? null,
             'landscape_pressure' => $alnsTrigger['alns_landscape_pressure'] ?? false,
             'eligible' => $alnsTrigger['alns_trigger_eligible'] ?? false,
             'triggered' => $alnsTrigger['alns_triggered'] ?? false,
             'reason' => $alnsTrigger['alns_trigger_reason'] ?? null,
             'sources' => $alnsTrigger['alns_trigger_sources'] ?? [],
+            'recent_effectiveness' => [
+                'sample_size' => $alnsTrigger['alns_recent_effectiveness_sample_size'] ?? 0,
+                'mean_improvement' => $alnsTrigger['alns_recent_effectiveness_mean_improvement'] ?? 0.0,
+                'success_rate' => $alnsTrigger['alns_recent_effectiveness_success_rate'] ?? 0.0,
+            ],
             'real_activation' => [
                 'enabled' => $alnsTrigger['alns_real_activation_enabled'] ?? false,
                 'requested' => $alnsTrigger['alns_real_activation_requested'] ?? false,

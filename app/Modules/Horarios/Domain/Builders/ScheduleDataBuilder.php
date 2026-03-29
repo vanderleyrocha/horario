@@ -51,14 +51,14 @@ final class ScheduleDataBuilder
             $lessonsByProfessor[$aula->professor_id][] = $aula->id;
             $lessonsByClass[$aula->turma_id][] = $aula->id;
 
-            if (!isset($professors[$aula->professor_id])) {
+            if (! isset($professors[$aula->professor_id])) {
                 $professors[$aula->professor_id] = new ProfessorData(
                     id: $aula->professor_id,
                     maxWeeklyLoad: $aula->professor->carga_maxima ?? 40,
                 );
             }
 
-            if (!isset($classes[$aula->turma_id])) {
+            if (! isset($classes[$aula->turma_id])) {
                 $classes[$aula->turma_id] = new ClassData(
                     id: $aula->turma_id,
                     maxDailyLessons: $aula->turma->max_aulas_dia ?? 6,
@@ -94,6 +94,8 @@ final class ScheduleDataBuilder
             totalLessons: count($lessons),
             totalProfessors: count($professors),
             totalClasses: count($classes),
+            groupDisciplines: (bool) ($config->agrupar_disciplinas ?? false),
+            maxConsecutiveLessons: max(1, (int) ($config->max_aulas_seguidas ?? 1)),
         );
     }
 

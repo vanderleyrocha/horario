@@ -1,9 +1,9 @@
 <?php
 
-use App\Modules\AG\UI\Livewire\ExecutionDashboard;
-use App\Modules\AG\UI\Livewire\ExecutionMetricsStream;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\UI\Livewire\ExecutionDashboard;
+use App\Modules\AG\UI\Livewire\ExecutionMetricsStream;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
@@ -34,6 +34,9 @@ it('exibe o dashboard em portugues e permite trocar de execucao', function (): v
         ->assertSee('Trocar execucao')
         ->assertSee('Populacao inicial')
         ->assertSee('Resumo operacional')
+        ->assertSee('Limite atual de tentativas')
+        ->assertSee('Ajuste adaptativo')
+        ->assertSee('Limite adaptativo de tentativas')
         ->assertSeeHtml('data-initial-hard-badge')
         ->assertSeeHtml('data-initial-invalid-badge')
         ->assertSeeHtml('data-initial-penalty-badge')

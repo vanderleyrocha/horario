@@ -41,7 +41,7 @@
 
             <div class="bg-white shadow rounded p-4">
                 <p class="text-sm text-gray-500">Melhor fitness</p>
-                <p class="text-lg font-bold">{{ number_format((float) ($executionInfo['bestFitness'] ?? 0), 4) }}</p>
+                <p class="text-lg font-bold">{{ number_format((float) ($executionInfo['bestFitness']  ??  0), 4) }}</p>
             </div>
 
             <div class="bg-white shadow rounded p-4" data-dashboard-last-heartbeat-card>
@@ -219,7 +219,7 @@
                         Aguardando dados para identificar os gargalos da populacao inicial.
                     </p>
                 </div>
-                <div class="grid grid-cols-2 gap-3 text-xs lg:min-w-[20rem]">
+                <div class="grid grid-cols-2 gap-3 text-xs lg:min-w-[28rem] lg:grid-cols-3">
                     <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                         <p class="uppercase tracking-wide text-slate-500">Fail-fast</p>
                         <p class="mt-1 text-sm font-semibold text-slate-900" data-bottleneck-fail-fast-count>0</p>
@@ -236,6 +236,36 @@
                         <p class="uppercase tracking-wide text-slate-500">Pico de conflitos hard</p>
                         <p class="mt-1 text-sm font-semibold text-slate-900" data-bottleneck-peak-hard-conflicts>0</p>
                     </div>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p class="uppercase tracking-wide text-slate-500">Limite atual de tentativas</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-900" data-bottleneck-current-attempt-limit>0</p>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p class="uppercase tracking-wide text-slate-500">Ajuste adaptativo</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-900" data-bottleneck-attempt-limit-status>sem reducao</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Limite adaptativo de tentativas</p>
+                        <p class="mt-1 text-sm text-slate-600">
+                            Base <span class="font-semibold text-slate-900" data-bottleneck-attempt-limit-base>12</span>
+                            <span class="mx-1 text-slate-400">-&gt;</span>
+                            Atual <span class="font-semibold text-slate-900" data-bottleneck-current-attempt-limit-inline>12</span>
+                        </p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700" data-bottleneck-attempt-limit-badge>
+                        Sem reducao por degradacao
+                    </span>
+                </div>
+
+                <div class="mt-3 space-y-2" data-bottleneck-attempt-limit-criteria>
+                    <p class="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500">
+                        O limite segue no valor base enquanto nao houver sinais suficientes de degradacao.
+                    </p>
                 </div>
             </div>
 

@@ -7,7 +7,7 @@ use App\Models\ScheduleGenerationMetric;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-#[Layout('components.app-layout', ['title' => 'Execução do Solver'])]
+#[Layout('components.app-layout', ['title' => 'Execucao do Solver'])]
 class ExecutionDashboard extends Component
 {
     public ScheduleExecution $execution;
@@ -35,7 +35,7 @@ class ExecutionDashboard extends Component
         ]);
 
         $this->execution->refresh();
-        session()->flash('success', 'Cancelamento solicitado. O solver será interrompido assim que atingir um ponto seguro.');
+        session()->flash('success', 'Cancelamento solicitado. O solver sera interrompido assim que atingir um ponto seguro.');
     }
 
     public function loadMetrics()
@@ -92,10 +92,10 @@ class ExecutionDashboard extends Component
             ->map(fn (ScheduleExecution $execution): array => [
                 'id' => $execution->id,
                 'label' => sprintf(
-                    '#%d · %s · %s',
+                    '#%d | %s | %s',
                     $execution->id,
                     $this->translateStatus($execution->status),
-                    optional($execution->start_time)->format('d/m/Y H:i') ?? 'sem início'
+                    optional($execution->start_time)->format('d/m/Y H:i') ?? 'sem inicio'
                 ),
             ])
             ->all();
@@ -123,11 +123,11 @@ class ExecutionDashboard extends Component
     private function translateStatus(?string $status): string
     {
         return match ($status) {
-            'running' => 'em execução',
+            'running' => 'em execucao',
             'cancel_requested' => 'cancelamento solicitado',
             'cancelled' => 'cancelada',
             'failed' => 'falhou',
-            'finished', 'completed', 'concluida', 'concluida_com_sucesso' => 'concluída',
+            'finished', 'completed', 'concluida', 'concluida_com_sucesso' => 'concluida',
             default => $status ?? 'desconhecido',
         };
     }

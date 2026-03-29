@@ -86,6 +86,14 @@ final class AdaptiveLargeNeighborhoodSearch
     }
 
     /**
+     * @return array<string, float|int>
+     */
+    public function recentEffectiveness(): array
+    {
+        return $this->recentEffectivenessSummary();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function resolveIntensityProfile(Cromossomo $solution, array $context): array

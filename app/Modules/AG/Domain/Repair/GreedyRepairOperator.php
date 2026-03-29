@@ -25,12 +25,27 @@ final class GreedyRepairOperator
         Cromossomo $chromosome,
         ScheduleData $data,
         ?callable $fitnessProbe = null,
-        ?callable $progressHeartbeat = null
+        ?callable $progressHeartbeat = null,
+        array $limits = []
     ): Cromossomo {
         $child = $chromosome->copy();
         $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
+        $startedAt = microtime(true);
+        $maxMillis = isset($limits['max_millis']) ? max(1, (int) $limits['max_millis']) : null;
+        $maxPassesWithoutProgress = isset($limits['max_passes_without_progress'])
+            ? max(1, (int) $limits['max_passes_without_progress'])
+            : null;
+        $passesWithoutProgress = 0;
 
         for ($pass = 1; $pass <= self::MAX_PASSES; $pass++) {
+            if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
+                $this->lastTelemetry['aborted'] = true;
+                $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
+                $this->lastTelemetry['time_budget_ms'] = $maxMillis;
+                $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
+                break;
+            }
+
             $invalidIndexes = $this->prioritizeInvalidGeneIndexes($child);
 
             if ($invalidIndexes === []) {
@@ -94,7 +109,26 @@ final class GreedyRepairOperator
             $this->emitHeartbeat($progressHeartbeat, 'pass_finished', $passTelemetry);
             $this->lastTelemetry['passes'][] = $passTelemetry;
 
+            $progressDelta = (float) ($passTelemetry['hard_penalty_delta'] ?? 0.0);
+
+            if ($progressDelta <= 0.0) {
+                $passesWithoutProgress++;
+            } else {
+                $passesWithoutProgress = 0;
+            }
+
+            if ($maxPassesWithoutProgress !== null && $passesWithoutProgress >= $maxPassesWithoutProgress) {
+                $this->lastTelemetry['aborted'] = true;
+                $this->lastTelemetry['abort_reason'] = 'no_progress';
+                $this->lastTelemetry['passes_without_progress'] = $passesWithoutProgress;
+                $this->emitAbortHeartbeat($progressHeartbeat, 'no_progress', $pass, $maxMillis, $passesWithoutProgress);
+                break;
+            }
+
             if (! $changed) {
+                $this->lastTelemetry['aborted'] = true;
+                $this->lastTelemetry['abort_reason'] = 'no_structural_moves';
+                $this->emitAbortHeartbeat($progressHeartbeat, 'no_structural_moves', $pass, $maxMillis, $passesWithoutProgress);
                 break;
             }
         }
@@ -603,6 +637,8 @@ final class GreedyRepairOperator
         $this->lastTelemetry['relocations'] = array_sum(array_column($this->lastTelemetry['passes'], 'relocations'));
         $this->lastTelemetry['swaps'] = array_sum(array_column($this->lastTelemetry['passes'], 'swaps'));
         $this->lastTelemetry['local_rebuilds'] = array_sum(array_column($this->lastTelemetry['passes'], 'local_rebuilds'));
+        $this->lastTelemetry['aborted'] = (bool) ($this->lastTelemetry['aborted'] ?? false);
+        $this->lastTelemetry['abort_reason'] = $this->lastTelemetry['abort_reason'] ?? null;
     }
 
     /**
@@ -654,6 +690,35 @@ final class GreedyRepairOperator
             'swaps' => $passTelemetry['swaps'] ?? 0,
             'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
         ]);
+    }
+
+    private function emitAbortHeartbeat(
+        ?callable $progressHeartbeat,
+        string $reason,
+        int $pass,
+        ?int $timeBudgetMs,
+        int $passesWithoutProgress
+    ): void {
+        if ($progressHeartbeat === null) {
+            return;
+        }
+
+        $progressHeartbeat([
+            'event' => 'repair_aborted',
+            'pass' => $pass,
+            'abort_reason' => $reason,
+            'time_budget_ms' => $timeBudgetMs,
+            'passes_without_progress' => $passesWithoutProgress,
+        ]);
+    }
+
+    private function timeBudgetExceeded(float $startedAt, ?int $maxMillis): bool
+    {
+        if ($maxMillis === null) {
+            return false;
+        }
+
+        return ((microtime(true) - $startedAt) * 1000) >= $maxMillis;
     }
 
     /**
