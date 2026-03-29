@@ -34,12 +34,15 @@ it('exibe o dashboard em portugues e permite trocar de execucao', function (): v
         ->assertSee('Trocar execucao')
         ->assertSee('Populacao inicial')
         ->assertSee('Resumo operacional')
+        ->assertSee('Freio adaptativo do ALNS')
         ->assertSee('Limite atual de tentativas')
         ->assertSee('Ajuste adaptativo')
         ->assertSee('Limite adaptativo de tentativas')
         ->assertSeeHtml('data-initial-hard-badge')
         ->assertSeeHtml('data-initial-invalid-badge')
         ->assertSeeHtml('data-initial-penalty-badge')
+        ->assertSeeHtml('data-landscape-alns-brake-badge')
+        ->assertSeeHtml('data-landscape-alns-brake-detail')
         ->set('selectedExecutionId', $olderExecution->id)
         ->assertRedirect(route('algoritmo.execution', ['execution' => $olderExecution->id]));
 });

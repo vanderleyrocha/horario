@@ -309,6 +309,22 @@
                     <p class="font-semibold" data-landscape-summary>Nenhuma observacao ainda</p>
                 </div>
             </div>
+            <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Freio adaptativo do ALNS</p>
+                        <p class="mt-1 text-sm text-slate-600" data-landscape-alns-brake-detail>
+                            Aguardando telemetria do cooldown adaptativo.
+                        </p>
+                    </div>
+                    <span
+                        class="inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                        data-landscape-alns-brake-badge
+                    >
+                        Sem freio adaptativo
+                    </span>
+                </div>
+            </div>
         </div>
 
         <div class="col-span-2 overflow-hidden rounded-2xl border border-slate-200 bg-linear-to-br from-slate-50 via-white to-emerald-50 shadow-sm">

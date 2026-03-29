@@ -253,7 +253,18 @@ it('flushes generation metrics immediately and publishes the current metric to c
                 'budget_frequency' => 5,
                 'landscape_frequency' => 3,
                 'effective_frequency' => 3,
+                'base_cooldown_generations' => 1,
                 'cooldown_generations' => 1,
+                'cooldown_brake' => [
+                    'applied' => true,
+                    'extra_generations' => 3,
+                    'reason' => 'Recent ALNS outcomes are consistently negative or null.',
+                ],
+                'recent_effectiveness' => [
+                    'sample_size' => 3,
+                    'mean_improvement' => 0.0,
+                    'success_rate' => 0.0,
+                ],
                 'generations_since_last_trigger' => 2,
                 'landscape_pressure' => true,
                 'eligible' => true,
@@ -328,6 +339,10 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($cachedMetric['landscape_observation']['basin_of_attraction_lock_detected'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['current_episode']['duration'] ?? null)->toBe(3)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['effective_frequency'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['base_cooldown_generations'] ?? null)->toBe(1)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['cooldown_brake']['applied'] ?? null)->toBeTrue()
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['cooldown_brake']['extra_generations'] ?? null)->toBe(3)
+        ->and($cachedMetric['landscape_observation']['alns_trigger']['recent_effectiveness']['sample_size'] ?? null)->toBe(3)
         ->and($cachedMetric['landscape_observation']['alns_trigger']['reason'] ?? null)->toBe('budget_interval+landscape_pressure')
         ->and($cachedMetric['landscape_observation']['alns_trigger']['real_activation']['applied'] ?? null)->toBeTrue()
         ->and($cachedMetric['landscape_observation']['alns_trigger']['real_activation']['policy'] ?? null)->toBe('basin_lock_escape')
@@ -359,6 +374,8 @@ it('flushes generation metrics immediately and publishes the current metric to c
         ->and($storedObservation['search_response_activation_gate']['eligible_as_candidate'] ?? null)->toBeTrue()
         ->and($storedObservation['search_response_readiness_dashboard']['best_policy_by_success']['policy'] ?? null)->toBe('basin_lock_escape')
         ->and($storedObservation['alns_trigger']['sources'] ?? null)->toBe(['budget_interval', 'landscape_pressure'])
+        ->and($storedObservation['alns_trigger']['cooldown_brake']['applied'] ?? null)->toBeTrue()
+        ->and($storedObservation['alns_trigger']['cooldown_brake']['reason'] ?? null)->toBe('Recent ALNS outcomes are consistently negative or null.')
         ->and($storedObservation['alns_trigger']['real_activation']['mode'] ?? null)->toBe('opt_in')
         ->and($storedObservation['alns_trigger']['response']['repair_intensity'] ?? null)->toBe(0.88)
         ->and($storedObservation['alns_trigger']['response']['reasons'] ?? null)->toBe(['landscape_pressure', 'basin_lock', 'deep_valley']);

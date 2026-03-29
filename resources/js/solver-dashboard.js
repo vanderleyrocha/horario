@@ -936,8 +936,17 @@ function updateLandscapeObservation(phenomenon, observation) {
     const confidenceElement = root.querySelector("[data-landscape-confidence]")
     const depthScoreElement = root.querySelector("[data-landscape-depth-score]")
     const summaryElement = root.querySelector("[data-landscape-summary]")
+    const alnsBrakeBadgeElement = root.querySelector("[data-landscape-alns-brake-badge]")
+    const alnsBrakeDetailElement = root.querySelector("[data-landscape-alns-brake-detail]")
 
-    if (!phenomenonElement || !confidenceElement || !depthScoreElement || !summaryElement) {
+    if (
+        !phenomenonElement ||
+        !confidenceElement ||
+        !depthScoreElement ||
+        !summaryElement ||
+        !alnsBrakeBadgeElement ||
+        !alnsBrakeDetailElement
+    ) {
         return
     }
 
@@ -967,10 +976,20 @@ function updateLandscapeObservation(phenomenon, observation) {
     const alnsTriggered = Boolean(alnsTrigger.triggered  ??  false)
     const alnsTriggerReason = String(alnsTrigger.reason  ??  "")
     const alnsEffectiveFrequency = Number(alnsTrigger.effective_frequency  ??  0)
+    const alnsBaseCooldownGenerations = Number(alnsTrigger.base_cooldown_generations  ??  0)
+    const alnsCooldownGenerations = Number(alnsTrigger.cooldown_generations  ??  0)
     const alnsResponse = alnsTrigger.response  ??  {}
     const alnsAggressionLabel = String(alnsResponse.aggression_label  ??  "")
     const alnsDestroyRatio = Number(alnsResponse.destroy_ratio  ??  0)
     const alnsRecentSuccessRate = Number(alnsResponse.recent_success_rate  ??  0)
+    const alnsCooldownBrake = alnsTrigger.cooldown_brake  ??  {}
+    const alnsCooldownBrakeApplied = Boolean(alnsCooldownBrake.applied  ??  false)
+    const alnsCooldownBrakeExtraGenerations = Number(alnsCooldownBrake.extra_generations  ??  0)
+    const alnsCooldownBrakeReason = String(alnsCooldownBrake.reason  ??  "")
+    const alnsRecentEffectiveness = alnsTrigger.recent_effectiveness  ??  {}
+    const alnsRecentEffectivenessSampleSize = Number(alnsRecentEffectiveness.sample_size  ??  0)
+    const alnsRecentEffectivenessMeanImprovement = Number(alnsRecentEffectiveness.mean_improvement  ??  0)
+    const alnsRecentEffectivenessSuccessRate = Number(alnsRecentEffectiveness.success_rate  ??  0)
     const alnsRealActivation = alnsTrigger.real_activation  ??  {}
     const alnsRealActivationApplied = Boolean(alnsRealActivation.applied  ??  false)
     const alnsRealActivationPolicy = String(alnsRealActivation.policy  ??  "")
@@ -978,7 +997,44 @@ function updateLandscapeObservation(phenomenon, observation) {
     phenomenonElement.textContent = landscapePhenomenonLabel(phenomenon)
     confidenceElement.textContent = confidence.toFixed(2)
     depthScoreElement.textContent = depthScore.toFixed(2)
-    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${alnsRealActivationApplied ? ` live:${alnsRealActivationPolicy || "gate"}` : ""}${alnsAggressionLabel ? ` ${alnsAggressionLabel}` : ""}${alnsDestroyRatio > 0 ? ` d${alnsDestroyRatio.toFixed(2)}` : ""}${alnsAggressionLabel ? ` s${(alnsRecentSuccessRate * 100).toFixed(0)}%` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
+
+    const brakeBadgeClassName = alnsCooldownBrakeApplied
+        ? "inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
+        : "inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+
+    const brakeDetailParts = []
+
+    if (alnsCooldownBrakeApplied) {
+        brakeDetailParts.push(`Cooldown ampliado em +${alnsCooldownBrakeExtraGenerations} geracoes`)
+        if (alnsBaseCooldownGenerations > 0 || alnsCooldownGenerations > 0) {
+            brakeDetailParts.push(`janela ${alnsBaseCooldownGenerations} -> ${alnsCooldownGenerations}`)
+        }
+    } else if (alnsCooldownGenerations > 0) {
+        brakeDetailParts.push(
+            alnsCooldownGenerations === 1
+                ? `Cooldown atual ${alnsCooldownGenerations} geracao`
+                : `Cooldown atual ${alnsCooldownGenerations} geracoes`,
+        )
+    } else {
+        brakeDetailParts.push("Sem freio adaptativo ativo no momento")
+    }
+
+    if (alnsRecentEffectivenessSampleSize > 0) {
+        brakeDetailParts.push(`retorno medio ${alnsRecentEffectivenessMeanImprovement.toFixed(2)}`)
+        brakeDetailParts.push(`sucesso ${(alnsRecentEffectivenessSuccessRate * 100).toFixed(0)}% em ${alnsRecentEffectivenessSampleSize} amostras`)
+    }
+
+    if (alnsCooldownBrakeApplied && alnsCooldownBrakeReason !== "") {
+        brakeDetailParts.push(alnsCooldownBrakeReason)
+    }
+
+    alnsBrakeBadgeElement.textContent = alnsCooldownBrakeApplied
+        ? `Freio ativo +${alnsCooldownBrakeExtraGenerations}g`
+        : "Sem freio adaptativo"
+    alnsBrakeBadgeElement.className = brakeBadgeClassName
+    alnsBrakeDetailElement.textContent = brakeDetailParts.join(" | ")
+
+    summaryElement.textContent = `ep ${episodeDuration} | dBestWin ${bestDeltaWindow.toFixed(3)}${searchResponseWouldEscalate ? ` -> ${auditTargetBestDeltaWindow.toFixed(3)}` : ""} | turnover ${(populationTurnover * 100).toFixed(0)}%${searchResponseWouldEscalate ? ` -> ${(auditTargetPopulationTurnover * 100).toFixed(0)}%` : ""} | elite ${eliteSimilarity.toFixed(2)}${basinLockDetected ? ` | basin ${basinLockConfidence.toFixed(2)}` : ""}${alnsEffectiveFrequency > 0 ? ` | ALNS q${alnsEffectiveFrequency}` : ""}${alnsTriggered ? `:${alnsTriggerReason || "trigger"}` : ""}${alnsCooldownBrakeApplied ? ` | freio +${alnsCooldownBrakeExtraGenerations}g` : ""}${alnsRealActivationApplied ? ` live:${alnsRealActivationPolicy || "gate"}` : ""}${alnsAggressionLabel ? ` ${alnsAggressionLabel}` : ""}${alnsDestroyRatio > 0 ? ` d${alnsDestroyRatio.toFixed(2)}` : ""}${alnsAggressionLabel ? ` s${(alnsRecentSuccessRate * 100).toFixed(0)}%` : ""}${searchResponseWouldEscalate ? ` | plan ${searchResponsePolicy}` : ""}${normalizedObservation.search_response_outcome ? ` | outcome ${searchResponseOutcomeSatisfied ? "hit" : "miss"} ${searchResponseOutcomeProgress.toFixed(2)}` : ""}${effectivenessTotalResolved > 0 ? ` | bestS ${effectivenessBestBySuccess || "-"} | bestP ${effectivenessBestByProgress || "-"} (${effectivenessTotalResolved})` : ""}${activationEligible ? ` | gate ${activationCandidate}` : ""}${searchResponsePendingAudits > 0 ? ` | pending ${searchResponsePendingAudits}` : ""}${bestSignatureChanged ? " | sig changed" : ""}`
 }
 
 function updateSearchResponseReadiness(observation) {
