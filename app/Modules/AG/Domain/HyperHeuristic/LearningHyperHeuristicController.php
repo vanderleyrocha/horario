@@ -198,4 +198,17 @@ class LearningHyperHeuristicController
         $this->landscapeState = $state;
     }
 
+    public function recordRewardByName(string $name, float $reward): void
+    {
+        if (!isset($this->operatorMap[$name])) {
+            $this->tracker->registerOperator($name);
+        }
+
+        $this->tracker->recordReward($name, $reward);
+
+        if ($this->landscapeState !== null) {
+            $this->moveLearning->record($this->landscapeState, $name, $reward);
+        }
+    }
+
 }

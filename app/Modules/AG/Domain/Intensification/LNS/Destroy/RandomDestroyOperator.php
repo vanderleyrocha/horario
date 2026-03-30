@@ -7,7 +7,8 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 class RandomDestroyOperator implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
 {
-    private float $destroyRatio = 0.2;
+    // 🔧 PRIORIDADE 4: Aumentar destruição para mais diversidade
+    private float $destroyRatio = 0.40;  // ← Aumentado de 0.2 para 0.40 (40% dos genes)
 
     public function destroy(Cromossomo $solution): PartialSolution
     {

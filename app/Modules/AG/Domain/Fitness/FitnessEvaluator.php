@@ -147,6 +147,17 @@ final class FitnessEvaluator
             return min(49.999, 49.999 / (1.0 + $hardComponent + $softComponent));
         }
 
-        return 50.0 + max(0.0, 50.0 - $softPenalty);
+        // ✅ AÇÃO 01: Evitar saturação de score viável usando logaritmo
+        // Problema: fórmula original (50 + 50/(1+soft)) satura em ~50 para soft penalties altas
+        // Exemplo ruim: para 157 aulas weekly + DistributionRule*2 = soft_penalty=314 → score≈50.16
+        // Solução: usar logaritmo para normalizar soft penalty e manter gradiente
+        // log(1 + soft/50) normaliza soft penalties na escala esperada
+        $softComponent = $softPenalty > 0.0
+            ? log(1.0 + ($softPenalty / 50.0))  // Desloca soft penalties para escala logarítmica
+            : 0.0;
+
+        return 50.0 + (50.0 / (1.0 + $softComponent));
+        // Agora: soft=0 → score=100, soft=50 → score≈79.5, soft=314 → score≈66.7
+        // Mantém diferenciação mesmo com penalidades 6x maiores ✅
     }
 }

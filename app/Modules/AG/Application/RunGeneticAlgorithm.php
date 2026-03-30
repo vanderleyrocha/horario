@@ -15,6 +15,7 @@ use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
 use App\Modules\AG\Domain\HyperHeuristic\OperatorPerformanceTracker;
 use App\Modules\AG\Domain\HyperHeuristic\OperatorRewardCalculator;
 use App\Modules\AG\Domain\HyperHeuristic\Strategies\EpsilonGreedySelector;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\Acceptance\StrictScoreImprovementAcceptance;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
 use App\Modules\AG\Domain\Intensification\LNS\Conflict\ConflictDetector;
 use App\Modules\AG\Domain\Intensification\LNS\Destroy\ClusterDestroyOperator;
@@ -74,34 +75,39 @@ final class RunGeneticAlgorithm
         Log::info('RunGeneticAlgorithm::execute() iniciado');
 
         $config = GeneticAlgorithmConfigDTO::fromModels($horario);
-        $executionMetrics ??= new ExecutionMetricsRecorder;
+        $executionMetrics ??= new ExecutionMetricsRecorder();
 
         if ($executionMetrics->hasExecutionId()) {
             $executionId = $executionMetrics->getExecutionId();
         } else {
-            $executionId = $executionMetrics->startExecution(horarioId: $horario->id, populationSize: $config->tamanhoPopulacao, generations: $config->numeroGeracoes, parameters: [
-                'mutation_rate' => $config->taxaMutacao,
-                'elite_count' => $config->eliteCount(),
-                'islands' => 2,
-            ]);
+            $executionId = $executionMetrics->startExecution(
+                horarioId: $horario->id,
+                populationSize: $config->tamanhoPopulacao,
+                generations: $config->numeroGeracoes,
+                parameters: [
+                    'mutation_rate' => $config->taxaMutacao,
+                    'elite_count' => $config->eliteCount(),
+                    'islands' => 2,
+                ]
+            );
         }
 
-        $progress = $progress ?? new NullProgressReporter;
+        $progress = $progress ?? new NullProgressReporter();
 
-        $scheduleData = (new ScheduleDataBuilder)->build($horario);
+        $scheduleData = (new ScheduleDataBuilder())->build($horario);
 
         $maxLessonsPerDay = (int) ($horario->configuracaoHorario?->aulas_por_dia ?? 7);
 
         $fitnessRules = [
-            new TeacherConflictRule,
-            new ClassConflictRule,
-            new WorkloadExceededRule,
-            new MandatoryBlockViolationRule,
-            new WindowPenaltyRule,
-            new DistributionRule,
+            new TeacherConflictRule(),
+            new ClassConflictRule(),
+            new WorkloadExceededRule(),
+            new MandatoryBlockViolationRule(),
+            new WindowPenaltyRule(),
+            new DistributionRule(),
             new MaxLessonsPerDayRule($maxLessonsPerDay),
-            new ConsecutiveLessonRule,
-            new PreferredTimeRule,
+            new ConsecutiveLessonRule(),
+            new PreferredTimeRule(),
         ];
 
         $fitnessEvaluator = new FitnessEvaluator(
@@ -109,11 +115,18 @@ final class RunGeneticAlgorithm
             rules: $fitnessRules
         );
 
-        $repairOperator = new GreedyRepairOperator;
+        $repairOperator = new GreedyRepairOperator();
 
-        $problem = new ScheduleProblem(data: $scheduleData, contextBuilder: new EvaluationContextBuilder, fitnessEvaluator: $fitnessEvaluator, repairOperator: $repairOperator, progress: $progress, executionId: $executionId);
+        $problem = new ScheduleProblem(
+            data: $scheduleData,
+            contextBuilder: new EvaluationContextBuilder(),
+            fitnessEvaluator: $fitnessEvaluator,
+            repairOperator: $repairOperator,
+            progress: $progress,
+            executionId: $executionId
+        );
 
-        $distance = new GeneticDistance;
+        $distance = new GeneticDistance();
 
         $sharingFunction = new SharingFunction(sigma: 0.35, alpha: 1.0);
 
@@ -121,15 +134,15 @@ final class RunGeneticAlgorithm
 
         $selection = new TournamentSelection(3, $sharingCalculator);
 
-        $crossover = new ConflictGraphCrossoverOperator;
+        $crossover = new ConflictGraphCrossoverOperator();
 
         $elitism = new TopEliteStrategy(max(1, $config->eliteCount()));
 
         $termination = new VarianceBasedTerminationCriterion(
             maxGenerations: $config->numeroGeracoes,
             populationStatistics: new PopulationStatistics(
-                new HashDiversityCalculator,
-                new PopulationEntropyCalculator
+                new HashDiversityCalculator(),
+                new PopulationEntropyCalculator()
             ),
             targetFitness: $config->targetFitness,
             maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement,
@@ -140,43 +153,60 @@ final class RunGeneticAlgorithm
             minEntropy: (float) config('ag.termination_min_entropy', 0.10)
         );
 
-        $islandEngine = new IslandModelEngine(migrationPolicy: new BestIndividualsMigration(2), migrationInterval: 25);
+        $islandEngine = new IslandModelEngine(
+            migrationPolicy: new BestIndividualsMigration(2),
+            migrationInterval: 25
+        );
+
         $baseLnsFrequency = $this->resolveBaseLnsFrequency($config->numeroGeracoes);
 
         $metricsGlobal = [];
 
         for ($i = 0; $i < 2; $i++) {
-
-            $metrics = new MetricsRecorder;
+            $metrics = new MetricsRecorder();
             $metrics->setExecutionId($executionId);
-            $metrics->setPopulationStatistics(new PopulationStatistics(
-                diversityCalculator: new HashDiversityCalculator,
-                entropyCalculator: new PopulationEntropyCalculator,
-                diversitySamplingInterval: 5,
-                diversityCollapseThreshold: 0.05
-            ));
+            $metrics->setPopulationStatistics(
+                new PopulationStatistics(
+                    diversityCalculator: new HashDiversityCalculator(),
+                    entropyCalculator: new PopulationEntropyCalculator(),
+                    diversitySamplingInterval: 5,
+                    diversityCollapseThreshold: 0.05
+                )
+            );
 
-            $mutation = new AdaptiveDiversityMutation(structured: new StructuredSwapMutation, swap: new GeneSwapMutation, conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6));
+            $mutation = new AdaptiveDiversityMutation(
+                structured: new StructuredSwapMutation(),
+                swap: new GeneSwapMutation(),
+                conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6)
+            );
 
-            $tracker = new OperatorPerformanceTracker;
-            $rewardCalculator = new OperatorRewardCalculator;
+            $tracker = new OperatorPerformanceTracker();
+            $rewardCalculator = new OperatorRewardCalculator();
             $selectionStrategy = new EpsilonGreedySelector(epsilon: 0.15);
 
-            $hyperHeuristic = new LearningHyperHeuristicController($tracker, $selectionStrategy, $rewardCalculator);
+            $hyperHeuristic = new LearningHyperHeuristicController(
+                $tracker,
+                $selectionStrategy,
+                $rewardCalculator
+            );
 
             $hyperHeuristic->registerOperators([
-                new StructuredSwapMutation,
-                new GeneSwapMutation,
+                new StructuredSwapMutation(),
+                new GeneSwapMutation(),
                 new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6),
-                new SinglePointCrossover,
-                new BlockPreservingCrossover,
-                new RandomDestroyOperator,
-                new ConflictDestroyOperator(new ConflictDetector),
-                new ClusterDestroyOperator,
+                new SinglePointCrossover(),
+                new BlockPreservingCrossover(),
+                new RandomDestroyOperator(),
+                new ConflictDestroyOperator(new ConflictDetector()),
+                new ClusterDestroyOperator(),
                 new RegretInsertionOperator($scheduleData),
             ]);
 
-            $adaptiveMutation = new AdaptiveMutationController(baseRate: 0.02, amplification: 0.25, maxRate: 0.35);
+            $adaptiveMutation = new AdaptiveMutationController(
+                baseRate: 0.02,
+                amplification: 0.25,
+                maxRate: 0.35
+            );
 
             $parallelEvaluation = (bool) config('ag.parallel_evaluation', true);
             $maxWorkers = (int) config('ag.max_workers', 8);
@@ -185,22 +215,57 @@ final class RunGeneticAlgorithm
                 ? new AsyncFitnessEvaluator(problem: $problem, concurrency: $maxWorkers)
                 : new PopulationFitnessEvaluator(problem: $problem, concurrency: $maxWorkers);
 
-            $replacement = new AdaptiveNichingReplacement(new GeneticDistance);
+            $replacement = new AdaptiveNichingReplacement(new GeneticDistance());
 
-            $lns = new AdaptiveLargeNeighborhoodSearch([
-                new RandomDestroyOperator,
-                new ConflictDestroyOperator(new ConflictDetector),
-                new ClusterDestroyOperator,
-            ], [
-                new LNSRepairAdapter($repairOperator, $scheduleData),
-                new RegretInsertionOperator($scheduleData),
-            ]);
+            $lns = new AdaptiveLargeNeighborhoodSearch(
+                [
+                    new RandomDestroyOperator(),
+                    new ConflictDestroyOperator(new ConflictDetector()),
+                    new ClusterDestroyOperator(),
+                ],
+                [
+                    new LNSRepairAdapter($repairOperator, $scheduleData),
+                    new RegretInsertionOperator($scheduleData),
+                ]
+            );
 
-            $landscapeEngine = new LandscapeEngine(new LandscapeAnalyzer, new LandscapeDetector, new LandscapeResponseStrategy, new LandscapeMemory);
+            $alnsAcceptance = new StrictScoreImprovementAcceptance();
 
-            $engine = new GeneticAlgorithmEngine(problem: $problem, selection: $selection, crossover: $crossover, mutation: $mutation, termination: $termination, metrics: $metrics, elitism: $elitism, adaptiveMutation: $adaptiveMutation, populationEvaluator: $populationEvaluator, replacement: $replacement, hyperHeuristic: $hyperHeuristic, lns: $lns, progress: $progress, lnsFrequency: $baseLnsFrequency, executionMetrics: $executionMetrics, landscapeEngine: $landscapeEngine);
+            $landscapeEngine = new LandscapeEngine(
+                new LandscapeAnalyzer(),
+                new LandscapeDetector(),
+                new LandscapeResponseStrategy(),
+                new LandscapeMemory()
+            );
 
-            $islandEngine->addIsland(new Island($i + 1, engine: $engine, populationSize: $config->tamanhoPopulacao, replacement: $replacement));
+            $engine = new GeneticAlgorithmEngine(
+                alnsAcceptance: $alnsAcceptance,
+                problem: $problem,
+                selection: $selection,
+                crossover: $crossover,
+                mutation: $mutation,
+                termination: $termination,
+                metrics: $metrics,
+                elitism: $elitism,
+                adaptiveMutation: $adaptiveMutation,
+                populationEvaluator: $populationEvaluator,
+                replacement: $replacement,
+                hyperHeuristic: $hyperHeuristic,
+                lns: $lns,
+                progress: $progress,
+                lnsFrequency: $baseLnsFrequency,
+                executionMetrics: $executionMetrics,
+                landscapeEngine: $landscapeEngine
+            );
+
+            $islandEngine->addIsland(
+                new Island(
+                    $i + 1,
+                    engine: $engine,
+                    populationSize: $config->tamanhoPopulacao,
+                    replacement: $replacement
+                )
+            );
 
             $metricsGlobal[] = $metrics;
         }
@@ -214,7 +279,10 @@ final class RunGeneticAlgorithm
         return [
             'best' => $best,
             'best_fitness' => $best->fitness(),
-            'generation_metrics' => array_map(fn ($m) => $m->generationData(), $metricsGlobal),
+            'generation_metrics' => array_map(
+                fn ($m) => $m->generationData(),
+                $metricsGlobal
+            ),
         ];
     }
 
@@ -230,6 +298,7 @@ final class RunGeneticAlgorithm
                 reportProgress: true,
                 source: 'final_repair'
             );
+
             $result = $problem->evaluate($candidate);
             $lastHardPenalty = $result->hardPenalty();
             $repairTelemetry = $problem->lastRepairTelemetry();
@@ -255,12 +324,10 @@ final class RunGeneticAlgorithm
             ]);
         }
 
-        throw new RuntimeException(
-            sprintf(
-                'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
-                $lastHardPenalty
-            )
-        );
+        throw new RuntimeException(sprintf(
+            'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
+            $lastHardPenalty
+        ));
     }
 
     private function resolveBaseLnsFrequency(int $maxGenerations): int

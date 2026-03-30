@@ -539,6 +539,201 @@ it('applies an adaptive cooldown brake when recent alns outcomes have low return
         ->and($telemetry['alns_recent_effectiveness_success_rate'] ?? null)->toBe(0.0);
 });
 
+it('evaluates each offspring only once during generation step', function (): void {
+    $problem = new class implements GeneticProblem
+    {
+        public int $sequence = 1;
+        public int $evaluateCalls = 0;
+
+        public function createIndividual(): Cromossomo
+        {
+            $seed = $this->sequence++;
+            $individual = new Cromossomo([
+                new Gene($seed, $seed, $seed, $seed, 1, 1, 1),
+                new Gene($seed + 100, $seed, $seed, $seed + 1, 2, 2, 1),
+            ]);
+            $individual->setFitness((float) $seed);
+
+            return $individual;
+        }
+
+        public function evaluate(Cromossomo $individual): FitnessResult
+        {
+            $this->evaluateCalls++;
+
+            $score = (float) array_sum(array_map(
+                static fn (Gene $gene): int => $gene->aulaId(),
+                $individual->genes()
+            ));
+            $individual->setFitness($score);
+
+            return new FitnessResult($score, 0.0, 0.0, 0.0);
+        }
+
+        public function evaluateDelta(Cromossomo $individual, AffectedRegion $region, FitnessResult $previous): FitnessResult
+        {
+            return $this->evaluate($individual);
+        }
+
+        public function repair(Cromossomo $individual): Cromossomo
+        {
+            return $individual;
+        }
+
+        public function isFeasible(Cromossomo $individual): bool
+        {
+            return true;
+        }
+
+        public function clearFitnessCache(): void {}
+    };
+
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1)
+    );
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+    $problem->evaluateCalls = 0;
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'executeGenerationStep');
+    $method->setAccessible(true);
+    $step = $method->invoke($engine, $population, 4);
+
+    expect($step['population'])->toHaveCount(4)
+        ->and($problem->evaluateCalls)->toBe(4);
+});
+
+it('accepts ALNS candidates only when they strictly improve best fitness', function (): void {
+    $replacement = new class implements ReplacementStrategyInterface
+    {
+        public int $calls = 0;
+
+        public function replace(array &$population, Cromossomo $incoming): void
+        {
+            $this->calls++;
+            $population[] = $incoming;
+        }
+    };
+
+    $makeEngine = static function (GeneticProblem $problem, AdaptiveLargeNeighborhoodSearch $lns, ReplacementStrategyInterface $replacement): GeneticAlgorithmEngine {
+        return new GeneticAlgorithmEngine(
+            problem: $problem,
+            selection: makeFirstParentSelection(),
+            crossover: makeCopyingCrossover(),
+            mutation: makeCountingMutationOperator(),
+            termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+            metrics: new MetricsRecorder,
+            elitism: makeNoElitism(),
+            adaptiveMutation: new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
+            populationEvaluator: new PopulationFitnessEvaluator($problem),
+            replacement: $replacement,
+            hyperHeuristic: null,
+            lns: $lns,
+            progress: null,
+            lnsFrequency: 50,
+            landscapeEngine: null,
+        );
+    };
+
+    $applyLns = new ReflectionMethod(GeneticAlgorithmEngine::class, 'applyLns');
+    $applyLns->setAccessible(true);
+
+    $problemReject = makeStandaloneFakeProblem();
+    $lnsReject = new AdaptiveLargeNeighborhoodSearch(
+        destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
+        repairOperators: [
+            new class implements RepairOperatorInterface
+            {
+                public function repair(PartialSolution $partial): Cromossomo
+                {
+                    return new Cromossomo([
+                        new Gene(1, 1, 1, 1, 1, 1, 1),
+                        new Gene(2, 1, 1, 2, 1, 2, 1),
+                    ]);
+                }
+
+                public function getName(): string
+                {
+                    return 'WorseRepair';
+                }
+            },
+        ],
+        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'WorseRepair'])
+    );
+
+    $engineReject = $makeEngine($problemReject, $lnsReject, $replacement);
+    $populationReject = [
+        $problemReject->createIndividual(),
+        $problemReject->createIndividual(),
+        $problemReject->createIndividual(),
+        $problemReject->createIndividual(),
+    ];
+    (new PopulationFitnessEvaluator($problemReject))->evaluate($populationReject);
+    $replacement->calls = 0;
+
+    $rejectArgs = [&$populationReject, [], null];
+    $telemetryReject = $applyLns->invokeArgs($engineReject, $rejectArgs);
+
+    expect($telemetryReject)->toMatchArray([
+        'alns_accepted' => false,
+        'alns_acceptance_policy' => 'strict_improvement',
+        'alns_acceptance_reason' => 'rejected_no_improvement',
+    ])
+        ->and($replacement->calls)->toBe(0);
+
+    $problemAccept = makeStandaloneFakeProblem();
+    $lnsAccept = new AdaptiveLargeNeighborhoodSearch(
+        destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
+        repairOperators: [
+            new class implements RepairOperatorInterface
+            {
+                public function repair(PartialSolution $partial): Cromossomo
+                {
+                    return new Cromossomo([
+                        new Gene(5000, 1, 1, 1, 1, 1, 1),
+                        new Gene(6000, 1, 1, 2, 1, 2, 1),
+                    ]);
+                }
+
+                public function getName(): string
+                {
+                    return 'BetterRepair';
+                }
+            },
+        ],
+        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'BetterRepair'])
+    );
+
+    $engineAccept = $makeEngine($problemAccept, $lnsAccept, $replacement);
+    $populationAccept = [
+        $problemAccept->createIndividual(),
+        $problemAccept->createIndividual(),
+        $problemAccept->createIndividual(),
+        $problemAccept->createIndividual(),
+    ];
+    (new PopulationFitnessEvaluator($problemAccept))->evaluate($populationAccept);
+    $replacement->calls = 0;
+
+    $acceptArgs = [&$populationAccept, [], null];
+    $telemetryAccept = $applyLns->invokeArgs($engineAccept, $acceptArgs);
+
+    expect($telemetryAccept)->toMatchArray([
+        'alns_accepted' => true,
+        'alns_acceptance_policy' => 'strict_improvement',
+        'alns_acceptance_reason' => 'strict_improvement',
+    ])
+        ->and($replacement->calls)->toBe(1);
+});
+
 function makeStandaloneEngine(
     GeneticProblem $problem,
     MutationOperatorInterface $mutation,

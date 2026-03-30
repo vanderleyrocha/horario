@@ -10,7 +10,10 @@ use App\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\Acceptance\AlnsAcceptanceCriterion;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\Acceptance\StrictScoreImprovementAcceptance;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\AdaptiveLargeNeighborhoodSearch;
+use App\Modules\AG\Domain\Intensification\LNS\ALNS\DTO\AlnsStepResult;
 use App\Modules\AG\Domain\Landscape\LandscapeEngine;
 use App\Modules\AG\Domain\Landscape\LandscapeMetrics;
 use App\Modules\AG\Domain\Metrics\DTO\GenerationMetrics;
@@ -27,26 +30,20 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Termination\TerminationCriterionInterface;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
+use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
 use Illuminate\Support\Facades\Log;
 
 final class GeneticAlgorithmEngine
 {
     private const INITIAL_POPULATION_LOG_SAMPLE_SIZE = 3;
-
     private const OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS = 30;
-
     private const LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS = 300;
-
     private const CANCELLATION_CHECK_INTERVAL_SECONDS = 2;
 
     private array $mutationPool;
-
     private array $lastEvolutionTelemetry = [];
-
     private int $evolutionGeneration = 0;
-
     private ?int $lastAlnsGeneration = null;
-
     private ?int $lastMutationShockGeneration = null;
 
     /**
@@ -55,7 +52,6 @@ final class GeneticAlgorithmEngine
     private ?array $activeMutationShock = null;
 
     private float $currentSelectionPressureMultiplier = 1.0;
-
     private ?int $lastSelectionPressureReductionGeneration = null;
 
     /**
@@ -64,15 +60,30 @@ final class GeneticAlgorithmEngine
     private ?array $activeSelectionPressureReduction = null;
 
     private ?float $lastOperationalHeartbeatAt = null;
-
     private ?float $lastLongRunningOperationLogAt = null;
-
     private ?float $lastCancellationCheckAt = null;
-
     private ?string $lastKnownExecutionStatus = null;
 
-    public function __construct(private readonly GeneticProblem $problem, private readonly SelectionOperatorInterface $selection, private readonly CrossoverOperatorInterface $crossover, private readonly MutationOperatorInterface $mutation, private readonly TerminationCriterionInterface $termination, private readonly MetricsRecorder $metrics, private readonly ElitismStrategyInterface $elitism, private readonly AdaptiveMutationController $adaptiveMutation, private readonly FitnessEvaluatorInterface $populationEvaluator, private readonly ReplacementStrategyInterface $replacement, private readonly ?LearningHyperHeuristicController $hyperHeuristic, private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null, private readonly ?ProgressReporterInterface $progress = null, private readonly int $lnsFrequency = 50, private readonly ?ExecutionMetricsRecorder $executionMetrics = null, private readonly ?LandscapeEngine $landscapeEngine = null)
-    {
+    public function __construct(
+        private ?AlnsAcceptanceCriterion $alnsAcceptance = null,
+        private readonly GeneticProblem $problem,
+        private readonly SelectionOperatorInterface $selection,
+        private readonly CrossoverOperatorInterface $crossover,
+        private readonly MutationOperatorInterface $mutation,
+        private readonly TerminationCriterionInterface $termination,
+        private readonly MetricsRecorder $metrics,
+        private readonly ElitismStrategyInterface $elitism,
+        private readonly AdaptiveMutationController $adaptiveMutation,
+        private readonly FitnessEvaluatorInterface $populationEvaluator,
+        private readonly ReplacementStrategyInterface $replacement,
+        private readonly ?LearningHyperHeuristicController $hyperHeuristic,
+        private readonly ?AdaptiveLargeNeighborhoodSearch $lns = null,
+        private readonly ?ProgressReporterInterface $progress = null,
+        private readonly int $lnsFrequency = 50,
+        private readonly ?ExecutionMetricsRecorder $executionMetrics = null,
+        private readonly ?LandscapeEngine $landscapeEngine = null
+    ) {
+        $this->alnsAcceptance ??= new StrictScoreImprovementAcceptance();
         $this->mutationPool = [$this->mutation];
         $this->applySelectionPressureMultiplier(1.0);
     }
@@ -114,6 +125,7 @@ final class GeneticAlgorithmEngine
                 operatorReward: $generationStep['operator_reward'],
                 populationTrajectory: $generationStep
             );
+
             $metrics = $postProcess['metrics'];
 
             $this->publishGenerationState(
@@ -146,7 +158,6 @@ final class GeneticAlgorithmEngine
             $this->assertNotCancelled();
 
             $individual = $this->problem->createIndividual();
-
             $individual = $this->problem->repair($individual);
 
             $population[] = $individual;
@@ -186,10 +197,13 @@ final class GeneticAlgorithmEngine
     public function createIndividual(): Cromossomo
     {
         $individual = $this->problem->createIndividual();
-
         $individual = $this->problem->repair($individual);
 
-        $this->problem->evaluate($individual);
+        // ✅ AÇÃO 03: Remover avaliação duplicada
+        // Problema: población é avaliada 2x - aqui individualmente e depois em batch
+        // Solução: deixar apenas avaliação em batch em initializePopulation()
+        // A avaliação batch é mais eficiente e reutiliza cache melhor
+        // $this->problem->evaluate($individual);  ← REMOVIDO
 
         return $individual;
     }
@@ -202,11 +216,13 @@ final class GeneticAlgorithmEngine
     public function evolveGeneration(array $population, int $populationSize): array
     {
         $this->assertNotCancelled();
+
         $currentGeneration = $this->evolutionGeneration;
         $generationStep = $this->executeGenerationStep(
             population: $population,
             populationSize: $populationSize
         );
+
         $newPopulation = $generationStep['population'];
         $telemetry = [];
         $stagnation = $this->termination->getGenerationsWithoutImprovement();
@@ -223,30 +239,34 @@ final class GeneticAlgorithmEngine
                 stagnation: $stagnation
             );
 
-            $response = $this->landscapeEngine->evaluate(new LandscapeMetrics(
-                generation: $currentGeneration,
-                bestFitness: $localMetrics->bestFitness,
-                avgFitness: $localMetrics->avgFitness,
-                variance: $localMetrics->variance,
-                diversity: $localMetrics->diversity,
-                entropy: $localMetrics->entropy,
-                stagnation: $stagnation,
-                improvementAcceptanceRate: $generationStep['improvement_acceptance_rate'],
-                worseningAcceptanceRate: $generationStep['worsening_acceptance_rate'],
-                populationTurnover: $generationStep['population_turnover'],
-                bestSignatureChanged: $generationStep['best_signature_changed'],
-                eliteSimilarity: $generationStep['elite_similarity'],
-                bestSignature: $generationStep['best_signature']
-            ));
+            $response = $this->landscapeEngine->evaluate(
+                new LandscapeMetrics(
+                    generation: $currentGeneration,
+                    bestFitness: $localMetrics->bestFitness,
+                    avgFitness: $localMetrics->avgFitness,
+                    variance: $localMetrics->variance,
+                    diversity: $localMetrics->diversity,
+                    entropy: $localMetrics->entropy,
+                    stagnation: $stagnation,
+                    improvementAcceptanceRate: $generationStep['improvement_acceptance_rate'],
+                    worseningAcceptanceRate: $generationStep['worsening_acceptance_rate'],
+                    populationTurnover: $generationStep['population_turnover'],
+                    bestSignatureChanged: $generationStep['best_signature_changed'],
+                    eliteSimilarity: $generationStep['elite_similarity'],
+                    bestSignature: $generationStep['best_signature']
+                )
+            );
 
             $landscapeState = $response->state->value;
             $activateDynamicLns = $response->activateALNS;
             $telemetry['landscape_state'] = $landscapeState;
+
             $selectionPressureTelemetry = $this->applySelectionPressureMultiplier(
                 $response->selectionPressureMultiplier,
                 'landscape_response',
                 $landscapeState
             );
+
             $telemetry += $selectionPressureTelemetry;
 
             if ($observation = $this->landscapeEngine->observation()) {
@@ -263,12 +283,14 @@ final class GeneticAlgorithmEngine
             activateDynamicLns: $activateDynamicLns
         );
         $telemetry += $alnsTrigger;
+
         $mutationShockActivation = $this->resolveRealMutationShockActivation(
             generation: $currentGeneration,
             landscapeObservation: $observationPayload,
             eligible: true
         );
         $telemetry += $mutationShockActivation;
+
         $selectionPressureActivation = $this->resolveRealSelectionPressureReductionActivation(
             generation: $currentGeneration,
             landscapeObservation: $observationPayload,
@@ -279,10 +301,7 @@ final class GeneticAlgorithmEngine
         if ($observationPayload !== null) {
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $generationStep
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $generationStep),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -292,10 +311,7 @@ final class GeneticAlgorithmEngine
         } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
             $telemetry['landscape_observation'] = [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $generationStep
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $generationStep),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -307,10 +323,7 @@ final class GeneticAlgorithmEngine
             || ($selectionPressureActivation['selection_pressure_trigger_eligible'] ?? false) === true
         ) {
             $telemetry['landscape_observation'] = [
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $generationStep
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $generationStep),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -321,11 +334,13 @@ final class GeneticAlgorithmEngine
 
         if (($alnsTrigger['alns_triggered'] ?? false) === true) {
             $this->lastAlnsGeneration = $currentGeneration;
+
             $alnsTelemetry = $this->applyLns(
                 population: $newPopulation,
                 triggerTelemetry: $alnsTrigger,
                 landscapeObservation: $telemetry['landscape_observation'] ?? null
             );
+
             $telemetry += $alnsTelemetry;
 
             if (isset($telemetry['landscape_observation']) && is_array($telemetry['landscape_observation'])) {
@@ -359,26 +374,54 @@ final class GeneticAlgorithmEngine
         return $newPopulation;
     }
 
-    private function applyLns(
-        array &$population,
-        array $triggerTelemetry = [],
-        ?array $landscapeObservation = null
-    ): array {
+    private function applyLns(array &$population, array $triggerTelemetry = [], ?array $landscapeObservation = null): array
+    {
         if ($this->lns === null || $population === []) {
             return [];
         }
 
         $best = $this->getBest($population);
-        $candidate = $this->lns->improve($best->copy(), [
-            'trigger' => $triggerTelemetry,
-            'landscape_observation' => $landscapeObservation,
-        ]);
-        $candidate = $this->problem->repair($candidate);
-        $this->problem->evaluate($candidate);
-        $this->replacement->replace($population, $candidate);
-        $this->problem->clearFitnessCache();
+        $stagnation = $this->termination->getGenerationsWithoutImprovement();
+
+        $step = $this->executeAlnsStep(
+            best: $best,
+            generation: $this->evolutionGeneration,
+            stagnation: $stagnation,
+            triggerTelemetry: $triggerTelemetry,
+            landscapeObservation: $landscapeObservation
+        );
+
+        if ($step->accepted) {
+            $this->replacement->replace($population, $step->selected);
+            $this->problem->clearFitnessCache();
+        }
 
         $telemetry = $this->lns->lastTelemetry();
+        $telemetry['alns_base_fitness'] = $step->currentEvaluation->score();
+        $telemetry['alns_candidate_fitness'] = $step->candidateEvaluation->score();
+        $telemetry['alns_selected_fitness'] = $step->selectedEvaluation->score();
+
+        $telemetry['alns_base_hard_penalty'] = $step->currentEvaluation->hardPenalty();
+        $telemetry['alns_candidate_hard_penalty'] = $step->candidateEvaluation->hardPenalty();
+        $telemetry['alns_selected_hard_penalty'] = $step->selectedEvaluation->hardPenalty();
+
+        $telemetry['alns_base_soft_penalty'] = $step->currentEvaluation->softPenalty();
+        $telemetry['alns_candidate_soft_penalty'] = $step->candidateEvaluation->softPenalty();
+        $telemetry['alns_selected_soft_penalty'] = $step->selectedEvaluation->softPenalty();
+
+        $telemetry['alns_improvement'] = $step->rawImprovement;
+        $telemetry['alns_accepted_improvement'] = $step->acceptedImprovement;
+        $telemetry['alns_reward'] = $step->reward;
+        $telemetry['operator_reward'] = $step->reward;
+
+        $telemetry['alns_acceptance_policy'] = class_basename($this->alnsAcceptance);
+        $telemetry['alns_accepted'] = $step->accepted;
+        $telemetry['alns_acceptance_reason'] = $this->resolveAlnsAcceptanceReason($step);
+
+        $telemetry['alns_destroy_operator'] = $step->destroyOperator
+            ?? ($telemetry['alns_destroy_operator'] ?? null);
+        $telemetry['alns_repair_operator'] = $step->repairOperator
+            ?? ($telemetry['alns_repair_operator'] ?? null);
 
         if ($telemetry !== []) {
             Log::info('ga.alns.applied', [
@@ -387,7 +430,13 @@ final class GeneticAlgorithmEngine
                 'effective_frequency' => $triggerTelemetry['alns_effective_frequency'] ?? null,
                 'destroy_operator' => $telemetry['alns_destroy_operator'] ?? null,
                 'repair_operator' => $telemetry['alns_repair_operator'] ?? null,
-                'improvement' => $telemetry['alns_improvement'] ?? null,
+                'improvement' => $step->rawImprovement,
+                'accepted_improvement' => $step->acceptedImprovement,
+                'base_fitness' => $step->currentEvaluation->score(),
+                'candidate_fitness' => $step->candidateEvaluation->score(),
+                'accepted' => $step->accepted,
+                'acceptance_reason' => $telemetry['alns_acceptance_reason'],
+                'reward' => $step->reward,
                 'destroy_uses' => $telemetry['alns_destroy_stats']['uses'] ?? null,
                 'destroy_mean_reward' => $telemetry['alns_destroy_stats']['mean_reward'] ?? null,
                 'repair_uses' => $telemetry['alns_repair_stats']['uses'] ?? null,
@@ -396,6 +445,152 @@ final class GeneticAlgorithmEngine
         }
 
         return $triggerTelemetry + $telemetry;
+    }
+
+    private function executeAlnsStep(
+        Cromossomo $best,
+        int $generation,
+        int $stagnation,
+        array $triggerTelemetry = [],
+        ?array $landscapeObservation = null
+    ): AlnsStepResult {
+        $current = $best->copy();
+        $currentEvaluation = $this->problem->evaluate($current);
+        $current->setFitness($currentEvaluation->score());
+
+        $candidate = $this->lns->improve($current->copy(), [
+            'trigger' => $triggerTelemetry,
+            'landscape_observation' => $landscapeObservation,
+            // ✅ AÇÃO 04: Remover avaliação duplicada do callback
+            // Problema: candidate era avaliado aqui e depois novamente abaixo
+            // Solução: deixar apenas aqui a repair, sem evaluate
+            'finalize_candidate' => function (Cromossomo $individual): Cromossomo {
+                $individual = $this->problem->repair($individual);
+                // REMOVIDO: $this->problem->evaluate($individual);
+                // A avaliação acontece UMA ÚNICA VEZ abaixo (linha 473)
+
+                return $individual;
+            },
+        ]);
+
+        // ✅ AÇÃO 04: Avaliação única e real do candidate
+        // Agora candidate é avaliado apenas UMA VEZ com fitness real
+        // Isso garante que o improvement calculado em ALNS.improve() usa fitness correto
+        $candidateEvaluation = $this->problem->evaluate($candidate);
+        $candidate->setFitness($candidateEvaluation->score());
+        // Registrar para próxima iteração ALNS poder usar delta
+        $this->problem->recordFitness($candidate, $candidateEvaluation);
+
+        $rawImprovement = $candidateEvaluation->score() - $currentEvaluation->score();
+
+        $accepted = $this->alnsAcceptance->shouldAccept(
+            current: $current,
+            currentResult: $currentEvaluation,
+            candidate: $candidate,
+            candidateResult: $candidateEvaluation,
+            generation: $generation,
+            stagnation: $stagnation
+        );
+
+        $selected = $accepted ? $candidate : $current;
+        $selectedEvaluation = $accepted ? $candidateEvaluation : $currentEvaluation;
+        $acceptedImprovement = $accepted ? $rawImprovement : 0.0;
+
+        $destroyOperator = $this->extractOperatorName(
+            $this->lns->lastTelemetry()['alns_destroy_operator'] ?? null
+        );
+        $repairOperator = $this->extractOperatorName(
+            $this->lns->lastTelemetry()['alns_repair_operator'] ?? null
+        );
+
+        $reward = $this->calculateAlnsReward(
+            currentEvaluation: $currentEvaluation,
+            candidateEvaluation: $candidateEvaluation,
+            accepted: $accepted,
+            rawImprovement: $rawImprovement
+        );
+
+        if ($this->hyperHeuristic !== null) {
+            if ($destroyOperator !== null) {
+                $this->hyperHeuristic->recordRewardByName($destroyOperator, $reward);
+            }
+
+            if ($repairOperator !== null) {
+                $this->hyperHeuristic->recordRewardByName($repairOperator, $reward);
+            }
+        }
+
+        return new AlnsStepResult(
+            current: $current,
+            currentEvaluation: $currentEvaluation,
+            candidate: $candidate,
+            candidateEvaluation: $candidateEvaluation,
+            selected: $selected,
+            selectedEvaluation: $selectedEvaluation,
+            accepted: $accepted,
+            rawImprovement: $rawImprovement,
+            acceptedImprovement: $acceptedImprovement,
+            reward: $reward,
+            destroyOperator: $destroyOperator,
+            repairOperator: $repairOperator,
+        );
+    }
+
+    private function calculateAlnsReward(
+        object $currentEvaluation,
+        object $candidateEvaluation,
+        bool $accepted,
+        float $rawImprovement
+    ): float {
+        if ($candidateEvaluation->hardPenalty() < $currentEvaluation->hardPenalty()) {
+            return 2.0 + max(0.0, $rawImprovement);
+        }
+
+        if ($accepted && $rawImprovement > 0.0) {
+            return 1.0 + $rawImprovement;
+        }
+
+        if (! $accepted && $rawImprovement > 0.0) {
+            return 0.25 * $rawImprovement;
+        }
+
+        return 0.0;
+    }
+
+    private function resolveAlnsAcceptanceReason(AlnsStepResult $step): string
+    {
+        if ($step->accepted) {
+            if ($step->candidateEvaluation->hardPenalty() < $step->currentEvaluation->hardPenalty()) {
+                return 'accepted_hard_penalty_improved';
+            }
+
+            if ($step->candidateEvaluation->hardPenalty() === $step->currentEvaluation->hardPenalty()
+                && $step->candidateEvaluation->score() > $step->currentEvaluation->score()) {
+                return 'accepted_score_improved_same_hard_penalty';
+            }
+
+            return 'accepted_by_policy';
+        }
+
+        if ($step->candidateEvaluation->hardPenalty() > $step->currentEvaluation->hardPenalty()) {
+            return 'rejected_hard_penalty_worsened';
+        }
+
+        if ($step->candidateEvaluation->hardPenalty() === $step->currentEvaluation->hardPenalty()
+            && $step->candidateEvaluation->score() <= $step->currentEvaluation->score()) {
+            return 'rejected_no_score_improvement';
+        }
+
+        return 'rejected_by_policy';
+    }
+
+    private function extractOperatorName(mixed $value): ?string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return $value;
     }
 
     /**
@@ -453,6 +648,7 @@ final class GeneticAlgorithmEngine
             $mutationRate *= $response->mutationMultiplier;
             $mutationRate = max(0.001, min($mutationRate, 0.9));
             $activateDynamicLNS = $response->activateALNS;
+
             $selectionPressureTelemetry = $this->applySelectionPressureMultiplier(
                 $response->selectionPressureMultiplier,
                 'landscape_response',
@@ -474,12 +670,14 @@ final class GeneticAlgorithmEngine
             activateDynamicLns: $activateDynamicLNS
         );
         $telemetry += $alnsTrigger;
+
         $mutationShockActivation = $this->resolveRealMutationShockActivation(
             generation: $generation,
             landscapeObservation: $observationPayload,
             eligible: true
         );
         $telemetry += $mutationShockActivation;
+
         $selectionPressureActivation = $this->resolveRealSelectionPressureReductionActivation(
             generation: $generation,
             landscapeObservation: $observationPayload,
@@ -490,10 +688,7 @@ final class GeneticAlgorithmEngine
         if ($observationPayload !== null) {
             $telemetry['landscape_observation'] = $observationPayload + [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $populationTrajectory
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $populationTrajectory),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -503,10 +698,7 @@ final class GeneticAlgorithmEngine
         } elseif (($alnsTrigger['alns_trigger_eligible'] ?? false) === true) {
             $telemetry['landscape_observation'] = [
                 'alns_trigger' => $this->alnsTriggerObservationPayload($alnsTrigger),
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $populationTrajectory
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $populationTrajectory),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -518,10 +710,7 @@ final class GeneticAlgorithmEngine
             || ($selectionPressureActivation['selection_pressure_trigger_eligible'] ?? false) === true
         ) {
             $telemetry['landscape_observation'] = [
-                'mutation_shock' => $this->mutationShockObservationPayload(
-                    $mutationShockActivation,
-                    $populationTrajectory
-                ),
+                'mutation_shock' => $this->mutationShockObservationPayload($mutationShockActivation, $populationTrajectory),
                 'selection_pressure' => $this->selectionPressureObservationPayload(
                     $selectionPressureTelemetry,
                     $selectionPressureActivation,
@@ -532,11 +721,13 @@ final class GeneticAlgorithmEngine
 
         if (($alnsTrigger['alns_triggered'] ?? false) === true) {
             $this->lastAlnsGeneration = $generation;
+
             $alnsTelemetry = $this->applyLns(
                 population: $population,
                 triggerTelemetry: $alnsTrigger,
                 landscapeObservation: $telemetry['landscape_observation'] ?? null
             );
+
             $telemetry += $alnsTelemetry;
 
             if (isset($telemetry['landscape_observation']) && is_array($telemetry['landscape_observation'])) {
@@ -599,8 +790,7 @@ final class GeneticAlgorithmEngine
             return;
         }
 
-        $progress = new EvolutionProgress;
-
+        $progress = new EvolutionProgress();
         $progress->phase = 'evolution';
         $progress->generation = $generation;
         $progress->maxGenerations = $this->termination->getMaxGenerations() ?? 0;
@@ -634,6 +824,7 @@ final class GeneticAlgorithmEngine
             landscapeObservation: $landscapeObservation,
             activateDynamicLns: $activateDynamicLns
         );
+
         $effectiveFrequency = min($baseFrequency, $budgetFrequency, $landscapeFrequency ?? PHP_INT_MAX);
 
         if ($effectiveFrequency === PHP_INT_MAX) {
@@ -645,23 +836,30 @@ final class GeneticAlgorithmEngine
             'mean_improvement' => 0.0,
             'success_rate' => 0.0,
         ];
+
         $baseCooldown = max(1, (int) floor($effectiveFrequency / 2));
         $cooldownBrake = $this->adaptiveAlnsCooldownBrake($recentEffectiveness);
+
         $cooldown = $baseCooldown + (int) ($cooldownBrake['extra_generations'] ?? 0);
+
         $generationsSinceLastTrigger = $this->lastAlnsGeneration === null
             ? null
             : $generation - $this->lastAlnsGeneration;
+
         $cooldownSatisfied = $generationsSinceLastTrigger === null || $generationsSinceLastTrigger >= $cooldown;
+
         $realActivation = $this->resolveRealAlnsActivation(
             landscapeObservation: $landscapeObservation,
             generationsSinceLastTrigger: $generationsSinceLastTrigger,
             eligible: $this->lns !== null && $generation > 0
         );
+
         $landscapePressure = $this->hasLandscapePressure(
             landscapeState: $landscapeState,
             landscapeObservation: $landscapeObservation,
             activateDynamicLns: $activateDynamicLns
         );
+
         $intervalDue = $generation > 0 && $generation % $effectiveFrequency === 0;
         $landscapeDue = $generation > 0 && $landscapePressure && $cooldownSatisfied;
         $triggerSources = [];
@@ -697,7 +895,9 @@ final class GeneticAlgorithmEngine
             'alns_triggered' => $triggered,
             'alns_trigger_reason' => $triggered
                 ? implode('+', $triggerSources)
-                : ($cooldownSatisfied ? ($landscapePressure ? 'waiting_interval' : 'not_due') : (($cooldownBrake['applied'] ?? false) ? 'cooldown_recent_low_return' : 'cooldown')),
+                : ($cooldownSatisfied
+                    ? ($landscapePressure ? 'waiting_interval' : 'not_due')
+                    : (($cooldownBrake['applied'] ?? false) ? 'cooldown_recent_low_return' : 'cooldown')),
             'alns_trigger_sources' => $triggerSources,
             'alns_recent_effectiveness_sample_size' => (int) ($recentEffectiveness['sample_size'] ?? 0),
             'alns_recent_effectiveness_mean_improvement' => (float) ($recentEffectiveness['mean_improvement'] ?? 0.0),
@@ -884,6 +1084,7 @@ final class GeneticAlgorithmEngine
         $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
             ? $landscapeObservation['search_response_simulation']
             : [];
+
         $policy = $activationGate['candidate_policy'] ?? null;
         $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
         $simulationRequestsAlns = (bool) ($simulation['activate_alns'] ?? false)
@@ -976,6 +1177,7 @@ final class GeneticAlgorithmEngine
         $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
             ? $landscapeObservation['search_response_simulation']
             : [];
+
         $policy = $activationGate['candidate_policy'] ?? null;
         $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
         $multiplier = max(1.0, (float) ($simulation['mutation_multiplier'] ?? 1.0));
@@ -1014,6 +1216,7 @@ final class GeneticAlgorithmEngine
         $generationsSinceLastShock = $this->lastMutationShockGeneration === null
             ? null
             : $generation - $this->lastMutationShockGeneration;
+
         $cooldownSatisfied = $generationsSinceLastShock === null || $generationsSinceLastShock >= $cooldown;
         $applied = $eligible && $cooldownSatisfied;
         $mode = 'opt_in';
@@ -1062,10 +1265,8 @@ final class GeneticAlgorithmEngine
      * @param  array<string, mixed>  $populationTrajectory
      * @return array<string, mixed>
      */
-    private function mutationShockObservationPayload(
-        array $mutationShockActivation,
-        array $populationTrajectory = []
-    ): array {
+    private function mutationShockObservationPayload(array $mutationShockActivation, array $populationTrajectory = []): array
+    {
         return [
             'enabled' => $mutationShockActivation['mutation_shock_enabled'] ?? false,
             'requested' => $mutationShockActivation['mutation_shock_requested'] ?? false,
@@ -1161,17 +1362,16 @@ final class GeneticAlgorithmEngine
      * @param  array<string, mixed>  $alnsTelemetry
      * @return array<string, mixed>
      */
-    private function mergeAlnsObservationTelemetry(
-        array $landscapeObservation,
-        array $alnsTrigger,
-        array $alnsTelemetry
-    ): array {
+    private function mergeAlnsObservationTelemetry(array $landscapeObservation, array $alnsTrigger, array $alnsTelemetry): array
+    {
         $existingTrigger = is_array($landscapeObservation['alns_trigger'] ?? null)
             ? $landscapeObservation['alns_trigger']
             : $this->alnsTriggerObservationPayload($alnsTrigger);
+
         $profile = is_array($alnsTelemetry['alns_intensity_profile'] ?? null)
             ? $alnsTelemetry['alns_intensity_profile']
             : [];
+
         $recentEffectiveness = is_array($alnsTelemetry['alns_recent_effectiveness'] ?? null)
             ? $alnsTelemetry['alns_recent_effectiveness']
             : [];
@@ -1181,6 +1381,27 @@ final class GeneticAlgorithmEngine
             'repair_operator' => $alnsTelemetry['alns_repair_operator'] ?? null,
             'improvement' => isset($alnsTelemetry['alns_improvement'])
                 ? round((float) $alnsTelemetry['alns_improvement'], 6)
+                : null,
+            'accepted_improvement' => isset($alnsTelemetry['alns_accepted_improvement'])
+                ? round((float) $alnsTelemetry['alns_accepted_improvement'], 6)
+                : null,
+            'accepted' => $alnsTelemetry['alns_accepted'] ?? null,
+            'acceptance_policy' => $alnsTelemetry['alns_acceptance_policy'] ?? null,
+            'acceptance_reason' => $alnsTelemetry['alns_acceptance_reason'] ?? null,
+            'reward' => isset($alnsTelemetry['alns_reward'])
+                ? round((float) $alnsTelemetry['alns_reward'], 6)
+                : null,
+            'base_hard_penalty' => isset($alnsTelemetry['alns_base_hard_penalty'])
+                ? round((float) $alnsTelemetry['alns_base_hard_penalty'], 6)
+                : null,
+            'candidate_hard_penalty' => isset($alnsTelemetry['alns_candidate_hard_penalty'])
+                ? round((float) $alnsTelemetry['alns_candidate_hard_penalty'], 6)
+                : null,
+            'base_soft_penalty' => isset($alnsTelemetry['alns_base_soft_penalty'])
+                ? round((float) $alnsTelemetry['alns_base_soft_penalty'], 6)
+                : null,
+            'candidate_soft_penalty' => isset($alnsTelemetry['alns_candidate_soft_penalty'])
+                ? round((float) $alnsTelemetry['alns_candidate_soft_penalty'], 6)
                 : null,
             'aggression_label' => $profile['aggression_label'] ?? null,
             'intensity' => isset($profile['intensity']) ? round((float) $profile['intensity'], 4) : null,
@@ -1318,6 +1539,7 @@ final class GeneticAlgorithmEngine
         }
 
         $evaluationStartedAt = microtime(true);
+
         $this->reportOperationalHeartbeat(
             generation: $generation,
             stage: 'evaluating_population',
@@ -1329,7 +1551,7 @@ final class GeneticAlgorithmEngine
             ],
             force: true
         );
-        $this->populationEvaluator->evaluate($newPopulation);
+
         $trajectorySignals = $this->calculateTrajectorySignals(
             previousPopulation: $population,
             newPopulation: $newPopulation,
@@ -1480,6 +1702,7 @@ final class GeneticAlgorithmEngine
         $simulation = is_array($landscapeObservation['search_response_simulation'] ?? null)
             ? $landscapeObservation['search_response_simulation']
             : [];
+
         $policy = $activationGate['candidate_policy'] ?? null;
         $policyAligned = $policy !== null && $policy === ($simulation['policy'] ?? null);
         $multiplier = max(0.34, min(1.0, (float) ($simulation['selection_pressure_multiplier'] ?? 1.0)));
@@ -1518,6 +1741,7 @@ final class GeneticAlgorithmEngine
         $generationsSinceLastReduction = $this->lastSelectionPressureReductionGeneration === null
             ? null
             : $generation - $this->lastSelectionPressureReductionGeneration;
+
         $cooldownSatisfied = $generationsSinceLastReduction === null || $generationsSinceLastReduction >= $cooldown;
         $applied = $eligible && $cooldownSatisfied;
         $mode = 'opt_in';
@@ -1575,10 +1799,7 @@ final class GeneticAlgorithmEngine
             return [
                 'telemetry' => $telemetry + [
                     'selection_pressure_base_multiplier' => round($baseMultiplier, 6),
-                    'selection_pressure_effective_multiplier' => round(
-                        (float) ($telemetry['selection_pressure_multiplier'] ?? $baseMultiplier),
-                        6
-                    ),
+                    'selection_pressure_effective_multiplier' => round((float) ($telemetry['selection_pressure_multiplier'] ?? $baseMultiplier), 6),
                     'selection_pressure_reduction_active' => false,
                 ],
             ];
@@ -1588,11 +1809,7 @@ final class GeneticAlgorithmEngine
         $multiplier = max(0.34, min(1.0, (float) ($reduction['multiplier'] ?? 1.0)));
         $remainingBefore = max(0, (int) ($reduction['remaining_generations'] ?? 0));
         $effectiveMultiplier = min(max(0.34, $baseMultiplier), $multiplier);
-        $telemetry = $this->applySelectionPressureMultiplier(
-            $effectiveMultiplier,
-            'activation_gate',
-            null
-        );
+        $telemetry = $this->applySelectionPressureMultiplier($effectiveMultiplier, 'activation_gate', null);
 
         $reduction['remaining_generations'] = max(0, $remainingBefore - 1);
         $remainingAfter = (int) $reduction['remaining_generations'];
@@ -1695,10 +1912,12 @@ final class GeneticAlgorithmEngine
         $rewardCount = count($rewards);
         $improvements = count(array_filter($rewards, static fn (float $reward): bool => $reward > 0.0));
         $worsenings = count(array_filter($rewards, static fn (float $reward): bool => $reward < 0.0));
+
         $previousSignatureSet = $this->signatureSet($previousPopulation);
         $newSignatureSet = $this->signatureSet($newPopulation);
         $newSignatureCount = max(1, count($newPopulation));
         $newBestSignature = $this->getBest($newPopulation)->signature();
+
         $previousBestSignature = $previousPopulation === []
             ? ''
             : $this->getBest($previousPopulation)->signature();
@@ -1767,7 +1986,10 @@ final class GeneticAlgorithmEngine
      */
     private function topSignatures(array $population, int $limit): array
     {
-        usort($population, static fn (Cromossomo $left, Cromossomo $right): int => $right->fitness() <=> $left->fitness());
+        usort(
+            $population,
+            static fn (Cromossomo $left, Cromossomo $right): int => $right->fitness() <=> $left->fitness()
+        );
 
         return array_map(
             static fn (Cromossomo $individual): string => $individual->signature(),
@@ -1827,14 +2049,14 @@ final class GeneticAlgorithmEngine
 
         $now = microtime(true);
         $elapsedSeconds = max(0.0, $now - $operationStartedAt);
+
         $shouldEmitHeartbeat = $force
             || $this->lastOperationalHeartbeatAt === null
             || ($now - $this->lastOperationalHeartbeatAt) >= self::OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS;
+
         $shouldLogLongRunning = $elapsedSeconds >= self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS
-            && (
-                $this->lastLongRunningOperationLogAt === null
-                || ($now - $this->lastLongRunningOperationLogAt) >= self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS
-            );
+            && ($this->lastLongRunningOperationLogAt === null
+                || ($now - $this->lastLongRunningOperationLogAt) >= self::LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS);
 
         if (! $shouldEmitHeartbeat && ! $shouldLogLongRunning) {
             return;

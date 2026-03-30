@@ -40,7 +40,7 @@ final class AdaptiveLargeNeighborhoodSearch
 
     public function improve(Cromossomo $solution, array $context = []): Cromossomo
     {
-        $selector = $this->selector ?? new RouletteWheelSelector;
+        $selector = $this->selector ?? new RouletteWheelSelector();
 
         /** @var DestroyOperatorInterface $destroy */
         $destroy = $selector->select(
@@ -60,7 +60,22 @@ final class AdaptiveLargeNeighborhoodSearch
 
         $partial = $destroy->destroy($solution);
         $candidate = $repair->repair($partial);
-        $improvement = $candidate->fitness() - $solution->fitness();
+        $finalizeCandidate = $context['finalize_candidate'] ?? null;
+
+        if (is_callable($finalizeCandidate)) {
+            $finalized = $finalizeCandidate($candidate);
+
+            if ($finalized instanceof Cromossomo) {
+                $candidate = $finalized;
+            }
+        }
+
+        // 🔧 PRIORIDADE 10: Extrair AffectedRegion para habilitar delta evaluation
+        $affectedRegion = $partial->buildAffectedRegion();
+
+        $baselineFitness = $solution->fitness();
+        $candidateFitness = $candidate->fitness();
+        $improvement = $candidateFitness - $baselineFitness;
 
         $this->scores->reward($destroy, $repair, $improvement);
         $this->recordOutcome($improvement);
@@ -69,10 +84,19 @@ final class AdaptiveLargeNeighborhoodSearch
             'alns_destroy_operator' => $destroy->getName(),
             'alns_repair_operator' => $repair->getName(),
             'alns_improvement' => $improvement,
+            'alns_base_fitness' => $baselineFitness,
+            'alns_candidate_fitness' => $candidateFitness,
             'alns_destroy_stats' => $this->scores->destroyStats()[$destroy->getName()] ?? [],
             'alns_repair_stats' => $this->scores->repairStats()[$repair->getName()] ?? [],
             'alns_intensity_profile' => $profile,
             'alns_recent_effectiveness' => $this->recentEffectivenessSummary(),
+            // 🔧 PRIORIDADE 10: Incluir AffectedRegion na telemetria
+            'alns_affected_region' => [
+                'gene_indexes_count' => count($affectedRegion->geneIndexes),
+                'professores_count' => count($affectedRegion->professores),
+                'turmas_count' => count($affectedRegion->turmas),
+                'dias_count' => count($affectedRegion->dias),
+            ],
             'alns_removed_genes' => count($partial->unassigned()),
             'alns_remaining_assigned_genes' => count($partial->assigned()),
         ];

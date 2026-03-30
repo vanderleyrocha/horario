@@ -38,6 +38,38 @@ final class Island
         Log::info("População da ilha {$this->islandNum} criada com sucesso! Tempo decorrido =  = {$elapsed}");
     }
 
+    /**
+     * 🔧 PRIORIDADE 5: Reinicializa a ilha com presunção de elite.
+     * - Mantém os indivíduos de elite (tipicamente 10% da população)
+     * - Gera novos indivíduos para completar o tamanho da população (90%)
+     *
+     * @param Cromossomo[] $elite - Indivíduos a serem preservados
+     */
+    public function reinitializeWithElite(array $elite): void
+    {
+        $eliteCount = min(count($elite), $this->populationSize);
+        $newIndividualsNeeded = $this->populationSize - $eliteCount;
+
+        Log::info("Reinicializando ilha {$this->islandNum} com elite + novos indivíduos", [
+            'elite_count' => $eliteCount,
+            'new_individuals' => $newIndividualsNeeded,
+            'total_population' => $this->populationSize,
+        ]);
+
+        // Começar com a elite
+        $this->population = array_slice($elite, 0, $eliteCount);
+
+        // Gerar novos indivíduos para completar a população
+        for ($i = 0; $i < $newIndividualsNeeded; $i++) {
+            $individual = $this->engine->createIndividual();
+            $this->population[] = $individual;
+        }
+
+        Log::info("Ilha {$this->islandNum} reinicializada com sucesso", [
+            'population_size' => count($this->population),
+        ]);
+    }
+
     public function evolveGeneration(): Cromossomo
     {
         $this->population = $this->engine->evolveGeneration($this->population, $this->populationSize);

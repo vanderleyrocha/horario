@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Log;
 
 final class ScheduleProblem implements GeneticProblem
 {
-    private const MAX_BUILD_ATTEMPTS = 12;
+    private const MAX_BUILD_ATTEMPTS = 25;  // ← Aumentado de 12 para melhor qualidade
 
     private const MIN_BUILD_ATTEMPTS = 4;
 
@@ -30,7 +30,7 @@ final class ScheduleProblem implements GeneticProblem
 
     private const RCL_ALPHA_MIN = 0.15;
 
-    private const RCL_ALPHA_MAX = 0.45;
+    private const RCL_ALPHA_MAX = 0.25;  // ← Reduzido de 0.45 (mais greedy, menos aleatório)
 
     private const TELEMETRY_EVERY_ALLOCATIONS = 25;
 
@@ -126,6 +126,14 @@ final class ScheduleProblem implements GeneticProblem
      * @var list<string>
      */
     private array $currentBuildAttemptLimitReductionCriteria = [];
+
+    // 🔧 PRIORIDADE 10: Rastreamento de fitness anterior para evaluateDelta
+    /**
+     * @var array<string, FitnessResult>
+     * Mapping de cromossomo signature -> fitness anterior
+     * Usado para calcular delta em vez de reavaliar completo
+     */
+    private array $previousFitnessCache = [];
 
     public function __construct(private readonly ScheduleData $data, private readonly EvaluationContextBuilder $contextBuilder, private readonly FitnessEvaluator $fitnessEvaluator, private readonly GreedyRepairOperator $repairOperator, private readonly ?ProgressReporterInterface $progress = null, private readonly ?int $executionId = null)
     {
@@ -530,6 +538,92 @@ final class ScheduleProblem implements GeneticProblem
         $context = $this->contextBuilder->build($individual, $this->data);
 
         return $this->fitnessEvaluator->evaluateDelta($individual, $context, $region, $previous);
+    }
+
+    /**
+     * 🔧 PRIORIDADE 10: Avaliar usando delta se fitness anterior está disponível.
+     * Reduz significativamente o custo de avaliação em mutação/repair.
+     *
+     * Se o cromossomo foi modificado em regiões específicas (gene indices),
+     * use evaluateDelta para reavalia apenas regras afetadas.
+     * Caso contrário, volta para evaluate() completo.
+     */
+    public function evaluateWithDelta(
+        Cromossomo $individual,
+        AffectedRegion $region
+    ): FitnessResult {
+        $signature = $individual->signature();
+
+        // Se não temos fitness anterior, fazer avaliação completa
+        if (!isset($this->previousFitnessCache[$signature])) {
+            $result = $this->evaluate($individual);
+            // Guardar para próxima mutação
+            $this->previousFitnessCache[$signature] = $result;
+            return $result;
+        }
+
+        // Usar delta evaluation - muito mais rápido!
+        $previous = $this->previousFitnessCache[$signature];
+        $result = $this->evaluateDelta($individual, $region, $previous);
+
+        // Atualizar cache para próxima mutação
+        $this->previousFitnessCache[$signature] = $result;
+
+        return $result;
+    }
+
+    /**
+     * 🔧 PRIORIDADE 10: Registrar fitness após mutação/repair para próxima avaliação.
+     * Isso permite que evaluateWithDelta() funcione sem surpresas.
+     */
+    public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void
+    {
+        $signature = $individual->signature();
+        $this->previousFitnessCache[$signature] = $fitness;
+    }
+
+    /**
+     * 🔧 PRIORIDADE 10: Limpar cache de fitness (entre gerações ou execuções).
+     */
+    public function clearFitnessDeltaCache(): void
+    {
+        $this->previousFitnessCache = [];
+    }
+
+    /**
+     * 🔧 PRIORIDADE 10: Avaliar com delta se AffectedRegion está disponível.
+     * Para uso em contextos onde sabemos exatamente qual região foi modificada.
+     *
+     * Fallback automático para evaluate() se delta não for possível.
+     */
+    public function evaluateWithAffectedRegion(
+        Cromossomo $individual,
+        ?AffectedRegion $region = null
+    ): FitnessResult {
+        $signature = $individual->signature();
+
+        // Se região não foi fornecida, fazer avaliação completa
+        if ($region === null) {
+            $result = $this->evaluate($individual);
+            $this->previousFitnessCache[$signature] = $result;
+            return $result;
+        }
+
+        // Se não temos fitness anterior, fazer avaliação completa
+        if (!isset($this->previousFitnessCache[$signature])) {
+            $result = $this->evaluate($individual);
+            $this->previousFitnessCache[$signature] = $result;
+            return $result;
+        }
+
+        // Usar delta evaluation - muito mais rápido!
+        $previous = $this->previousFitnessCache[$signature];
+        $result = $this->evaluateDelta($individual, $region, $previous);
+
+        // Atualizar cache para próxima mutação
+        $this->previousFitnessCache[$signature] = $result;
+
+        return $result;
     }
 
     public function repair(Cromossomo $individual): Cromossomo
@@ -1629,14 +1723,19 @@ final class ScheduleProblem implements GeneticProblem
         $result = $this->evaluate($candidate);
         $thresholds = $this->initialQualityGateThresholds($attempt, $queueSize);
 
+        // 🔧 PRIORIDADE 1: Forçar score >= 50 (viável) para população inicial
+        $fitnessScoreViable = $result->score() >= 50.0;
+
         return [
             'passes' => $result->hardPenalty() <= $thresholds['max_hard_penalty']
-                && $telemetry['hard_conflict_allocations'] <= $thresholds['max_hard_conflict_allocations'],
+                && $telemetry['hard_conflict_allocations'] <= $thresholds['max_hard_conflict_allocations']
+                && $fitnessScoreViable,  // ← NOVO: rejeitar se inviável
             'hard_penalty' => $result->hardPenalty(),
             'soft_penalty' => $result->softPenalty(),
             'score' => $result->score(),
             'max_hard_penalty' => $thresholds['max_hard_penalty'],
             'max_hard_conflict_allocations' => $thresholds['max_hard_conflict_allocations'],
+            'viable' => $fitnessScoreViable,  // ← NOVO: indicador de viabilidade
         ];
     }
 

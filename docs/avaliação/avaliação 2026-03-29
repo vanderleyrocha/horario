@@ -1,0 +1,301 @@
+1. Resumo Executivo
+    Estado atual: arquitetura ambiciosa, mas com gargalos e inconsistências críticas que hoje limitam qualidade e velocidade do solver.
+
+    Principais achados factuais:
+
+    Há execuções do horario_id=3 que ficaram longos períodos sem registrar nenhuma geração (forte evidência de gargalo na população inicial): execuções 2,3,4,5 com 0 linhas em schedule_generation_metrics.
+
+    A execução 6 registrou só 9 gerações em ~50m, com best_fitness travado em 50 e diversity=0 em todas as gerações observadas (ga-2026-03-28.log).
+
+    No caso real (horario_id=3), cada turma tem demanda semanal exatamente igual à capacidade (35 slots/semana por turma), e há 157 aulas com aulas_semana=1 (consulta SQL direta).
+
+    A função de score satura soluções viáveis em 50 quando soft_penalty >= 50 (FitnessEvaluator.php).
+
+    A regra DistributionRule penaliza qualquer aula alocada em menos de 2 dias, inclusive aulas semanais de 1 ocorrência (DistributionRule.php). Isso cria um piso de penalidade inevitável no caso real.
+
+    Conclusão executiva: hoje o problema é uma combinação de
+        (i) modelagem/função-objetivo mal calibradas,
+        (ii) custo computacional alto na construção/evolução, e
+        (iii) inconsistências de integração entre dados reais e código do solver.
+
+
+2. O Que Já Está Implementado
+
+    2.1 Núcleo GA com Island Model, seleção, crossover, mutação adaptativa, elitismo e replacement.
+    Referências: RunGeneticAlgorithm.php, IslandModelEngine.php, AdaptiveNichingReplacement.php.
+
+    2.2 Construção inicial GRASP com quality gate/fail-fast e repair.
+    Referências: ScheduleProblem.php, ScheduleProblem.php, GreedyRepairOperator.php.
+
+    2.3 ALNS com operadores destroy/repair adaptativos e telemetria.
+    Referências: AdaptiveLargeNeighborhoodSearch.php, GeneticAlgorithmEngine.php.
+
+    2.4 Camada de landscape + search-response (diagnóstico e readiness).
+    Referências: LandscapeEngine.php, LandscapeObservation.php, SearchResponseActivationGate.php.
+
+    2.5 Telemetria e monitoramento via cache + banco + painel Livewire.
+    Referências: CacheAndDbProgressReporter.php, ExecutionMetricsRecorder.php, ExecutionStatusPanel.php.
+
+3. Avaliação Da Qualidade Técnica Atual
+    Classificação geral: criticamente deficiente para o objetivo de solver competitivo, apesar de boa base arquitetural.
+
+    Pontos fortes:
+    Modularidade razoável (Domain/Application/Infrastructure).
+
+    Instrumentação de execução bem acima da média de projetos legados.
+
+    Existência de peças avançadas (ALNS, landscape, hyper-heuristic, delta infra).
+
+    Pontos críticos:
+    Função-objetivo com perda de gradiente em soluções viáveis (saturação em 50).
+
+    Mismatches de modelagem/dados (campos/relacionamentos não alinhados).
+
+    Ciclo evolutivo com redundância de avaliação.
+
+    Sinal de ALNS potencialmente incorreto (reward medido antes de avaliar fitness real).
+
+    Inconsistência operacional frontend/backend (island_count exibido diferente do executado).
+
+    Execuções órfãs/stale (running/cancel_requested sem fechamento final).
+
+    Erros fatais repetidos no painel (Cannot redeclare...) em laravel.log.
+
+4. Análise Das Propostas Da Pasta docs/prompts
+
+    Proposta	    Status	Arquivos relacionados	    Observações	Prioridade futura
+
+    prompt 01       (GA híbrido + ALNS + métricas)	    parcialmente implementado	RunGeneticAlgorithm.php, CacheAndDbProgressReporter.php	Base pronta, mas com gargalos e desalinhamentos de score/modelagem	Alta
+
+    prompt 02 (evoluir motor + telemetria + frontend)	parcialmente implementado	ExecutionStatusPanel.php, ExecutionMetricsStream.php	Telemetria rica existe; robustez operacional ainda fraca	Alta
+
+    prompt 03 (nível ITC com metaheurísticas)	parcialmente implementado	GeneticAlgorithmEngine.php, AdaptiveLargeNeighborhoodSearch.php	Estratégia multi-camada incompleta na prática	Alta
+
+    prompt 04 (arquitetura: GA+LNS+HH+CP+Pareto)	parcialmente implementado	LearningHyperHeuristicController.php, LandscapeEngine.php	CP-like e Pareto não implementados	Média
+
+    prompt 05 (LSMC/SA/LAHC/path-relinking/reactive tabu)	não implementado	N/A no core	Não há cadeia de aceitação probabilística real	Média
+
+    prompt 06 (Move Engine completo)	não implementado	Apenas artefatos parciais em KempeNeighborhoodSearch.php	Código Kempe legado não integrado e com API antiga	Média
+
+    prompt 07 (Candidate Move Graph)	não implementado	N/A	Não há CMG/caching de movimentos promissores	Média
+
+    prompt 08 (Move Learning Engine)	parcialmente implementado	MoveLearningEngine.php, LearningHyperHeuristicController.php	Existe, porém ainda sem impacto robusto no core	Média
+
+    prompt 09 (Learning Hyper-Heuristic Engine)	já implementado (versão básica)	LearningHyperHeuristicController.php	Funciona, mas é limitado por score/reward problemáticos	Alta
+
+    prompt 10 (SLAE)	já implementado (forte)	LandscapeObservation.php, SearchResponseActivationGate.php	Boa base diagnóstica e de readiness	Média
+
+    prompt 11 (controle auto-adaptativo + trajetória)	parcialmente implementado	LandscapeObservation.php, GeneticAlgorithmEngine.php	Métricas de trajetória existem; ativação real ainda muito “opt-in/diagnostic”	Alta
+
+
+5. Diagnóstico Dos Gargalos De Desempenho
+
+    5.1 Problema: construção inicial muito cara por indivíduo, com múltiplas tentativas, lookahead e repair.
+    Por que prejudica: custo explode com queue_size alto.
+    Como corrigir: pré-filtrar slots por disponibilidade real + reduzir lookahead + seed construtivo mais forte.
+    Impacto esperado: muito alto na população inicial.
+    Referências: ScheduleProblem.php, ScheduleProblem.php, ScheduleProblem.php.
+
+    5.2 Problema: multiplicação do custo por ilhas.
+    Por que prejudica: cada ilha cria população completa.
+    Como corrigir: sincronizar island_count real/configurável e usar rampa progressiva de ilhas.
+    Impacto esperado: alto.
+    Referências: RunGeneticAlgorithm.php, Island.php, ExecutionCenter.php.
+
+    5.3 Problema: avaliação duplicada no ciclo evolutivo.
+    Por que prejudica: cada filho é avaliado em evolveChild e depois toda população é avaliada novamente.
+    Como corrigir: remover a segunda avaliação para indivíduos já avaliados.
+    Impacto esperado: alto em tempo por geração.
+    Referências: GeneticAlgorithmEngine.php, GeneticAlgorithmEngine.php, GeneticAlgorithmEngine.php.
+
+    5.4 Problema: reward de ALNS calculado com fitness potencialmente não avaliado.
+    Por que prejudica: aprendizado de operadores fica enviesado (logs com melhorias sempre negativas).
+    Como corrigir: avaliar fitness do candidato antes de computar improvement e só então premiar.
+    Impacto esperado: alto na efetividade de intensificação.
+    Referências: AdaptiveLargeNeighborhoodSearch.php, RegretInsertionOperator.php, LNSRepairAdapter.php.
+
+    5.5 Problema: ALNS aplica substituição sem critério de aceitação explícito no engine.
+    Por que prejudica: pode injetar piora.
+    Como corrigir: aceitar por melhoria, ou SA/LAHC, ou limiar adaptativo.
+    Impacto esperado: médio-alto.
+    Referências: GeneticAlgorithmEngine.php, GeneticAlgorithmEngine.php.
+
+    5.6 Problema: avaliação/contexto sem incremental real no hot path.
+    Por que prejudica: rebuild frequente e caro.
+    Como corrigir: usar evaluateDelta no fluxo de mutação/repair e cache de contexto.
+    Impacto esperado: alto.
+    Referências: ScheduleProblem.php, FitnessEvaluator.php, EvaluationContextBuilder.php.
+
+    5.7 Problema: parallel_evaluation forçado e com serialização pesada.
+    Por que prejudica: overhead de serialização/deserialização pode superar benefício em populações pequenas.
+    Como corrigir: tornar parallel_evaluation configurável por env e por threshold de população.
+    Impacto esperado: médio.
+    Referências: config/ag.php, AsyncFitnessEvaluator.php, AsyncFitnessEvaluator.php.
+
+    5.8 Problema: persistência de métricas com flush a cada geração (batchSize=1).
+    Por que prejudica: overhead de I/O de banco.
+    Como corrigir: batch por 10–25 gerações.
+    Impacto esperado: médio.
+    Referências: ExecutionMetricsRecorder.php, ExecutionMetricsRecorder.php.
+
+6. Diagnóstico Do Caso Real horario_id = 3
+Fatos observados (SQL + logs):
+
+264 aulas, 11 turmas, 19 professores, 385 slots de demanda total.
+Cada turma tem demanda exata 35 slots; configuração também é 5 dias x 7 aulas = 35 slots por turma.
+restricoes_tempo para horario_id=3: 0.
+
+157 aulas têm aulas_semana=1.
+
+Execuções 2,3,4,5 ficaram longos períodos sem geração registrada (forte indício de travamento na fase inicial).
+
+Execução 6: best_fitness=50 em todas as 9 gerações registradas (ga-2026-03-28.log).
+
+Diagnóstico por dimensão:
+
+    1. Algoritmo: há gargalo claro de custo (construção/eval/repair), e sinal de aprendizado comprometido (ALNS reward).
+
+    2. Modelagem: função objetivo e regras criam piso inevitável de soft penalty para esse dataset.
+
+    3. Dados: caso extremamente denso (cada turma totalmente preenchida), sem slack estrutural.
+
+    4. Restrições: praticamente inexistentes no banco para este horário; ainda há indícios de desalinhamento de integração de restrições no builder.
+
+Inferência técnica central:
+    Com 157 aulas de 1 ocorrência/semana, a DistributionRule gera penalidade mínima inevitável >=157; com peso 2.0, isso já dá >=314 de soft penalty. Como o score viável é 50 + max(0, 50-soft), o melhor score viável tende a ficar travado em 50.
+    Referências: DistributionRule.php, FitnessWeights.php, FitnessEvaluator.php.
+
+7. Melhorias Recomendadas -  Ganhos rápidos (P0/P1):
+
+    1. Corrigir score para manter gradiente em soluções viáveis (evitar saturação em 50).
+
+    2. orrigir DistributionRule para não penalizar aulas com weeklyOccurrences < 2.
+
+    3. Remover avaliação duplicada de newPopulation.
+
+    4. Corrigir cálculo de alns_improvement (avaliar fitness real antes do reward).
+
+    5. Adicionar critério de aceitação ALNS no engine (não substituir sempre).
+
+    6. Sincronizar island_count real (UI x execução).
+
+    7. Tornar parallel_evaluation realmente configurável e com threshold.
+
+    8. Aumentar batch de persistência de métricas.
+
+    Melhorias estruturais (P1):
+
+    1. Alinhar ScheduleDataBuilder com modelos/esquema real (carga_horaria_maxima, relação restricoes, intervalos).
+
+    2. Aplicar disponibilidade/restrições já no filtro de candidatos (não só no repair).
+
+    3. Introduzir fitness incremental real no fluxo de mutação/repair.
+
+    4. Reduzir custo de lookahead (futureFlexibilityScore) com caches/estimativas.
+
+    5. Fechar ciclo de status operacional (running/cancel_requested órfãos).
+
+    Melhorias avançadas (P2):
+
+    1. Integrar local search memético com aceitação (SA/LAHC).
+
+    2. Implementar Move Engine/Candidate Move Graph de forma consistente com representação atual.
+
+    3. Avaliar objetivo multiobjetivo (ou escalar soft-weights dinamicamente por fase).
+
+8. Plano De Ação Passo A Passo
+
+    x Ação 01: Ajustar função de score para evitar saturação de viáveis
+    Motivo: Recuperar gradiente de seleção
+    Impacto Esperado: Muito alto
+    Complexidade: Média
+    Prioridade: P0
+
+    x Ação 02: Corrigir DistributionRule para weeklyOccurrences<2
+    Motivo: Remover penalidade inevitável artificial
+    Impacto Esperado: Muito alto
+    Complexidade: Baixa
+    Prioridade: P0
+
+    x Ação 03: Remover avaliação duplicada por geração
+    Motivo: Corte direto de custo
+    Impacto Esperado: Alto
+    Complexidade: Baixa
+    Prioridade: P0
+
+    x Ação 04: Corrigir reward ALNS com fitness pós-avaliação
+    Motivo: Recuperar aprendizado adaptativo
+    Impacto Esperado: Alto
+    Complexidade: Baixa
+    Prioridade: P0
+
+    x Ação 05: Adicionar política de aceitação ALNS
+    Motivo: Evitar degradação populacional
+    Impacto Esperado: Alto
+    Complexidade: Média
+    Prioridade: P0
+
+    Ação 06: Sincronizar island_count (UI/backend)
+    Motivo: Coerência operacional e tuning confiável
+    Impacto Esperado: Médio
+    Complexidade: Baixa
+    Prioridade: P1
+
+    Ação 07: Tornar paralelismo parametrizável e condicional
+    Motivo: Reduzir overhead em cenários pequenos/médios
+    Impacto Esperado: Médio
+    Complexidade: Baixa
+    Prioridade: P1
+
+    Ação 08: Corrigir mapeamento de dados no ScheduleDataBuilder
+    Motivo: Eliminar inconsistência de domínio
+    Impacto Esperado: Alto
+    Complexidade: Média
+    Prioridade: P1
+
+    Ação 09: Aplicar restrições/disponibilidade no construtor de candidatos
+    Motivo: Reduzir reparo e conflito cedo
+    Impacto Esperado: Muito alto
+    Complexidade: Média
+    Prioridade: P1
+
+    x Ação 10: Integrar evaluateDelta no hot path
+    Motivo: Reduzir custo de fitness
+    Impacto Esperado: Alto
+    Complexidade: Alta
+    Prioridade: P1
+
+    Ação 11: Introduzir watchdog para execuções órfãs + fechamento de status/contexto
+    Motivo: Robustez operacional e UX
+    Impacto Esperado: Médio
+    Complexidade: Média
+    Prioridade: P1
+
+    Ação 12: Limpar/reescrever artefatos legados não integrados (Kempe antigo)
+    Motivo: Reduzir dívida técnica e confusão
+    Impacto Esperado: Médio
+    Complexidade: Média
+    Prioridade: P2
+
+9. Conclusão Final
+    Manter:
+        Base arquitetural modular.
+        Pipeline de telemetria e observabilidade.
+        Componentes de ALNS/landscape/hyper-heuristic como fundação.
+    Refatorar:
+        Função de fitness e regras soft (principalmente DistributionRule).
+        Ciclo evolutivo para eliminar redundâncias e corrigir reward/aceitação.
+        ScheduleDataBuilder para aderir ao esquema real e à semântica do domínio.
+        Pipeline de avaliação para incremental real.
+    Substituir/descartar:
+        Trechos legados não integrados (ex.: Kempe antigo fora da representação atual).
+        Configurações incoerentes fixas (ex.: islands hardcoded).
+
+Próxima etapa imediata (recomendada):
+    Executar um “Sprint P0” focado em 4 correções:
+        (1) score sem saturação,
+        (2) DistributionRule condicional por ocorrência,
+        (3) remover avaliação duplicada,
+        (4) corrigir reward/aceitação ALNS.
+
+Esse pacote deve destravar simultaneamente qualidade de solução e tempo de execução no caso horario_id=3.

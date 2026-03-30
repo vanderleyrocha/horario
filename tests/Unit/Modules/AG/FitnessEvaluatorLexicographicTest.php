@@ -71,6 +71,33 @@ it('preserves score gradient between infeasible solutions', function (): void {
         ->and($lessInfeasible->score())->toBeGreaterThan($moreInfeasible->score());
 });
 
+it('keeps feasible score gradient even under very high soft penalties', function (): void {
+    $chromosome = new Cromossomo([new Gene(1, 1, 1, 1, 1, 1, 1)]);
+    $context = makeEvalContext();
+
+    $highSoft = (new FitnessEvaluator(
+        weights: new FitnessWeights(),
+        rules: [
+            makeFixedHardPenaltyRule(0.0),
+            makeFixedSoftPenaltyRule(1000.0),
+        ]
+    ))->evaluate($chromosome, $context);
+
+    $higherSoft = (new FitnessEvaluator(
+        weights: new FitnessWeights(),
+        rules: [
+            makeFixedHardPenaltyRule(0.0),
+            makeFixedSoftPenaltyRule(1001.0),
+        ]
+    ))->evaluate($chromosome, $context);
+
+    expect($highSoft->hardPenalty())->toBe(0.0)
+        ->and($higherSoft->hardPenalty())->toBe(0.0)
+        ->and($highSoft->score())->toBeGreaterThan(50.0)
+        ->and($higherSoft->score())->toBeGreaterThan(50.0)
+        ->and($highSoft->score())->toBeGreaterThan($higherSoft->score());
+});
+
 function makeEvalContext(): EvaluationContext
 {
     $scheduleData = new ScheduleData(
