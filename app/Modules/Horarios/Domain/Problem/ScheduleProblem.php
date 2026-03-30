@@ -1463,9 +1463,22 @@ final class ScheduleProblem implements GeneticProblem
 
         $candidateSlotIds = [];
 
+        // ✅ AÇÃO 09: Pré-filtrar por disponibilidade do professor e turma
+        // Evita candidatos que já têm availability=0
+        $professorAvailable = $this->data->availableSlotsByProfessor[$lesson->professorId] ?? [];
+        $classAvailable = $this->data->availableSlotsByClass[$lesson->classId] ?? [];
+
+        // Interseção: só slots disponíveis para AMBOS professor e turma
+        $availableIntersection = array_intersect($professorAvailable, $classAvailable);
+
         foreach ($this->data->timeSlots as $slotId => $slot) {
 
             if (! $this->slotSupportsDuration($lesson, $slot)) {
+                continue;
+            }
+
+            // ✅ AÇÃO 09: Early constraint filtering - skip se não está em slots disponíveis
+            if (! in_array($slotId, $availableIntersection, strict: true)) {
                 continue;
             }
 

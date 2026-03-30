@@ -241,19 +241,19 @@ Inferência técnica central:
     Complexidade: Baixa
     Prioridade: P1
 
-    Ação 07: Tornar paralelismo parametrizável e condicional
+    x Ação 07: Tornar paralelismo parametrizável e condicional
     Motivo: Reduzir overhead em cenários pequenos/médios
     Impacto Esperado: Médio
     Complexidade: Baixa
     Prioridade: P1
 
-    Ação 08: Corrigir mapeamento de dados no ScheduleDataBuilder
+    x Ação 08: Corrigir mapeamento de dados no ScheduleDataBuilder
     Motivo: Eliminar inconsistência de domínio
     Impacto Esperado: Alto
     Complexidade: Média
     Prioridade: P1
 
-    Ação 09: Aplicar restrições/disponibilidade no construtor de candidatos
+    x Ação 09: Aplicar restrições/disponibilidade no construtor de candidatos
     Motivo: Reduzir reparo e conflito cedo
     Impacto Esperado: Muito alto
     Complexidade: Média

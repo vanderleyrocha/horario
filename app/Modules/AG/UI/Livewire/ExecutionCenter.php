@@ -27,6 +27,8 @@ class ExecutionCenter extends Component
         $this->config = [
             'population' => (int) ($savedConfig['populacao'] ?? 120),
             'generations' => (int) ($savedConfig['geracoes'] ?? 500),
+            // ✅ AÇÃO 06: Adicionar island_count configurável
+            'islands' => (int) ($savedConfig['islands'] ?? config('ag.islands', 2)),
         ];
     }
 
@@ -38,7 +40,8 @@ class ExecutionCenter extends Component
             'start_time' => now(),
             'population_size' => $this->config['population'],
             'generations' => $this->config['generations'],
-            'island_count' => 4,
+            // ✅ AÇÃO 06: Usar island_count da configuração
+            'island_count' => $this->config['islands'] ?? 2,
             'parameters_json' => $this->config,
         ]);
 
@@ -79,21 +82,21 @@ class ExecutionCenter extends Component
 
     public function getHistoricalReadinessReportProperty(): array
     {
-        return (new SearchResponseHistoricalReadinessReportBuilder)
+        return (new SearchResponseHistoricalReadinessReportBuilder())
             ->build($this->executions)
             ->toArray();
     }
 
     public function getGlobalPolicyReadinessReportProperty(): array
     {
-        return (new SearchResponseGlobalPolicyReadinessReportBuilder)
+        return (new SearchResponseGlobalPolicyReadinessReportBuilder())
             ->build($this->executions)
             ->toArray();
     }
 
     public function getActivationImpactReportProperty(): array
     {
-        return (new SearchResponseActivationImpactReportBuilder)
+        return (new SearchResponseActivationImpactReportBuilder())
             ->build($this->executions, windowSize: 2)
             ->toArray();
     }

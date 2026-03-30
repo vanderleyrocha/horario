@@ -16,8 +16,14 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
         $penalty = 0.0;
 
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
+        $lessons = $context->data()->lessons;
 
         foreach ($slotsPorAula as $aulaId => $dias) {
+            $lesson = $lessons[$aulaId] ?? null;
+
+            if ($lesson === null || $lesson->requiresConsecutive !== true) {
+                continue;
+            }
 
             foreach ($dias as $dia => $periodos) {
 
@@ -43,6 +49,7 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
 
 
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
+        $lessons = $context->data()->lessons;
 
         $affectedAulas = [];
 
@@ -56,6 +63,11 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
         $penalty = 0.0;
 
         foreach (array_keys($affectedAulas) as $aulaId) {
+            $lesson = $lessons[$aulaId] ?? null;
+
+            if ($lesson === null || $lesson->requiresConsecutive !== true) {
+                continue;
+            }
 
             if (!isset($slotsPorAula[$aulaId])) {
                 continue;

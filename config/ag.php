@@ -1,7 +1,9 @@
 <?php
 
 return [
+    'islands' => (int) env('AG_ISLANDS', 2),
     'parallel_evaluation' => true,
+    'parallel_evaluation_threshold' => (int) env('AG_PARALLEL_EVALUATION_THRESHOLD', 200),
     'max_workers' => env('AG_MAX_WORKERS', 8),
     'log_window_penalty' => env('AG_LOG_WINDOW_PENALTY', false),
     'termination_variance_threshold' => (float) env('AG_TERMINATION_VARIANCE_THRESHOLD', 0.0005),

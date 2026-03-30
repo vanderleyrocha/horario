@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Horarios\Domain\Builders;
 
 use App\Models\Horario;
+use App\Models\Professor;
+use App\Models\Turma;
 use App\Modules\Horarios\Domain\ValueObjects\ClassData;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ProfessorData;
@@ -54,14 +56,14 @@ final class ScheduleDataBuilder
             if (! isset($professors[$aula->professor_id])) {
                 $professors[$aula->professor_id] = new ProfessorData(
                     id: $aula->professor_id,
-                    maxWeeklyLoad: $aula->professor->carga_maxima ?? 40,
+                    maxWeeklyLoad: (int) ($aula->professor->carga_horaria_maxima ?? 40),
                 );
             }
 
             if (! isset($classes[$aula->turma_id])) {
                 $classes[$aula->turma_id] = new ClassData(
                     id: $aula->turma_id,
-                    maxDailyLessons: $aula->turma->max_aulas_dia ?? 6,
+                    maxDailyLessons: (int) ($config->aulas_por_dia ?? 6),
                 );
             }
         }
@@ -120,25 +122,35 @@ final class ScheduleDataBuilder
         $byProfessor = [];
         $byClass = [];
 
-        $restricoes = $horario->restricoes_tempo ?? $horario->restricoesTempo ?? [];
+        // ✅ AÇÃO 08: Usar método relacionamento em vez de atributo
+        $restricoes = $horario->restricoes()->get() ?? [];
 
         foreach ($restricoes as $r) {
+            // ✅ AÇÃO 08: Construir TimeSlot a partir dos campos corretos
+            $dia = $r->dia_semana;
+            $periodo = $r->tempo;
+            $slotId = ((int) $dia * 1000) + (int) $periodo;
+
+            $slot = new TimeSlot(
+                id: $slotId,
+                day: $dia,
+                lessonNumber: $periodo
+            );
+
+            // ✅ AÇÃO 08: Usar entidade_type e status corretos
             $restrictions[] = [
-                'entity_type' => $r->tipo,
+                'entity_type' => $r->entidade_type,
                 'entity_id' => $r->entidade_id,
-                'time_slot' => $r->time_slot,
-                'is_mandatory' => (bool) $r->obrigatorio,
+                'time_slot' => $slot,
+                'is_mandatory' => $r->status === 'bloqueado',
             ];
 
-            $slot = $r->time_slot;
-            $dia = $slot->day ?? null;
-            $periodo = $slot->lessonNumber ?? null;
-
-            if ($r->tipo === 'professor') {
+            // ✅ AÇÃO 08: Comparar contra class FQN
+            if ($r->entidade_type === Professor::class) {
                 $byProfessor[$r->entidade_id][$dia][$periodo] = true;
             }
 
-            if ($r->tipo === 'turma') {
+            if ($r->entidade_type === Turma::class) {
                 $byClass[$r->entidade_id][$dia][$periodo] = true;
             }
         }

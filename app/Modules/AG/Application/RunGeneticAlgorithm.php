@@ -77,9 +77,16 @@ final class RunGeneticAlgorithm
         $config = GeneticAlgorithmConfigDTO::fromModels($horario);
         $executionMetrics ??= new ExecutionMetricsRecorder();
 
+        // ✅ AÇÃO 06: Sincronizar island_count (UI/backend)
         if ($executionMetrics->hasExecutionId()) {
+            // Se execução já existe, recuperar island_count dela
             $executionId = $executionMetrics->getExecutionId();
+            $execution = \App\Models\ScheduleExecution::find($executionId);
+            $islandCount = ($execution?->island_count) ?? (int) config('ag.islands', 2);
         } else {
+            // Caso contrário, usar config como source of truth
+            $islandCount = (int) config('ag.islands', 2);
+
             $executionId = $executionMetrics->startExecution(
                 horarioId: $horario->id,
                 populationSize: $config->tamanhoPopulacao,
@@ -87,7 +94,7 @@ final class RunGeneticAlgorithm
                 parameters: [
                     'mutation_rate' => $config->taxaMutacao,
                     'elite_count' => $config->eliteCount(),
-                    'islands' => 2,
+                    'islands' => $islandCount,
                 ]
             );
         }
@@ -162,7 +169,7 @@ final class RunGeneticAlgorithm
 
         $metricsGlobal = [];
 
-        for ($i = 0; $i < 2; $i++) {
+        for ($i = 0; $i < $islandCount; $i++) {
             $metrics = new MetricsRecorder();
             $metrics->setExecutionId($executionId);
             $metrics->setPopulationStatistics(
@@ -208,10 +215,15 @@ final class RunGeneticAlgorithm
                 maxRate: 0.35
             );
 
-            $parallelEvaluation = (bool) config('ag.parallel_evaluation', true);
+            // ✅ AÇÃO 07: Condicional parallel evaluation por population_size threshold
+            $parallelEvaluationEnabled = (bool) config('ag.parallel_evaluation', true);
+            $parallelEvaluationThreshold = (int) config('ag.parallel_evaluation_threshold', 200);
             $maxWorkers = (int) config('ag.max_workers', 8);
 
-            $populationEvaluator = $parallelEvaluation
+            // Usar avaliação paralela apenas se population_size > threshold
+            $useParallelEvaluation = $parallelEvaluationEnabled && ($config->tamanhoPopulacao > $parallelEvaluationThreshold);
+
+            $populationEvaluator = $useParallelEvaluation
                 ? new AsyncFitnessEvaluator(problem: $problem, concurrency: $maxWorkers)
                 : new PopulationFitnessEvaluator(problem: $problem, concurrency: $maxWorkers);
 
