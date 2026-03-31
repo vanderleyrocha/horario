@@ -40,7 +40,7 @@ final class IslandModelEngine
 
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
-        private readonly int $migrationInterval = 20
+        private readonly int $migrationInterval = 20,
     ) {
     }
 
@@ -52,7 +52,7 @@ final class IslandModelEngine
     public function setTelemetry(
         MetricsRecorder $metrics,
         ProgressReporterInterface $progress,
-        float $mutationRate = 0.05
+        float $mutationRate = 0.05,
     ): void {
         $this->globalMetrics = $metrics;
         $this->progress = $progress;
@@ -73,17 +73,45 @@ final class IslandModelEngine
         }
 
         $globalBest = null;
-        Log::info('Iniciando o motor de orquestracao sincronica das ilhas.');
+        Log::info('Iniciando o motor de orquestracao sincronica das ilhas.', [
+            'execution_id' => $this->executionId,
+            'island_count' => count($this->islands),
+            'max_generations' => $generations,
+            'migration_interval' => $this->migrationInterval,
+        ]);
 
         for ($generation = 1; $generation <= $generations; $generation++) {
             $this->assertNotCancelled();
             $globalPopulation = [];
             $telemetrySnapshots = [];
+            $islandBestFitness = [];
 
             foreach ($this->islands as $island) {
+                $islandStartedAt = microtime(true);
                 $island->evolveGeneration();
                 $bestInIsland = $island->best();
-                $telemetrySnapshots[] = $island->telemetrySnapshot();
+                $snapshot = $island->telemetrySnapshot();
+                $telemetrySnapshots[] = $snapshot;
+                $islandBestFitness[$island->getislandNum()] = $bestInIsland->fitness();
+
+                Log::info('ga.island.generation.completed', [
+                    'execution_id' => $this->executionId,
+                    'global_generation' => $generation,
+                    'island_id' => $island->getislandNum(),
+                    'local_generation' => $island->currentGeneration(),
+                    'elapsed_ms' => (int) round((microtime(true) - $islandStartedAt) * 1000),
+                    'best_fitness' => $bestInIsland->fitness(),
+                    'mutation_rate' => $snapshot['mutation_rate'] ?? null,
+                    'operator_used' => $snapshot['operator_used'] ?? null,
+                    'operator_reward' => $snapshot['operator_reward'] ?? null,
+                    'landscape_state' => $snapshot['landscape_state'] ?? null,
+                    'landscape_phenomenon' => $snapshot['landscape_phenomenon'] ?? null,
+                    'alns_destroy_operator' => $snapshot['alns_destroy_operator'] ?? null,
+                    'alns_repair_operator' => $snapshot['alns_repair_operator'] ?? null,
+                    'alns_improvement' => $snapshot['alns_improvement'] ?? null,
+                    'population_turnover' => $snapshot['population_turnover'] ?? null,
+                    'best_signature_changed' => $snapshot['best_signature_changed'] ?? null,
+                ]);
 
                 if ($globalBest === null || $bestInIsland->fitness() > $globalBest->fitness()) {
                     $globalBest = $bestInIsland;
@@ -134,17 +162,17 @@ final class IslandModelEngine
             if ($this->globalMetrics && $this->progress) {
                 $mutationRates = array_values(array_filter(array_map(
                     static fn (array $snapshot) => $snapshot['mutation_rate'] ?? null,
-                    $telemetrySnapshots
+                    $telemetrySnapshots,
                 ), static fn ($value) => $value !== null));
 
                 $operatorRewards = array_values(array_filter(array_map(
                     static fn (array $snapshot) => $snapshot['operator_reward'] ?? null,
-                    $telemetrySnapshots
+                    $telemetrySnapshots,
                 ), static fn ($value) => $value !== null));
 
                 $alnsImprovements = array_values(array_filter(array_map(
                     static fn (array $snapshot) => $snapshot['alns_improvement'] ?? null,
-                    $telemetrySnapshots
+                    $telemetrySnapshots,
                 ), static fn ($value) => $value !== null));
 
                 $operatorUsed = collect($telemetrySnapshots)
@@ -178,7 +206,7 @@ final class IslandModelEngine
                     $globalPopulation,
                     empty($mutationRates) ? $this->telemetryMutationRate : array_sum($mutationRates) / count($mutationRates),
                     0,
-                    $landscapeState ?? 'Exploracao Intensiva'
+                    $landscapeState ?? 'Exploracao Intensiva',
                 );
 
                 $this->progress->report([
@@ -200,6 +228,26 @@ final class IslandModelEngine
                     'alns_destroy_operator' => $alnsDestroyOperator,
                     'alns_repair_operator' => $alnsRepairOperator,
                     'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
+                ]);
+
+                Log::info('ga.islands.generation.completed', [
+                    'execution_id' => $this->executionId,
+                    'global_generation' => $generation,
+                    'max_generations' => $generations,
+                    'best_fitness' => $metricsDto->bestFitness,
+                    'avg_fitness' => $metricsDto->avgFitness,
+                    'variance' => $metricsDto->variance,
+                    'diversity' => $metricsDto->diversity,
+                    'entropy' => $metricsDto->entropy,
+                    'mutation_rate' => $metricsDto->mutationRate,
+                    'landscape_state' => $metricsDto->landscapeState,
+                    'operator_used' => $operatorUsed,
+                    'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
+                    'alns_destroy_operator' => $alnsDestroyOperator,
+                    'alns_repair_operator' => $alnsRepairOperator,
+                    'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
+                    'island_best_fitness' => $islandBestFitness,
+                    'migration_due' => $generation % $this->migrationInterval === 0,
                 ]);
             }
         }
@@ -229,6 +277,7 @@ final class IslandModelEngine
             // Houve melhoria! Reset contador
             $this->previousBestFitness = $currentBestFitness;
             $this->generationsSinceImprovement = 0;
+
             return false;
         }
 

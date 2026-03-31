@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Evolution\IslandModel;
 
-use App\Support\DateTimeHelper;
 use App\Modules\AG\Application\GeneticAlgorithmEngine;
 use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Support\DateTimeHelper;
 use Illuminate\Support\Facades\Log;
 
 final class Island
@@ -16,6 +16,7 @@ final class Island
 
     public function __construct(private int $islandNum, private readonly GeneticAlgorithmEngine $engine, private readonly int $populationSize, private readonly ReplacementStrategyInterface $replacement)
     {
+        $this->engine->setIslandContext($this->islandNum);
     }
 
     public function initialize(): void
@@ -25,10 +26,10 @@ final class Island
         $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
 
         Log::info("Iniciando população da ilha {$this->islandNum} com {$this->populationSize} indivíduos... Tempo decorrido = {$elapsed}");
+
         for ($i = 0; $i < $this->populationSize; $i++) {
 
             $individual = $this->engine->createIndividual();
-
 
             $this->population[] = $individual;
         }
@@ -92,6 +93,11 @@ final class Island
     public function telemetrySnapshot(): array
     {
         return $this->engine->lastEvolutionTelemetry();
+    }
+
+    public function currentGeneration(): int
+    {
+        return $this->engine->currentEvolutionGeneration();
     }
 
     public function injectIndividual(Cromossomo $individual): void
