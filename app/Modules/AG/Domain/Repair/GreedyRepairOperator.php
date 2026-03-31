@@ -21,6 +21,13 @@ final class GreedyRepairOperator
      */
     private array $lastTelemetry = [];
 
+    private ?ScheduleData $activeData = null;
+
+    /**
+     * @var callable|null
+     */
+    private $activeFitnessProbe = null;
+
     public function repair(
         Cromossomo $chromosome,
         ScheduleData $data,
@@ -28,114 +35,123 @@ final class GreedyRepairOperator
         ?callable $progressHeartbeat = null,
         array $limits = []
     ): Cromossomo {
-        $child = $chromosome->copy();
-        $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
-        $startedAt = microtime(true);
-        $maxMillis = isset($limits['max_millis']) ? max(1, (int) $limits['max_millis']) : null;
-        $maxPassesWithoutProgress = isset($limits['max_passes_without_progress'])
-            ? max(1, (int) $limits['max_passes_without_progress'])
-            : null;
-        $passesWithoutProgress = 0;
+        $this->activeData = $data;
+        $this->activeFitnessProbe = $fitnessProbe;
 
-        for ($pass = 1; $pass <= self::MAX_PASSES; $pass++) {
-            if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
-                $this->lastTelemetry['aborted'] = true;
-                $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
-                $this->lastTelemetry['time_budget_ms'] = $maxMillis;
-                $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
-                break;
-            }
+        try {
+            $child = $chromosome->copy();
+            $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
+            $startedAt = microtime(true);
+            $maxMillis = isset($limits['max_millis']) ? max(1, (int) $limits['max_millis']) : null;
+            $maxPassesWithoutProgress = isset($limits['max_passes_without_progress'])
+                ? max(1, (int) $limits['max_passes_without_progress'])
+                : null;
+            $passesWithoutProgress = 0;
 
-            $invalidIndexes = $this->prioritizeInvalidGeneIndexes($child);
-
-            if ($invalidIndexes === []) {
-                break;
-            }
-
-            $passTelemetry = $this->startPassTelemetry($pass, $child, $invalidIndexes, $fitnessProbe);
-            $this->emitHeartbeat($progressHeartbeat, 'pass_started', $passTelemetry);
-            $changed = false;
-            $processedInvalidGenes = 0;
-
-            foreach ($invalidIndexes as $index) {
-                $currentGenes = $child->genes();
-
-                if (! isset($currentGenes[$index])) {
-                    continue;
+            for ($pass = 1; $pass <= self::MAX_PASSES; $pass++) {
+                if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
+                    $this->lastTelemetry['aborted'] = true;
+                    $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
+                    $this->lastTelemetry['time_budget_ms'] = $maxMillis;
+                    $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
+                    break;
                 }
 
-                if ($this->isValid($child, $currentGenes[$index], $index)) {
-                    continue;
+                $repairTargets = $this->prioritizeRepairTargets($child);
+
+                if ($repairTargets === []) {
+                    break;
                 }
 
-                $candidate = $this->attemptRelocation($child, $index, $data);
+                $passTelemetry = $this->startPassTelemetry($pass, $child, $repairTargets, $fitnessProbe);
+                $this->emitHeartbeat($progressHeartbeat, 'pass_started', $passTelemetry);
+                $changed = false;
+                $processedInvalidGenes = 0;
 
-                if ($candidate !== null) {
-                    $child = $candidate;
-                    $passTelemetry['relocations']++;
-                    $changed = true;
+                foreach ($repairTargets as $target) {
+                    $index = $target['index'];
+                    $currentGenes = $child->genes();
 
-                    continue;
+                    if (! isset($currentGenes[$index])) {
+                        continue;
+                    }
+
+                    if ($this->isRepairTargetResolved($child, $index, $target['violations'] ?? [])) {
+                        continue;
+                    }
+
+                    $candidate = $this->attemptRelocation($child, $index, $data, $target['violations'] ?? []);
+
+                    if ($candidate !== null) {
+                        $child = $candidate;
+                        $passTelemetry['relocations']++;
+                        $changed = true;
+
+                        continue;
+                    }
+
+                    $candidate = $this->attemptSwap($child, $index, $data, $target['violations'] ?? []);
+
+                    if ($candidate !== null) {
+                        $child = $candidate;
+                        $passTelemetry['swaps']++;
+                        $changed = true;
+
+                        continue;
+                    }
+
+                    $candidate = $this->attemptLocalRebuild($child, $index, $data, $target['violations'] ?? []);
+
+                    if ($candidate !== null) {
+                        $child = $candidate;
+                        $passTelemetry['local_rebuilds']++;
+                        $changed = true;
+                    }
+
+                    $processedInvalidGenes++;
+                    $this->emitProgressHeartbeat(
+                        progressHeartbeat: $progressHeartbeat,
+                        passTelemetry: $passTelemetry,
+                        processedInvalidGenes: $processedInvalidGenes,
+                        totalInvalidGenes: count($repairTargets)
+                    );
                 }
 
-                $candidate = $this->attemptSwap($child, $index, $data);
+                $this->finishPassTelemetry($passTelemetry, $child, $fitnessProbe);
+                $this->emitHeartbeat($progressHeartbeat, 'pass_finished', $passTelemetry);
+                $this->lastTelemetry['passes'][] = $passTelemetry;
 
-                if ($candidate !== null) {
-                    $child = $candidate;
-                    $passTelemetry['swaps']++;
-                    $changed = true;
+                $progressDelta = (float) ($passTelemetry['hard_penalty_delta'] ?? 0.0);
 
-                    continue;
+                if ($progressDelta <= 0.0) {
+                    $passesWithoutProgress++;
+                } else {
+                    $passesWithoutProgress = 0;
                 }
 
-                $candidate = $this->attemptLocalRebuild($child, $index, $data);
-
-                if ($candidate !== null) {
-                    $child = $candidate;
-                    $passTelemetry['local_rebuilds']++;
-                    $changed = true;
+                if ($maxPassesWithoutProgress !== null && $passesWithoutProgress >= $maxPassesWithoutProgress) {
+                    $this->lastTelemetry['aborted'] = true;
+                    $this->lastTelemetry['abort_reason'] = 'no_progress';
+                    $this->lastTelemetry['passes_without_progress'] = $passesWithoutProgress;
+                    $this->emitAbortHeartbeat($progressHeartbeat, 'no_progress', $pass, $maxMillis, $passesWithoutProgress);
+                    break;
                 }
 
-                $processedInvalidGenes++;
-                $this->emitProgressHeartbeat(
-                    progressHeartbeat: $progressHeartbeat,
-                    passTelemetry: $passTelemetry,
-                    processedInvalidGenes: $processedInvalidGenes,
-                    totalInvalidGenes: count($invalidIndexes)
-                );
+                if (! $changed) {
+                    $this->lastTelemetry['aborted'] = true;
+                    $this->lastTelemetry['abort_reason'] = 'no_structural_moves';
+                    $this->emitAbortHeartbeat($progressHeartbeat, 'no_structural_moves', $pass, $maxMillis, $passesWithoutProgress);
+                    break;
+                }
             }
 
-            $this->finishPassTelemetry($passTelemetry, $child, $fitnessProbe);
-            $this->emitHeartbeat($progressHeartbeat, 'pass_finished', $passTelemetry);
-            $this->lastTelemetry['passes'][] = $passTelemetry;
+            $this->finalizeTelemetry($child, $fitnessProbe);
 
-            $progressDelta = (float) ($passTelemetry['hard_penalty_delta'] ?? 0.0);
-
-            if ($progressDelta <= 0.0) {
-                $passesWithoutProgress++;
-            } else {
-                $passesWithoutProgress = 0;
-            }
-
-            if ($maxPassesWithoutProgress !== null && $passesWithoutProgress >= $maxPassesWithoutProgress) {
-                $this->lastTelemetry['aborted'] = true;
-                $this->lastTelemetry['abort_reason'] = 'no_progress';
-                $this->lastTelemetry['passes_without_progress'] = $passesWithoutProgress;
-                $this->emitAbortHeartbeat($progressHeartbeat, 'no_progress', $pass, $maxMillis, $passesWithoutProgress);
-                break;
-            }
-
-            if (! $changed) {
-                $this->lastTelemetry['aborted'] = true;
-                $this->lastTelemetry['abort_reason'] = 'no_structural_moves';
-                $this->emitAbortHeartbeat($progressHeartbeat, 'no_structural_moves', $pass, $maxMillis, $passesWithoutProgress);
-                break;
-            }
+            return $child;
+        } finally {
+            $this->activeData = null;
+            $this->activeFitnessProbe = null;
         }
-
-        $this->finalizeTelemetry($child, $fitnessProbe);
-
-        return $child;
     }
 
     /**
@@ -147,23 +163,34 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @return int[]
+     * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
      */
-    private function prioritizeInvalidGeneIndexes(Cromossomo $chromosome): array
+    private function prioritizeRepairTargets(Cromossomo $chromosome): array
     {
-        $conflictMap = $this->buildConflictMap($chromosome);
+        $targetMap = $this->buildConflictMap($chromosome);
+        $targetMap = $this->mergeRepairTargetMaps($targetMap, $this->buildMandatoryBlockViolationMap($chromosome));
 
-        uasort($conflictMap, static function (array $left, array $right): int {
-            return [$right['count'], $right['duration'], -$right['index']]
+        uasort($targetMap, static function (array $left, array $right): int {
+            return [
+                -count($left['violations'] ?? []),
+                $right['count'],
+                $right['duration'],
+                -$right['index'],
+            ]
                 <=>
-                [$left['count'], $left['duration'], -$left['index']];
+                [
+                    -count($right['violations'] ?? []),
+                    $left['count'],
+                    $left['duration'],
+                    -$left['index'],
+                ];
         });
 
-        return array_keys($conflictMap);
+        return array_values($targetMap);
     }
 
     /**
-     * @return array<int, array{index:int,count:int,duration:int,peers:int[]}>
+     * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
      */
     private function buildConflictMap(Cromossomo $chromosome): array
     {
@@ -174,9 +201,111 @@ final class GreedyRepairOperator
 
         foreach ($conflicts as $index => $data) {
             $conflicts[$index]['peers'] = array_values(array_unique($data['peers']));
+            $conflicts[$index]['violations'] = ['overlap'];
         }
 
         return $conflicts;
+    }
+
+    /**
+     * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
+     */
+    private function buildMandatoryBlockViolationMap(Cromossomo $chromosome): array
+    {
+        if ($this->activeData === null) {
+            return [];
+        }
+
+        $grouped = [];
+
+        foreach ($chromosome->genes() as $index => $gene) {
+            $lesson = $this->activeData->lessons[$gene->aulaId()] ?? null;
+
+            if ($lesson === null || $lesson->requiresConsecutive !== true) {
+                continue;
+            }
+
+            $grouped[$gene->aulaId()][$gene->diaSemana()][] = [
+                'index' => $index,
+                'start' => $gene->periodoDia(),
+                'end' => $gene->endPeriodo(),
+                'duration' => $gene->duracaoTempos(),
+            ];
+        }
+
+        $violations = [];
+
+        foreach ($grouped as $days) {
+            foreach ($days as $entries) {
+                if (count($entries) < 2) {
+                    continue;
+                }
+
+                usort($entries, static fn (array $left, array $right): int => [$left['start'], $left['index']] <=> [$right['start'], $right['index']]);
+
+                for ($position = 1; $position < count($entries); $position++) {
+                    $previous = $entries[$position - 1];
+                    $current = $entries[$position];
+
+                    if ($current['start'] === ($previous['end'] + 1)) {
+                        continue;
+                    }
+
+                    foreach ([$previous, $current] as $entry) {
+                        $index = $entry['index'];
+
+                        if (! isset($violations[$index])) {
+                            $violations[$index] = [
+                                'index' => $index,
+                                'count' => 0,
+                                'duration' => $entry['duration'],
+                                'peers' => [],
+                                'violations' => ['mandatory_block'],
+                            ];
+                        }
+
+                        $violations[$index]['count']++;
+                    }
+
+                    $violations[$previous['index']]['peers'][] = $current['index'];
+                    $violations[$current['index']]['peers'][] = $previous['index'];
+                }
+            }
+        }
+
+        foreach ($violations as $index => $data) {
+            $violations[$index]['peers'] = array_values(array_unique($data['peers']));
+        }
+
+        return $violations;
+    }
+
+    /**
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $baseMap
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $extraMap
+     * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
+     */
+    private function mergeRepairTargetMaps(array $baseMap, array $extraMap): array
+    {
+        foreach ($extraMap as $index => $target) {
+            if (! isset($baseMap[$index])) {
+                $baseMap[$index] = $target;
+
+                continue;
+            }
+
+            $baseMap[$index]['count'] += $target['count'];
+            $baseMap[$index]['peers'] = array_values(array_unique([
+                ...$baseMap[$index]['peers'],
+                ...$target['peers'],
+            ]));
+            $baseMap[$index]['violations'] = array_values(array_unique([
+                ...($baseMap[$index]['violations'] ?? []),
+                ...($target['violations'] ?? []),
+            ]));
+        }
+
+        return $baseMap;
     }
 
     /**
@@ -217,7 +346,7 @@ final class GreedyRepairOperator
         }
     }
 
-    private function attemptRelocation(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    private function attemptRelocation(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data, array $violationTypes = []): ?Cromossomo
     {
         $gene = $chromosome->genes()[$sourceGeneIndex];
         $candidate = $this->findBestRelocation(
@@ -226,7 +355,8 @@ final class GreedyRepairOperator
             data: $data,
             sourceGeneIndex: $sourceGeneIndex,
             ignoredIndexes: [],
-            allowSamePosition: false
+            allowSamePosition: false,
+            violationTypes: $violationTypes
         );
 
         if ($candidate === null) {
@@ -239,10 +369,13 @@ final class GreedyRepairOperator
         return $copy;
     }
 
-    private function attemptSwap(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    private function attemptSwap(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data, array $violationTypes = []): ?Cromossomo
     {
         $genes = $chromosome->genes();
         $sourceGene = $genes[$sourceGeneIndex];
+        $baselineRanking = $this->buildRepairRanking($chromosome, $sourceGene, $sourceGeneIndex, $violationTypes);
+        $bestCandidate = null;
+        $bestRanking = null;
 
         foreach ($genes as $targetIndex => $targetGene) {
             if ($targetIndex === $sourceGeneIndex) {
@@ -267,17 +400,33 @@ final class GreedyRepairOperator
                 $this->isValid($candidate, $swappedSource, $sourceGeneIndex)
                 && $this->isValid($candidate, $swappedTarget, $targetIndex)
             ) {
-                return $candidate;
+                $ranking = $this->buildRepairRanking($candidate, $candidate->genes()[$sourceGeneIndex], $sourceGeneIndex, $violationTypes);
+
+                if ($bestRanking === null || $ranking < $bestRanking) {
+                    $bestRanking = $ranking;
+                    $bestCandidate = $candidate;
+                }
             }
         }
 
-        return null;
+        if ($bestCandidate === null || $bestRanking === null) {
+            return null;
+        }
+
+        return $bestRanking < $baselineRanking ? $bestCandidate : null;
     }
 
-    private function attemptLocalRebuild(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data): ?Cromossomo
+    private function attemptLocalRebuild(Cromossomo $chromosome, int $sourceGeneIndex, ScheduleData $data, array $violationTypes = []): ?Cromossomo
     {
         $conflictMap = $this->buildConflictMap($chromosome);
         $sourceConflicts = $conflictMap[$sourceGeneIndex] ?? null;
+
+        if ($sourceConflicts === null && in_array('mandatory_block', $violationTypes, true)) {
+            $sourceConflicts = [
+                'index' => $sourceGeneIndex,
+                'peers' => $this->buildMandatoryBlockViolationMap($chromosome)[$sourceGeneIndex]['peers'] ?? [],
+            ];
+        }
 
         if ($sourceConflicts === null || $sourceConflicts['peers'] === []) {
             return null;
@@ -310,7 +459,8 @@ final class GreedyRepairOperator
                 data: $data,
                 sourceGeneIndex: $geneIndex,
                 ignoredIndexes: $ignoredIndexes,
-                allowSamePosition: $geneIndex !== $sourceGeneIndex
+                allowSamePosition: $geneIndex !== $sourceGeneIndex,
+                violationTypes: $geneIndex === $sourceGeneIndex ? $violationTypes : ['overlap']
             );
 
             if ($candidate === null) {
@@ -329,9 +479,14 @@ final class GreedyRepairOperator
             }
         }
 
-        return $working->signature() === $chromosome->signature()
-            ? null
-            : $working;
+        if ($working->signature() === $chromosome->signature()) {
+            return null;
+        }
+
+        $baselineRanking = $this->buildRepairRanking($chromosome, $chromosome->genes()[$sourceGeneIndex], $sourceGeneIndex, $violationTypes);
+        $candidateRanking = $this->buildRepairRanking($working, $working->genes()[$sourceGeneIndex], $sourceGeneIndex, $violationTypes);
+
+        return $candidateRanking < $baselineRanking ? $working : null;
     }
 
     /**
@@ -381,10 +536,12 @@ final class GreedyRepairOperator
         ScheduleData $data,
         int $sourceGeneIndex,
         array $ignoredIndexes,
-        bool $allowSamePosition
+        bool $allowSamePosition,
+        array $violationTypes = []
     ): ?Gene {
         $bestCandidate = null;
-        $bestConflictScore = PHP_INT_MAX;
+        $bestRanking = null;
+        $baselineRanking = $this->buildRepairRanking($chromosome, $gene, $sourceGeneIndex, $violationTypes);
 
         foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
             $slot = $data->timeSlots[$slotId] ?? null;
@@ -407,15 +564,21 @@ final class GreedyRepairOperator
                 continue;
             }
 
-            $conflictScore = $this->sameEntityLoadScore($chromosome, $candidate, $sourceGeneIndex);
+            $candidateChromosome = $chromosome->copy();
+            $candidateChromosome->replaceGene($sourceGeneIndex, $candidate);
+            $ranking = $this->buildRepairRanking($candidateChromosome, $candidate, $sourceGeneIndex, $violationTypes);
 
-            if ($conflictScore < $bestConflictScore) {
-                $bestConflictScore = $conflictScore;
+            if ($bestRanking === null || $ranking < $bestRanking) {
+                $bestRanking = $ranking;
                 $bestCandidate = $candidate;
             }
         }
 
-        return $bestCandidate;
+        if ($bestCandidate === null || $bestRanking === null) {
+            return null;
+        }
+
+        return $bestRanking < $baselineRanking ? $bestCandidate : null;
     }
 
     /**
@@ -474,6 +637,57 @@ final class GreedyRepairOperator
         }
 
         return $score;
+    }
+
+    /**
+     * @param  string[]  $violationTypes
+     * @return array{0: float, 1: int, 2: float, 3: int}
+     */
+    private function buildRepairRanking(Cromossomo $chromosome, Gene $candidate, int $sourceGeneIndex, array $violationTypes): array
+    {
+        $fitness = $this->probeFitness($chromosome, $this->activeFitnessProbe);
+        $hardPenalty = $fitness['hard_penalty'] ?? INF;
+        $softPenalty = $fitness['soft_penalty'] ?? INF;
+        $remainingViolations = $this->countRemainingTargetViolations($chromosome, $sourceGeneIndex, $violationTypes);
+        $conflictScore = $this->sameEntityLoadScore($chromosome, $candidate, $sourceGeneIndex);
+
+        return [$hardPenalty, $remainingViolations, $softPenalty, $conflictScore];
+    }
+
+    /**
+     * @param  string[]  $violationTypes
+     */
+    private function countRemainingTargetViolations(Cromossomo $chromosome, int $geneIndex, array $violationTypes): int
+    {
+        $remaining = 0;
+        $gene = $chromosome->genes()[$geneIndex] ?? null;
+
+        if ($gene === null) {
+            return 0;
+        }
+
+        if (in_array('overlap', $violationTypes, true) && ! $this->isValid($chromosome, $gene, $geneIndex)) {
+            $remaining++;
+        }
+
+        if (in_array('mandatory_block', $violationTypes, true) && $this->isGeneInMandatoryBlockViolation($chromosome, $geneIndex)) {
+            $remaining++;
+        }
+
+        return $remaining;
+    }
+
+    /**
+     * @param  string[]  $violationTypes
+     */
+    private function isRepairTargetResolved(Cromossomo $chromosome, int $geneIndex, array $violationTypes): bool
+    {
+        return $this->countRemainingTargetViolations($chromosome, $geneIndex, $violationTypes) === 0;
+    }
+
+    private function isGeneInMandatoryBlockViolation(Cromossomo $chromosome, int $geneIndex): bool
+    {
+        return isset($this->buildMandatoryBlockViolationMap($chromosome)[$geneIndex]);
     }
 
     /**
@@ -566,12 +780,12 @@ final class GreedyRepairOperator
     private function initializeTelemetry(Cromossomo $chromosome, ?callable $fitnessProbe): array
     {
         $fitness = $this->probeFitness($chromosome, $fitnessProbe);
-        $invalidCount = count($this->prioritizeInvalidGeneIndexes($chromosome));
+        $repairTargets = $this->prioritizeRepairTargets($chromosome);
 
         return [
             'passes' => [],
-            'invalid_genes_before' => $invalidCount,
-            'invalid_genes_after' => $invalidCount,
+            'invalid_genes_before' => count($repairTargets),
+            'invalid_genes_after' => count($repairTargets),
             'hard_penalty_before' => $fitness['hard_penalty'] ?? null,
             'hard_penalty_after' => $fitness['hard_penalty'] ?? null,
             'soft_penalty_before' => $fitness['soft_penalty'] ?? null,
@@ -581,27 +795,30 @@ final class GreedyRepairOperator
             'relocations' => 0,
             'swaps' => 0,
             'local_rebuilds' => 0,
+            'repair_target_summary_before' => $this->summarizeRepairTargets($repairTargets),
+            'unrepairable_workload_classes' => $this->detectWorkloadExceededClasses($chromosome),
         ];
     }
 
     /**
-     * @param  int[]  $invalidIndexes
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
      * @return array<string, mixed>
      */
-    private function startPassTelemetry(int $pass, Cromossomo $chromosome, array $invalidIndexes, ?callable $fitnessProbe): array
+    private function startPassTelemetry(int $pass, Cromossomo $chromosome, array $repairTargets, ?callable $fitnessProbe): array
     {
         $fitness = $this->probeFitness($chromosome, $fitnessProbe);
 
         return [
             'pass' => $pass,
-            'invalid_genes_before' => count($invalidIndexes),
-            'invalid_genes_after' => count($invalidIndexes),
+            'invalid_genes_before' => count($repairTargets),
+            'invalid_genes_after' => count($repairTargets),
             'hard_penalty_before' => $fitness['hard_penalty'] ?? null,
             'hard_penalty_after' => $fitness['hard_penalty'] ?? null,
             'hard_penalty_delta' => 0.0,
             'relocations' => 0,
             'swaps' => 0,
             'local_rebuilds' => 0,
+            'repair_target_summary_before' => $this->summarizeRepairTargets($repairTargets),
         ];
     }
 
@@ -611,7 +828,7 @@ final class GreedyRepairOperator
     private function finishPassTelemetry(array &$passTelemetry, Cromossomo $chromosome, ?callable $fitnessProbe): void
     {
         $fitness = $this->probeFitness($chromosome, $fitnessProbe);
-        $passTelemetry['invalid_genes_after'] = count($this->prioritizeInvalidGeneIndexes($chromosome));
+        $passTelemetry['invalid_genes_after'] = count($this->prioritizeRepairTargets($chromosome));
         $passTelemetry['hard_penalty_after'] = $fitness['hard_penalty'] ?? null;
 
         if (
@@ -629,8 +846,9 @@ final class GreedyRepairOperator
     private function finalizeTelemetry(Cromossomo $chromosome, ?callable $fitnessProbe): void
     {
         $fitness = $this->probeFitness($chromosome, $fitnessProbe);
+        $repairTargets = $this->prioritizeRepairTargets($chromosome);
 
-        $this->lastTelemetry['invalid_genes_after'] = count($this->prioritizeInvalidGeneIndexes($chromosome));
+        $this->lastTelemetry['invalid_genes_after'] = count($repairTargets);
         $this->lastTelemetry['hard_penalty_after'] = $fitness['hard_penalty'] ?? null;
         $this->lastTelemetry['soft_penalty_after'] = $fitness['soft_penalty'] ?? null;
         $this->lastTelemetry['score_after'] = $fitness['score'] ?? null;
@@ -639,6 +857,52 @@ final class GreedyRepairOperator
         $this->lastTelemetry['local_rebuilds'] = array_sum(array_column($this->lastTelemetry['passes'], 'local_rebuilds'));
         $this->lastTelemetry['aborted'] = (bool) ($this->lastTelemetry['aborted'] ?? false);
         $this->lastTelemetry['abort_reason'] = $this->lastTelemetry['abort_reason'] ?? null;
+        $this->lastTelemetry['repair_target_summary_after'] = $this->summarizeRepairTargets($repairTargets);
+        $this->lastTelemetry['unrepairable_workload_classes'] = $this->detectWorkloadExceededClasses($chromosome);
+    }
+
+    /**
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
+     * @return array<string, int>
+     */
+    private function summarizeRepairTargets(array $repairTargets): array
+    {
+        $summary = [
+            'overlap' => 0,
+            'mandatory_block' => 0,
+        ];
+
+        foreach ($repairTargets as $target) {
+            foreach ($target['violations'] ?? [] as $violation) {
+                $summary[$violation] = ($summary[$violation] ?? 0) + 1;
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function detectWorkloadExceededClasses(Cromossomo $chromosome): array
+    {
+        if ($this->activeData === null) {
+            return [];
+        }
+
+        $expectedLoad = $this->activeData->expectedLoadByLesson;
+        $actualLoad = $chromosome->cargaTurma();
+        $exceeded = [];
+
+        foreach ($actualLoad as $classId => $load) {
+            $expected = $expectedLoad[$classId] ?? null;
+
+            if ($expected !== null && $load > $expected) {
+                $exceeded[] = (int) $classId;
+            }
+        }
+
+        return $exceeded;
     }
 
     /**
@@ -655,6 +919,7 @@ final class GreedyRepairOperator
             'pass' => $passTelemetry['pass'] ?? null,
             'invalid_genes_before' => $passTelemetry['invalid_genes_before'] ?? null,
             'invalid_genes_after' => $passTelemetry['invalid_genes_after'] ?? null,
+            'repair_target_summary_before' => $passTelemetry['repair_target_summary_before'] ?? null,
             'hard_penalty_before' => $passTelemetry['hard_penalty_before'] ?? null,
             'hard_penalty_after' => $passTelemetry['hard_penalty_after'] ?? null,
             'hard_penalty_delta' => $passTelemetry['hard_penalty_delta'] ?? null,

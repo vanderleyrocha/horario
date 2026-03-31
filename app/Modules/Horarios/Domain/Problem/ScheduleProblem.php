@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Log;
 
 final class ScheduleProblem implements GeneticProblem
 {
-    private const MAX_BUILD_ATTEMPTS = 25;  // ← Aumentado de 12 para melhor qualidade
+    private const MAX_BUILD_ATTEMPTS = 18;
 
     private const MIN_BUILD_ATTEMPTS = 4;
 
@@ -34,9 +34,9 @@ final class ScheduleProblem implements GeneticProblem
 
     private const TELEMETRY_EVERY_ALLOCATIONS = 25;
 
-    private const DYNAMIC_QUEUE_REORDER_EVERY_ALLOCATIONS = 8;
+    private const DYNAMIC_QUEUE_REORDER_EVERY_ALLOCATIONS = 6;
 
-    private const REGRET_FRONTIER_SIZE = 6;
+    private const REGRET_FRONTIER_SIZE = 8;
 
     private const INITIAL_QUALITY_GATE_BASE_HARD_PENALTY = 12.0;
 
@@ -50,9 +50,11 @@ final class ScheduleProblem implements GeneticProblem
 
     private const REPAIR_TELEMETRY_SAMPLE_EVERY = 25;
 
-    private const INITIAL_QUALITY_GATE_REPAIR_TIME_BUDGET_MS = 1500;
+    private const INITIAL_QUALITY_GATE_REPAIR_TIME_BUDGET_MS = 2500;
 
-    private const INITIAL_QUALITY_GATE_REPAIR_MAX_PASSES_WITHOUT_PROGRESS = 1;
+    private const INITIAL_QUALITY_GATE_REPAIR_MAX_PASSES_WITHOUT_PROGRESS = 2;
+
+    private const INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD = 50.0;
 
     private const EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS = 30;
 
@@ -173,6 +175,7 @@ final class ScheduleProblem implements GeneticProblem
                 'dynamic_reorders' => 0,
                 'regret_selections' => 0,
                 'attempt_limit' => $this->currentBuildAttemptLimit,
+                'attempt_started_at' => $attemptStartedAt,
                 'rcl_sizes' => [],
             ];
 
@@ -202,12 +205,14 @@ final class ScheduleProblem implements GeneticProblem
                         ]);
 
                     Log::warning('schedule.initial_population.quality_gate.fail_fast', [
+                        'execution_id' => $this->executionId,
                         'attempt' => $attempt,
                         'queue_size' => count($queue),
                         'forced_allocations' => $telemetry['forced_allocations'],
                         'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                         'max_hard_conflict_allocations' => $failFast['max_hard_conflict_allocations'],
                         'grace_hard_conflict_allocations' => $failFast['grace_hard_conflict_allocations'],
+                        'elapsed_ms' => $this->attemptElapsedMs($telemetry),
                     ]);
 
                     $this->reportInitialPopulationProgress([
@@ -242,6 +247,21 @@ final class ScheduleProblem implements GeneticProblem
                             'soft_penalty' => $qualityGate['soft_penalty'],
                             'score' => $qualityGate['score'],
                         ]);
+                    Log::info('schedule.initial_population.quality_gate.passed', [
+                        'execution_id' => $this->executionId,
+                        'attempt' => $attempt,
+                        'queue_size' => count($queue),
+                        'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                        'hard_penalty' => $qualityGate['hard_penalty'],
+                        'soft_penalty' => $qualityGate['soft_penalty'],
+                        'score' => $qualityGate['score'],
+                        'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                        'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                        'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
+                        'viable' => $qualityGate['viable'],
+                        'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                        'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+                    ]);
                     $this->reportInitialPopulationProgress([
                         'stage' => 'grasp_completed',
                         'attempt' => $attempt,
@@ -271,6 +291,8 @@ final class ScheduleProblem implements GeneticProblem
                         'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
                         'forced_allocations' => $telemetry['forced_allocations'],
                         'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                        'viable' => $qualityGate['viable'],
+                        'viable_score_threshold' => $qualityGate['viable_score_threshold'],
                     ]);
 
                     $this->lastAcceptedInitialSeed = $candidate->copy();
@@ -279,6 +301,7 @@ final class ScheduleProblem implements GeneticProblem
                 }
 
                 $this->initialPopulationCounters['quality_gate_rejected']++;
+                $this->lastBuildFailure = $this->formatInitialQualityGateFailureMessage($attempt, $qualityGate, $telemetry);
                 $this->rememberNogoodsFromAssignedGenes($candidate->genes());
                 $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'quality_gate_rejected', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
                         'hard_penalty' => $qualityGate['hard_penalty'],
@@ -296,7 +319,22 @@ final class ScheduleProblem implements GeneticProblem
                     $bestRejectedAttempt = $qualityGate;
                 }
 
-                $this->lastBuildFailure = sprintf('Quality gate rejeitou tentativa %d: hard_penalty=%.4f (limite=%.4f), hard_conflicts=%d (limite=%d).', $attempt, $qualityGate['hard_penalty'], $qualityGate['max_hard_penalty'], $telemetry['hard_conflict_allocations'], $qualityGate['max_hard_conflict_allocations']);
+                Log::warning('schedule.initial_population.quality_gate.rejected', [
+                    'execution_id' => $this->executionId,
+                    'attempt' => $attempt,
+                    'queue_size' => count($queue),
+                    'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                    'hard_penalty' => $qualityGate['hard_penalty'],
+                    'soft_penalty' => $qualityGate['soft_penalty'],
+                    'score' => $qualityGate['score'],
+                    'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                    'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
+                    'viable' => $qualityGate['viable'],
+                    'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                    'rejection_reasons' => $qualityGate['rejection_reasons'],
+                    'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+                ]);
 
                 $this->reportInitialPopulationProgress([
                     'stage' => 'quality_gate_rejected',
@@ -310,6 +348,9 @@ final class ScheduleProblem implements GeneticProblem
                     'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
                     'forced_allocations' => $telemetry['forced_allocations'],
                     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'viable' => $qualityGate['viable'],
+                    'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                    'rejection_reasons' => $qualityGate['rejection_reasons'],
                     'message' => $this->lastBuildFailure,
                 ]);
             } else {
@@ -317,16 +358,34 @@ final class ScheduleProblem implements GeneticProblem
                 $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'construct_failed', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
                         'message' => $this->lastBuildFailure,
                     ]);
+
+                Log::warning('schedule.initial_population.grasp.construct_failed', [
+                    'execution_id' => $this->executionId,
+                    'attempt' => $attempt,
+                    'queue_size' => count($queue),
+                    'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                    'allocations' => $telemetry['allocations'],
+                    'forced_allocations' => $telemetry['forced_allocations'],
+                    'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'message' => $this->lastBuildFailure,
+                ]);
             }
 
-            // Log::warning('schedule.initial_population.retry', [
-            //     'attempt' => $attempt,
-            //     'reason' => $this->lastBuildFailure,
-            //     'alpha' => round($alpha, 4),
-            //     'allocations' => $telemetry['allocations'],
-            //     'forced_allocations' => $telemetry['forced_allocations'],
-            //     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
-            // ]);
+            Log::warning('schedule.initial_population.retry', [
+                'execution_id' => $this->executionId,
+                'attempt' => $attempt,
+                'reason' => $this->lastBuildFailure,
+                'alpha' => round($alpha, 4),
+                'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                'allocations' => $telemetry['allocations'],
+                'queue_size' => $telemetry['queue_size'],
+                'forced_allocations' => $telemetry['forced_allocations'],
+                'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                'dynamic_reorders' => $telemetry['dynamic_reorders'],
+                'regret_selections' => $telemetry['regret_selections'],
+                'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
+                'fill_ratio' => round($telemetry['allocations'] / max(1, count($queue)), 4),
+            ]);
 
             $this->reportInitialPopulationProgress([
                 'stage' => 'grasp_retry',
@@ -345,7 +404,7 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         if ($bestRejectedAttempt !== null) {
-            $this->lastBuildFailure = sprintf('%s Melhor tentativa rejeitada: hard_penalty=%.4f, soft_penalty=%.4f, score=%.4f.', $this->lastBuildFailure, $bestRejectedAttempt['hard_penalty'], $bestRejectedAttempt['soft_penalty'], $bestRejectedAttempt['score']);
+            $this->lastBuildFailure = sprintf('%s Melhor tentativa rejeitada: hard_penalty=%.4f, soft_penalty=%.4f, score=%.4f, motivos=%s.', $this->lastBuildFailure, $bestRejectedAttempt['hard_penalty'], $bestRejectedAttempt['soft_penalty'], $bestRejectedAttempt['score'], implode(', ', $bestRejectedAttempt['rejection_reasons'] ?? ['desconhecido']));
         }
 
         throw new \RuntimeException($this->lastBuildFailure);
@@ -635,30 +694,36 @@ final class ScheduleProblem implements GeneticProblem
 
     public function repairWithTelemetry(Cromossomo $individual, bool $reportProgress = false, string $source = 'evolution', array $progressContext = []): Cromossomo
     {
-        $probe = null;
+        $probe = function (Cromossomo $candidate): array {
+            $result = $this->evaluate($candidate);
+
+            return [
+                'hard_penalty' => $result->hardPenalty(),
+                'soft_penalty' => $result->softPenalty(),
+                'score' => $result->score(),
+            ];
+        };
         $heartbeat = null;
         $repairStartedAt = microtime(true);
         $lastLongRunningRepairLogAt = null;
-
-        if ($reportProgress && $source === 'initial_population_quality_gate') {
-            $probe = function (Cromossomo $candidate): array {
-                $result = $this->evaluate($candidate);
-
-                return [
-                    'hard_penalty' => $result->hardPenalty(),
-                    'soft_penalty' => $result->softPenalty(),
-                    'score' => $result->score(),
-                ];
-            };
-        }
 
         if ($reportProgress && $source === 'initial_population_quality_gate') {
             $this->reportInitialPopulationProgress($progressContext + [
                 'stage' => 'quality_gate_repair_started',
             ]);
 
+            Log::info('schedule.initial_population.repair.started', [
+                'execution_id' => $this->executionId,
+                'source' => $source,
+                'attempt' => $progressContext['attempt'] ?? null,
+                'queue_size' => $progressContext['queue_size'] ?? null,
+                'forced_allocations' => $progressContext['forced_allocations'] ?? null,
+                'hard_conflict_allocations' => $progressContext['hard_conflict_allocations'] ?? null,
+            ]);
+
             $heartbeat = function (array $heartbeatPayload) use ($progressContext, $source, $repairStartedAt, &$lastLongRunningRepairLogAt): void {
                 $this->logLongRunningRepairOperation($source, $progressContext, $heartbeatPayload, $repairStartedAt, $lastLongRunningRepairLogAt);
+                $this->logInitialPopulationRepairHeartbeat($source, $progressContext, $heartbeatPayload, $repairStartedAt);
                 $this->reportInitialPopulationProgress($progressContext + [
                     'stage' => 'quality_gate_repairing',
                     'repair_event' => $heartbeatPayload['event'] ?? null,
@@ -673,6 +738,7 @@ final class ScheduleProblem implements GeneticProblem
                     'repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
                     'repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
                     'repair_hard_penalty_delta' => $heartbeatPayload['hard_penalty_delta'] ?? null,
+                    'repair_target_summary_before' => $heartbeatPayload['repair_target_summary_before'] ?? null,
                     'repair_relocations' => $heartbeatPayload['relocations'] ?? 0,
                     'repair_swaps' => $heartbeatPayload['swaps'] ?? 0,
                     'repair_local_rebuilds' => $heartbeatPayload['local_rebuilds'] ?? 0,
@@ -713,6 +779,7 @@ final class ScheduleProblem implements GeneticProblem
                     'repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
                     'repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
                     'repair_hard_penalty_delta' => $heartbeatPayload['hard_penalty_delta'] ?? null,
+                    'repair_target_summary_before' => $heartbeatPayload['repair_target_summary_before'] ?? null,
                     'repair_relocations' => $heartbeatPayload['relocations'] ?? 0,
                     'repair_swaps' => $heartbeatPayload['swaps'] ?? 0,
                     'repair_local_rebuilds' => $heartbeatPayload['local_rebuilds'] ?? 0,
@@ -733,6 +800,15 @@ final class ScheduleProblem implements GeneticProblem
         $this->lastRepairTelemetry = $this->repairOperator->lastTelemetry();
 
         if ($reportProgress && $source === 'initial_population_quality_gate') {
+            Log::info('schedule.initial_population.repair.finished', [
+                'execution_id' => $this->executionId,
+                'source' => $source,
+                'attempt' => $progressContext['attempt'] ?? null,
+                'queue_size' => $progressContext['queue_size'] ?? null,
+                'elapsed_ms' => (int) round(max(0, microtime(true) - $repairStartedAt) * 1000),
+                'summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+            ]);
+
             $this->reportInitialPopulationProgress($progressContext + [
                 'stage' => 'quality_gate_repair_finished',
                 'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
@@ -863,14 +939,20 @@ final class ScheduleProblem implements GeneticProblem
                 $telemetry['forced_allocations']++;
                 $shouldReorder = true;
 
-                //     Log::warning('schedule.initial_population.grasp.fallback', [
-                //         'lesson_id' => $lesson->id,
-                //         'occurrence' => $occurrence,
-                //         'class_id' => $lesson->classId,
-                //         'professor_id' => $lesson->professorId,
-                //         'day' => $slot->day,
-                //         'period' => $slot->lessonNumber,
-                //     ]);
+                if ($telemetry['forced_allocations'] <= 3 || $telemetry['forced_allocations'] % 5 === 0) {
+                    Log::warning('schedule.initial_population.grasp.fallback', [
+                        'execution_id' => $this->executionId,
+                        'attempt' => $telemetry['attempt'],
+                        'lesson_id' => $lesson->id,
+                        'occurrence' => $occurrence,
+                        'class_id' => $lesson->classId,
+                        'professor_id' => $lesson->professorId,
+                        'day' => $slot->day,
+                        'period' => $slot->lessonNumber,
+                        'forced_allocations' => $telemetry['forced_allocations'],
+                        'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                    ]);
+                }
             }
 
             if (! $this->canUseSlot($lesson, $slot, $teacherBusy, $classBusy)) {
@@ -886,15 +968,21 @@ final class ScheduleProblem implements GeneticProblem
             $telemetry['allocations']++;
 
             if ($telemetry['allocations'] % self::TELEMETRY_EVERY_ALLOCATIONS === 0 || $telemetry['allocations'] === $telemetry['queue_size']) {
-                // Log::info('schedule.initial_population.grasp.progress', [
-                //     'attempt' => $telemetry['attempt'],
-                //     'alpha' => $telemetry['alpha'],
-                //     'allocations' => $telemetry['allocations'],
-                //     'queue_size' => $telemetry['queue_size'],
-                //     'forced_allocations' => $telemetry['forced_allocations'],
-                //     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
-                //     'fill_ratio' => round($telemetry['allocations'] / max(1, $telemetry['queue_size']), 4),
-                // ]);
+                Log::info('schedule.initial_population.grasp.progress', [
+                    'execution_id' => $this->executionId,
+                    'attempt' => $telemetry['attempt'],
+                    'alpha' => $telemetry['alpha'],
+                    'allocations' => $telemetry['allocations'],
+                    'queue_size' => $telemetry['queue_size'],
+                    'remaining_queue' => max(0, $telemetry['queue_size'] - $telemetry['allocations']),
+                    'forced_allocations' => $telemetry['forced_allocations'],
+                    'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
+                    'dynamic_reorders' => $telemetry['dynamic_reorders'],
+                    'regret_selections' => $telemetry['regret_selections'],
+                    'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
+                    'fill_ratio' => round($telemetry['allocations'] / max(1, $telemetry['queue_size']), 4),
+                    'elapsed_ms' => $this->attemptElapsedMs($telemetry),
+                ]);
                 $this->reportInitialPopulationProgress([
                     'stage' => 'grasp_progress',
                     'attempt' => $telemetry['attempt'],
@@ -1695,6 +1783,9 @@ final class ScheduleProblem implements GeneticProblem
             'score_after' => $telemetry['score_after'] ?? null,
             'invalid_genes_before' => $telemetry['invalid_genes_before'] ?? null,
             'invalid_genes_after' => $telemetry['invalid_genes_after'] ?? null,
+            'repair_target_summary_before' => $telemetry['repair_target_summary_before'] ?? null,
+            'repair_target_summary_after' => $telemetry['repair_target_summary_after'] ?? null,
+            'unrepairable_workload_classes' => $telemetry['unrepairable_workload_classes'] ?? [],
             'relocations' => $telemetry['relocations'] ?? 0,
             'swaps' => $telemetry['swaps'] ?? 0,
             'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
@@ -1736,20 +1827,106 @@ final class ScheduleProblem implements GeneticProblem
         $result = $this->evaluate($candidate);
         $thresholds = $this->initialQualityGateThresholds($attempt, $queueSize);
 
-        // 🔧 PRIORIDADE 1: Forçar score >= 50 (viável) para população inicial
-        $fitnessScoreViable = $result->score() >= 50.0;
+        $fitnessScoreViable = $result->score() >= self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD;
+        $rejectionReasons = [];
+
+        if ($result->hardPenalty() > $thresholds['max_hard_penalty']) {
+            $rejectionReasons[] = 'hard_penalty_above_limit';
+        }
+
+        if (($telemetry['hard_conflict_allocations'] ?? 0) > $thresholds['max_hard_conflict_allocations']) {
+            $rejectionReasons[] = 'hard_conflicts_above_limit';
+        }
+
+        if (! $fitnessScoreViable) {
+            $rejectionReasons[] = 'score_below_viable_threshold';
+        }
 
         return [
             'passes' => $result->hardPenalty() <= $thresholds['max_hard_penalty']
-                && $telemetry['hard_conflict_allocations'] <= $thresholds['max_hard_conflict_allocations']
-                && $fitnessScoreViable,  // ← NOVO: rejeitar se inviável
+                && $telemetry['hard_conflict_allocations'] <= $thresholds['max_hard_conflict_allocations'],
             'hard_penalty' => $result->hardPenalty(),
             'soft_penalty' => $result->softPenalty(),
             'score' => $result->score(),
             'max_hard_penalty' => $thresholds['max_hard_penalty'],
             'max_hard_conflict_allocations' => $thresholds['max_hard_conflict_allocations'],
-            'viable' => $fitnessScoreViable,  // ← NOVO: indicador de viabilidade
+            'viable' => $fitnessScoreViable,
+            'viable_score_threshold' => self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD,
+            'rejection_reasons' => $rejectionReasons,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $qualityGate
+     * @param  array<string, mixed>  $telemetry
+     */
+    private function formatInitialQualityGateFailureMessage(int $attempt, array $qualityGate, array $telemetry): string
+    {
+        $reasons = $qualityGate['rejection_reasons'] ?? [];
+        $reasonSummary = $reasons === [] ? 'motivo_nao_identificado' : implode(', ', $reasons);
+
+        return sprintf(
+            'Quality gate rejeitou tentativa %d: motivos=%s; hard_penalty=%.4f (limite=%.4f), hard_conflicts=%d (limite=%d), score=%.4f (faixa viavel >= %.1f).',
+            $attempt,
+            $reasonSummary,
+            $qualityGate['hard_penalty'],
+            $qualityGate['max_hard_penalty'],
+            $telemetry['hard_conflict_allocations'],
+            $qualityGate['max_hard_conflict_allocations'],
+            $qualityGate['score'],
+            $qualityGate['viable_score_threshold']
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $telemetry
+     */
+    private function attemptElapsedMs(array $telemetry): int
+    {
+        $startedAt = $telemetry['attempt_started_at'] ?? null;
+
+        if (! is_float($startedAt) && ! is_int($startedAt)) {
+            return 0;
+        }
+
+        return (int) round(max(0, microtime(true) - (float) $startedAt) * 1000);
+    }
+
+    /**
+     * @param  array<string, mixed>  $progressContext
+     * @param  array<string, mixed>  $heartbeatPayload
+     */
+    private function logInitialPopulationRepairHeartbeat(string $source, array $progressContext, array $heartbeatPayload, float $repairStartedAt): void
+    {
+        $event = $heartbeatPayload['event'] ?? null;
+
+        if (! in_array($event, ['pass_started', 'pass_progress', 'pass_finished', 'repair_aborted'], true)) {
+            return;
+        }
+
+        $levelMethod = $event === 'repair_aborted' ? 'warning' : 'info';
+
+        Log::$levelMethod('schedule.initial_population.repair.heartbeat', [
+            'execution_id' => $this->executionId,
+            'source' => $source,
+            'event' => $event,
+            'attempt' => $progressContext['attempt'] ?? null,
+            'queue_size' => $progressContext['queue_size'] ?? null,
+            'elapsed_ms' => (int) round(max(0, microtime(true) - $repairStartedAt) * 1000),
+            'repair_pass' => $heartbeatPayload['pass'] ?? null,
+            'repair_abort_reason' => $heartbeatPayload['abort_reason'] ?? null,
+            'repair_processed_invalid_genes' => $heartbeatPayload['processed_invalid_genes'] ?? null,
+            'repair_total_invalid_genes' => $heartbeatPayload['total_invalid_genes'] ?? null,
+            'repair_invalid_genes_before' => $heartbeatPayload['invalid_genes_before'] ?? null,
+            'repair_invalid_genes_after' => $heartbeatPayload['invalid_genes_after'] ?? null,
+            'repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
+            'repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
+            'repair_hard_penalty_delta' => $heartbeatPayload['hard_penalty_delta'] ?? null,
+            'repair_target_summary_before' => $heartbeatPayload['repair_target_summary_before'] ?? null,
+            'repair_relocations' => $heartbeatPayload['relocations'] ?? 0,
+            'repair_swaps' => $heartbeatPayload['swaps'] ?? 0,
+            'repair_local_rebuilds' => $heartbeatPayload['local_rebuilds'] ?? 0,
+        ]);
     }
 
     private function initialQualityGateThresholds(int $attempt, int $queueSize): array
@@ -1803,6 +1980,9 @@ final class ScheduleProblem implements GeneticProblem
             'relocations' => $telemetry['relocations'] ?? 0,
             'swaps' => $telemetry['swaps'] ?? 0,
             'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
+            'repair_target_summary_before' => $telemetry['repair_target_summary_before'] ?? null,
+            'repair_target_summary_after' => $telemetry['repair_target_summary_after'] ?? null,
+            'unrepairable_workload_classes' => $telemetry['unrepairable_workload_classes'] ?? [],
             'pass_count' => count($telemetry['passes'] ?? []),
         ];
     }

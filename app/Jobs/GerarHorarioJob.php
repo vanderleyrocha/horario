@@ -27,7 +27,9 @@ class GerarHorarioJob implements ShouldQueue
 
     public $timeout = 3600;
 
-    public function __construct(public Horario $horario, public ?int $executionId = null) {}
+    public function __construct(public Horario $horario, public ?int $executionId = null)
+    {
+    }
 
     public function handle(): void
     {
@@ -40,7 +42,7 @@ class GerarHorarioJob implements ShouldQueue
         $telemetryLogger = app(GATelemetryLogger::class);
 
         $cacheReporter = new CacheProgressReporter($this->horario->id);
-        $dbRecorder = new ExecutionMetricsRecorder;
+        $dbRecorder = new ExecutionMetricsRecorder();
 
         try {
             $dbRecorder->startExecution(
@@ -130,7 +132,7 @@ class GerarHorarioJob implements ShouldQueue
                 $dbRecorder->hasExecutionId() ? $dbRecorder->getExecutionId() : $this->executionId
             );
 
-            Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: ".$e->getMessage());
+            Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: " . $e->getMessage());
 
             throw $e;
         }
@@ -172,7 +174,7 @@ class GerarHorarioJob implements ShouldQueue
         $reason = match (true) {
             $status === 'finished' => 'O solver concluiu o processamento e encerrou a execucao normalmente.',
             $phase === 'initial_population' && str_contains($stage, 'quality_gate_fail_fast') => 'A populacao inicial acumulou conflitos hard demais antes de chegar a um candidato apto para o repair.',
-            $phase === 'initial_population' && str_contains($stage, 'quality_gate_reject') => 'O quality gate rejeitou as melhores tentativas porque os conflitos hard e a penalidade continuaram altos demais.',
+            $phase === 'initial_population' && str_contains($stage, 'quality_gate_reject') => 'O quality gate rejeitou as melhores tentativas porque os limites operacionais continuaram fora da faixa aceitavel ou a semente permaneceu inviavel para a etapa seguinte.',
             $phase === 'initial_population' => 'A construcao da populacao inicial nao conseguiu formar um individuo valido dentro da janela de tentativas configurada.',
             $exception !== null => $exception->getMessage(),
             default => 'A execucao foi interrompida antes da etapa de evolucao gerar metricas consolidadas.',
