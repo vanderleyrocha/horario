@@ -1,0 +1,246 @@
+Monitor de execucao
+
+Andamento do solver
+Status atual: falhou • Tempo decorrido: 34 minutos
+
+Geracao
+
+-
+
+Metricas gravadas
+
+0
+
+Tempo sem heartbeat
+
+possivel estagnacao operacional
+1h 3min
+
+Aviso de heartbeat
+
+A execucao ficou tempo demais sem novo heartbeat. Verifique worker, fila e logs para confirmar se o solver ainda esta vivo.
+
+Resumo da interrupcao
+
+Execucao interrompida por falha
+A execucao foi interrompida durante a populacao inicial, na tentativa 25, sem conseguir formar um individuo inicial confiavel.
+
+Fase: initial population
+
+Etapa: grasp retry
+
+Tentativa
+
+25
+
+Fila
+
+385
+
+Conflitos hard
+
+1
+
+Penalidade hard
+
+-
+
+Motivo tecnico
+
+A construcao da populacao inicial nao conseguiu formar um individuo valido dentro da janela de tentativas configurada.
+
+Como contornar
+
+Priorize melhorar a construcao inicial antes de aumentar geracoes, porque o solver nem chegou na fase de evolucao.
+Considere reduzir o limite de reprocessamento completo e introduzir seeds parciais viaveis com repair incremental.
+Trocar parte do GRASP puro por seeds parciais viaveis com repair incremental, em vez de reiniciar a tentativa inteira do zero.
+Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.
+Abra os logs desta execucao para ver a sequencia completa de tentativas e confirmar se houve falha logica, timeout ou encerramento do worker.
+A execucao falhou antes de concluir todas as etapas. Se nao houver metricas suficientes, os graficos podem ficar vazios.
+Populacao inicial
+Etapa
+
+grasp progress
+
+Tentativa
+
+23
+
+Preenchimento
+
+58%
+
+Resumo operacional
+
+Alocacoes 225/385 ?? Forcadas 0
+
+Conflitos hard 0
+Sem invalidos apos reparo
+Encerramento da execucao
+
+Execucao interrompida por falha
+A execucao foi interrompida durante a populacao inicial, na tentativa 25, sem conseguir formar um individuo inicial confiavel.
+
+Status: failed
+
+Fase: initial population
+
+Etapa: grasp retry
+
+Tentativa
+
+25
+
+Fila
+
+385
+
+Conflitos hard
+
+1
+
+Penalidade hard
+
+-
+
+Motivo tecnico
+
+A construcao da populacao inicial nao conseguiu formar um individuo valido dentro da janela de tentativas configurada.
+
+Sugestoes
+
+Priorize melhorar a construcao inicial antes de aumentar geracoes, porque o solver nem chegou na fase de evolucao.
+
+Considere reduzir o limite de reprocessamento completo e introduzir seeds parciais viaveis com repair incremental.
+
+Trocar parte do GRASP puro por seeds parciais viaveis com repair incremental, em vez de reiniciar a tentativa inteira do zero.
+
+Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.
+
+Abra os logs desta execucao para ver a sequencia completa de tentativas e confirmar se houve falha logica, timeout ou encerramento do worker.
+
+Gargalos da populacao inicial
+
+Diagnostico da construcao inicial
+Algumas tentativas de construcao estao caras demais e ficam muito tempo sem chegar a um candidato aceitavel.
+
+Fail-fast
+
+0
+
+Rejeicoes do gate
+
+25
+
+Tentativa mais lenta
+
+3min 10s
+
+Pico de conflitos hard
+
+5
+
+Limite atual de tentativas
+
+25
+
+Ajuste adaptativo
+
+sem reducao
+
+Limite adaptativo de tentativas
+
+Base 25 -> Atual 25
+
+Sem reducao por degradacao
+O limite segue no valor base enquanto nao houver sinais suficientes de degradacao.
+
+Principais gargalos
+
+Algumas tentativas de construcao estao caras demais e ficam muito tempo sem chegar a um candidato aceitavel.
+
+O construtor ja aprendeu padroes ruins recorrentes e esta evitando recombinar parte desses conflitos.
+
+As aulas mais dificeis concentram muitas ocorrencias para poucos dias/slots realmente seguros.
+
+Sugestoes de melhoria
+
+Trocar parte do GRASP puro por seeds parciais viaveis com repair incremental, em vez de reiniciar a tentativa inteira do zero.
+
+Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.
+
+Observacao do landscape
+Fenomeno
+
+Neutro
+
+Confianca
+
+0.00
+
+Profundidade
+
+0.00
+
+Resumo
+
+Nenhuma observacao ainda
+
+Episodio atual
+
+Nenhum episodio ativo ainda
+
+O dashboard exibira inicio, duracao e intensidade maxima do episodio atual.
+
+Ultimo episodio encerrado
+
+Nenhum episodio encerrado ainda
+
+Quando um episodio terminar, o dashboard exibira como ele terminou e qual foi o pico de intensidade.
+
+Transicao relevante
+
+O dashboard destacara entradas em vale profundo, mudancas de fenomeno e recuperacoes assim que elas aparecerem.
+
+Sem transicao destacada
+Tendencia recente
+
+A tendencia entre episodios sera destacada quando houver sequencia suficiente para comparacao.
+
+Tendencia indefinida
+Historico recente de transicoes
+
+O historico recente sera preenchido quando os episodios comecarem a encerrar.
+
+Freio adaptativo do ALNS
+
+Aguardando telemetria do cooldown adaptativo.
+
+Sem freio adaptativo
+Prontidao da resposta de busca
+Nenhuma evidencia de prontidao coletada ainda
+
+ocioso
+Evidencia
+
+0
+
+Auditorias pendentes: 0
+
+Status do gate
+
+Somente diagnostico
+
+Nenhuma candidata ainda
+
+Melhor resultado
+
+Evidencia insuficiente
+
+Progresso indisponivel
+
+Ultimo resultado
+
+Nenhum resultado resolvido ainda
+
+Aguardando o primeiro horizonte expirar
