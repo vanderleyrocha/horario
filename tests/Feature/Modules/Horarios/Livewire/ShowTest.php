@@ -418,7 +418,7 @@ it('exibe a matriz consolidada por professor e turma', function () {
 
     Livewire::test(Show::class, ['horario' => $horario])
         ->set('view', 'matriz-professores')
-        ->assertSee('Matriz geral por professor e turma')
+        ->assertSee('Matriz geral por professor, dia e tempo')
         ->assertSee('Paula Santos')
         ->assertSee('4A')
         ->assertSee('Segunda')

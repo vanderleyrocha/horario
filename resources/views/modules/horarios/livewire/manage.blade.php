@@ -3,13 +3,17 @@
     {{-- HEADER --}}
     <div class="mb-6">
 
-        <a href="{{ route('horarios.index') }}" wire:navigate class="text-blue-600 mb-4 inline-flex items-center">
+        <a
+            href="{{ route('horarios.index') }}"
+            wire:navigate
+            class="mb-4 inline-flex items-center text-blue-600"
+        >
             ← Voltar
         </a>
 
-        <div class="bg-white rounded-xl shadow border p-6">
+        <div class="rounded-xl border bg-white p-6 shadow">
 
-            <div class="flex justify-between items-center">
+            <div class="flex items-center justify-between">
 
                 <div>
                     <h2 class="text-2xl font-bold text-gray-900">
@@ -31,9 +35,9 @@
 
 
     {{-- TABS --}}
-    <div class="bg-white rounded-xl shadow border">
+    <div class="rounded-xl border bg-white shadow">
 
-        <div class="border-b flex space-x-2 p-2">
+        <div class="flex space-x-2 border-b p-2">
 
             @php
                 $tabs = [
@@ -47,9 +51,10 @@
             @endphp
 
             @foreach ($this->tabs() as $key => $label)
-                <button wire:click="setTab('{{ $key }}')"
-                    class="px-4 py-2 rounded-lg text-sm font-medium
-                    {{ $tab === $key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+                <button
+                    wire:click="setTab('{{ $key }}')"
+                    class="{{ $tab === $key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }} rounded-lg px-4 py-2 text-sm font-medium"
+                >
                     {{ $label }}
                 </button>
             @endforeach
@@ -93,4 +98,3 @@
     </div>
 
 </div>
-

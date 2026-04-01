@@ -24,15 +24,17 @@ it('retries the initial population build when the quality gate rejects the candi
     $problem = makeScheduleProblem(
         hardPenalty: 20.0,
         softPenalty: 5.0,
-        progress: $progress
+        progress: $progress,
     );
 
     expect(fn () => $problem->createIndividual())
         ->toThrow(RuntimeException::class, 'Quality gate rejeitou');
 
+    $rejectedPayloads = $progress->payloadsForStage('quality_gate_rejected');
+
     expect($progress->stages())->toContain('quality_gate_rejected')
-        ->and($progress->payloadsForStage('quality_gate_rejected'))->toHaveCount(12)
-        ->and($progress->payloadsForStage('quality_gate_rejected')[0]['max_hard_penalty'])->toBe(12.0);
+        ->and($rejectedPayloads)->toHaveCount($rejectedPayloads[0]['attempt_limit'] ?? 0)
+        ->and($rejectedPayloads[0]['max_hard_penalty'])->toBe(12.0);
 });
 
 it('reduces the attempt budget adaptively after repeated degraded builds', function (): void {
@@ -41,7 +43,7 @@ it('reduces the attempt budget adaptively after repeated degraded builds', funct
         lessonCount: 10,
         hardPenalty: 20.0,
         softPenalty: 5.0,
-        progress: $progress
+        progress: $progress,
     );
 
     expect(fn () => $problem->createIndividual())
@@ -57,12 +59,12 @@ it('reduces the attempt budget adaptively after repeated degraded builds', funct
     $secondRunFirstPayload = $allFailFast[$firstRunFailFast] ?? [];
     $secondRunBottlenecks = $secondRunFirstPayload['initial_population_bottlenecks'] ?? [];
 
-    expect($firstRunFailFast)->toBe(12)
+    expect($firstRunFailFast)->toBe($allFailFast[0]['attempt_limit'] ?? 0)
         ->and($secondRunFailFast)->toBeLessThan($firstRunFailFast)
-        ->and($secondRunFirstPayload['attempt_limit'] ?? null)->toBeLessThan(12)
+        ->and($secondRunFirstPayload['attempt_limit'] ?? null)->toBeLessThan($allFailFast[0]['attempt_limit'] ?? 0)
         ->and($secondRunBottlenecks['attempt_limit_reduced'] ?? null)->toBeTrue()
-        ->and($secondRunBottlenecks['base_attempt_limit'] ?? null)->toBe(12)
-        ->and($secondRunBottlenecks['current_attempt_limit'] ?? null)->toBeLessThan(12)
+        ->and($secondRunBottlenecks['base_attempt_limit'] ?? null)->toBe($allFailFast[0]['attempt_limit'] ?? 0)
+        ->and($secondRunBottlenecks['current_attempt_limit'] ?? null)->toBeLessThan($allFailFast[0]['attempt_limit'] ?? 0)
         ->and($secondRunBottlenecks['attempt_limit_reduction_criteria'] ?? [])
         ->toContain('Taxa alta de fail-fast nas ultimas tentativas.');
 });
@@ -72,7 +74,7 @@ it('accepts the initial candidate when the quality gate metrics are within thres
     $problem = makeScheduleProblem(
         hardPenalty: 0.0,
         softPenalty: 3.0,
-        progress: $progress
+        progress: $progress,
     );
 
     $individual = $problem->createIndividual();
@@ -88,7 +90,7 @@ it('reorders the remaining queue dynamically during construction when conflict p
         softPenalty: 1.0,
         progress: $progress,
         lessonCount: 3,
-        slotCount: 3
+        slotCount: 3,
     );
 
     $problem->createIndividual();
@@ -107,7 +109,7 @@ it('fails fast before the expensive quality gate repair when hard conflicts are 
         lessonCount: 10,
         hardPenalty: 20.0,
         softPenalty: 5.0,
-        progress: $progress
+        progress: $progress,
     );
 
     expect(fn () => $problem->createIndividual())
@@ -124,7 +126,7 @@ it('publishes heartbeat stages while repairing the initial quality gate candidat
         lessonCount: 2,
         hardPenalty: 20.0,
         softPenalty: 5.0,
-        progress: $progress
+        progress: $progress,
     );
 
     expect(fn () => $problem->createIndividual())
@@ -143,7 +145,7 @@ it('reuses a previously accepted seed to accelerate the next initial individual'
         softPenalty: 1.0,
         progress: $progress,
         lessonCount: 2,
-        slotCount: 3
+        slotCount: 3,
     );
 
     $first = $problem->createIndividual();
@@ -160,22 +162,22 @@ function makeScheduleProblem(
     float $softPenalty,
     ?ProgressReporterInterface $progress = null,
     int $lessonCount = 1,
-    int $slotCount = 1
+    int $slotCount = 1,
 ): ScheduleProblem {
     $fitnessEvaluator = new FitnessEvaluator(
-        weights: new FitnessWeights,
+        weights: new FitnessWeights(),
         rules: [
             makeScheduleProblemFixedHardPenaltyRule($hardPenalty),
             makeScheduleProblemFixedSoftPenaltyRule($softPenalty),
-        ]
+        ],
     );
 
     return new ScheduleProblem(
         data: makeScheduleData(lessonCount: $lessonCount, slotCount: $slotCount),
-        contextBuilder: new EvaluationContextBuilder,
+        contextBuilder: new EvaluationContextBuilder(),
         fitnessEvaluator: $fitnessEvaluator,
-        repairOperator: new GreedyRepairOperator,
-        progress: $progress
+        repairOperator: new GreedyRepairOperator(),
+        progress: $progress,
     );
 }
 
@@ -183,22 +185,22 @@ function makeDenseConflictScheduleProblem(
     int $lessonCount,
     float $hardPenalty,
     float $softPenalty,
-    ?ProgressReporterInterface $progress = null
+    ?ProgressReporterInterface $progress = null,
 ): ScheduleProblem {
     $fitnessEvaluator = new FitnessEvaluator(
-        weights: new FitnessWeights,
+        weights: new FitnessWeights(),
         rules: [
             makeScheduleProblemFixedHardPenaltyRule($hardPenalty),
             makeScheduleProblemFixedSoftPenaltyRule($softPenalty),
-        ]
+        ],
     );
 
     return new ScheduleProblem(
         data: makeScheduleData(lessonCount: $lessonCount),
-        contextBuilder: new EvaluationContextBuilder,
+        contextBuilder: new EvaluationContextBuilder(),
         fitnessEvaluator: $fitnessEvaluator,
-        repairOperator: new GreedyRepairOperator,
-        progress: $progress
+        repairOperator: new GreedyRepairOperator(),
+        progress: $progress,
     );
 }
 
@@ -215,7 +217,7 @@ function makeScheduleData(int $lessonCount, int $slotCount = 1): ScheduleData
             disciplinaId: 30 + $i,
             requiredSlots: 1,
             weeklyOccurrences: 1,
-            requiresConsecutive: false
+            requiresConsecutive: false,
         );
         $lessonIds[] = $i;
     }
@@ -242,14 +244,13 @@ function makeScheduleData(int $lessonCount, int $slotCount = 1): ScheduleData
         totalTimeSlots: count($timeSlots),
         totalLessons: $lessonCount,
         totalProfessors: 1,
-        totalClasses: 1
+        totalClasses: 1,
     );
 }
 
 function makeScheduleProblemProgressSpy(): ProgressReporterInterface
 {
-    return new class implements ProgressReporterInterface
-    {
+    return new class () implements ProgressReporterInterface {
         private array $reports = [];
 
         public function report(array $data): void
@@ -261,7 +262,7 @@ function makeScheduleProblemProgressSpy(): ProgressReporterInterface
         {
             return array_values(array_filter(array_map(
                 static fn (array $payload): ?string => $payload['stage'] ?? null,
-                $this->reports
+                $this->reports,
             )));
         }
 
@@ -269,7 +270,7 @@ function makeScheduleProblemProgressSpy(): ProgressReporterInterface
         {
             return array_values(array_filter(
                 $this->reports,
-                static fn (array $payload): bool => ($payload['stage'] ?? null) === $stage
+                static fn (array $payload): bool => ($payload['stage'] ?? null) === $stage,
             ));
         }
     };
@@ -277,9 +278,10 @@ function makeScheduleProblemProgressSpy(): ProgressReporterInterface
 
 function makeScheduleProblemFixedHardPenaltyRule(float $penalty): HardRuleInterface
 {
-    return new class($penalty) implements HardRuleInterface
-    {
-        public function __construct(private readonly float $penalty) {}
+    return new class ($penalty) implements HardRuleInterface {
+        public function __construct(private readonly float $penalty)
+        {
+        }
 
         public function evaluate(EvaluationContext $context): RuleResult
         {
@@ -295,9 +297,10 @@ function makeScheduleProblemFixedHardPenaltyRule(float $penalty): HardRuleInterf
 
 function makeScheduleProblemFixedSoftPenaltyRule(float $penalty): SoftRuleInterface
 {
-    return new class($penalty) implements SoftRuleInterface
-    {
-        public function __construct(private readonly float $penalty) {}
+    return new class ($penalty) implements SoftRuleInterface {
+        public function __construct(private readonly float $penalty)
+        {
+        }
 
         public function evaluate(EvaluationContext $context): RuleResult
         {

@@ -41,7 +41,7 @@ it('runs the standalone evolution path without using an undefined operator when 
     $engine = makeStandaloneEngine(
         problem: $problem,
         mutation: $mutation,
-        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1)
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
     );
 
     $best = $engine->run(4);
@@ -56,20 +56,20 @@ it('logs a single structured summary for the initial population instead of one e
     $engine = makeStandaloneEngine(
         problem: makeStandaloneFakeProblem(),
         mutation: makeCountingMutationOperator(),
-        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 0)
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 0),
     );
 
     $engine->run(3);
 
     Log::shouldHaveReceived('info')
-        ->once()
         ->withArgs(function (string $message, array $context): bool {
             return $message === 'ga.population.initialized'
                 && ($context['population_size'] ?? null) === 3
                 && count($context['sample_gene_counts'] ?? []) === 3
                 && array_key_exists('best_fitness', $context)
                 && array_key_exists('avg_fitness', $context);
-        });
+        })
+        ->once();
 
     Log::shouldNotHaveReceived('info', ['Criando indivÃ­duo 0']);
     Log::shouldNotHaveReceived('info', ['Criando indivÃ­duo 1']);
@@ -82,7 +82,7 @@ it('reuses the shared generation step in evolveGeneration without emitting mutat
     $engine = makeStandaloneEngine(
         problem: $problem,
         mutation: $mutation,
-        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1)
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
     );
 
     $population = [
@@ -112,7 +112,7 @@ it('publishes the same structured progress payload for the frontend through the 
         problem: makeStandaloneFakeProblem(),
         mutation: makeCountingMutationOperator(),
         termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
-        progress: $progress
+        progress: $progress,
     );
 
     $engine->run(4);
@@ -151,7 +151,7 @@ it('logs the current long-running operation when a generation stage exceeds five
         problem: makeStandaloneFakeProblem(),
         mutation: makeCountingMutationOperator(),
         termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
-        progress: makeCollectingProgressReporter()
+        progress: makeCollectingProgressReporter(),
     );
 
     $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'reportOperationalHeartbeat');
@@ -167,7 +167,7 @@ it('logs the current long-running operation when a generation stage exceeds five
             'population_target' => 20,
             'offspring_built' => 11,
         ],
-        true
+        true,
     );
 
     Log::shouldHaveReceived('warning')
@@ -187,7 +187,7 @@ it('triggers alns adaptively in short runs and publishes trigger telemetry', fun
     $lns = new AdaptiveLargeNeighborhoodSearch(
         destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
         repairOperators: [makeStandaloneFakeRepairOperator('AdaptiveRepair')],
-        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair'])
+        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair']),
     );
 
     $engine = makeStandaloneEngine(
@@ -196,14 +196,14 @@ it('triggers alns adaptively in short runs and publishes trigger telemetry', fun
         termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 5),
         progress: $progress,
         lns: $lns,
-        lnsFrequency: 50
+        lnsFrequency: 50,
     );
 
     $engine->run(4);
 
     $alnsReports = array_values(array_filter(
         $progress->reports,
-        static fn (array $payload): bool => ($payload['alns_triggered'] ?? false) === true
+        static fn (array $payload): bool => ($payload['alns_triggered'] ?? false) === true,
     ));
 
     expect($alnsReports)->not->toBeEmpty()
@@ -227,7 +227,7 @@ it('activates temporary intensive alns via activation gate in opt-in mode before
         lns: new AdaptiveLargeNeighborhoodSearch(
             destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
             repairOperators: [makeStandaloneFakeRepairOperator('AdaptiveRepair')],
-            selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair'])
+            selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'AdaptiveRepair']),
         ),
         lnsFrequency: 50,
     );
@@ -253,7 +253,7 @@ it('activates temporary intensive alns via activation gate in opt-in mode before
                 'mode' => 'diagnostic_only',
             ],
         ],
-        false
+        false,
     );
 
     expect($telemetry)->toMatchArray([
@@ -299,7 +299,7 @@ it('arms a temporary mutation shock via activation gate and applies it on the ne
                 'mode' => 'diagnostic_only',
             ],
         ],
-        true
+        true,
     );
 
     expect($telemetry)->toMatchArray([
@@ -342,7 +342,7 @@ it('applies reduced selection pressure from the landscape response to the real s
     $problem = makeStandaloneFakeProblem();
     $selection = new TournamentSelection(
         3,
-        new FitnessSharingCalculator(new GeneticDistance, new SharingFunction(sigma: 0.35, alpha: 1.0))
+        new FitnessSharingCalculator(new GeneticDistance(), new SharingFunction(sigma: 0.35, alpha: 1.0)),
     );
 
     $engine = makeStandaloneEngine(
@@ -389,7 +389,7 @@ it('arms a temporary selection pressure reduction via activation gate and applie
     $problem = makeStandaloneFakeProblem();
     $selection = new TournamentSelection(
         3,
-        new FitnessSharingCalculator(new GeneticDistance, new SharingFunction(sigma: 0.35, alpha: 1.0))
+        new FitnessSharingCalculator(new GeneticDistance(), new SharingFunction(sigma: 0.35, alpha: 1.0)),
     );
 
     $engine = makeStandaloneEngine(
@@ -417,7 +417,7 @@ it('arms a temporary selection pressure reduction via activation gate and applie
                 'mode' => 'diagnostic_only',
             ],
         ],
-        true
+        true,
     );
 
     expect($telemetry)->toMatchArray([
@@ -461,8 +461,7 @@ it('arms a temporary selection pressure reduction via activation gate and applie
 });
 
 it('applies an adaptive cooldown brake when recent alns outcomes have low return', function (): void {
-    $repair = new class implements RepairOperatorInterface
-    {
+    $repair = new class () implements RepairOperatorInterface {
         public function repair(PartialSolution $partial): Cromossomo
         {
             $candidate = new Cromossomo(array_merge($partial->assigned(), $partial->unassigned()));
@@ -484,7 +483,7 @@ it('applies an adaptive cooldown brake when recent alns outcomes have low return
             'AdaptiveDestroy', 'AdaptiveRepair',
             'AdaptiveDestroy', 'AdaptiveRepair',
             'AdaptiveDestroy', 'AdaptiveRepair',
-        ])
+        ]),
     );
 
     $solution = new Cromossomo([
@@ -522,7 +521,7 @@ it('applies an adaptive cooldown brake when recent alns outcomes have low return
             'phenomenon' => 'neutral',
             'basin_of_attraction_lock_detected' => false,
         ],
-        false
+        false,
     );
 
     expect($telemetry)->toMatchArray([
@@ -540,8 +539,7 @@ it('applies an adaptive cooldown brake when recent alns outcomes have low return
 });
 
 it('evaluates each offspring only once during generation step', function (): void {
-    $problem = new class implements GeneticProblem
-    {
+    $problem = new class () implements GeneticProblem {
         public int $sequence = 1;
         public int $evaluateCalls = 0;
 
@@ -563,7 +561,7 @@ it('evaluates each offspring only once during generation step', function (): voi
 
             $score = (float) array_sum(array_map(
                 static fn (Gene $gene): int => $gene->aulaId(),
-                $individual->genes()
+                $individual->genes(),
             ));
             $individual->setFitness($score);
 
@@ -585,13 +583,23 @@ it('evaluates each offspring only once during generation step', function (): voi
             return true;
         }
 
-        public function clearFitnessCache(): void {}
+        public function clearFitnessCache(): void
+        {
+        }
+
+        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void
+        {
+        }
+
+        public function clearFitnessDeltaCache(): void
+        {
+        }
     };
 
     $engine = makeStandaloneEngine(
         problem: $problem,
         mutation: makeCountingMutationOperator(),
-        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1)
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
     );
 
     $population = [
@@ -613,8 +621,7 @@ it('evaluates each offspring only once during generation step', function (): voi
 });
 
 it('accepts ALNS candidates only when they strictly improve best fitness', function (): void {
-    $replacement = new class implements ReplacementStrategyInterface
-    {
+    $replacement = new class () implements ReplacementStrategyInterface {
         public int $calls = 0;
 
         public function replace(array &$population, Cromossomo $incoming): void
@@ -626,12 +633,13 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
 
     $makeEngine = static function (GeneticProblem $problem, AdaptiveLargeNeighborhoodSearch $lns, ReplacementStrategyInterface $replacement): GeneticAlgorithmEngine {
         return new GeneticAlgorithmEngine(
+            alnsAcceptance: null,
             problem: $problem,
             selection: makeFirstParentSelection(),
             crossover: makeCopyingCrossover(),
             mutation: makeCountingMutationOperator(),
             termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
-            metrics: new MetricsRecorder,
+            metrics: new MetricsRecorder(),
             elitism: makeNoElitism(),
             adaptiveMutation: new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
             populationEvaluator: new PopulationFitnessEvaluator($problem),
@@ -651,8 +659,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
     $lnsReject = new AdaptiveLargeNeighborhoodSearch(
         destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
         repairOperators: [
-            new class implements RepairOperatorInterface
-            {
+            new class () implements RepairOperatorInterface {
                 public function repair(PartialSolution $partial): Cromossomo
                 {
                     return new Cromossomo([
@@ -667,7 +674,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
                 }
             },
         ],
-        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'WorseRepair'])
+        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'WorseRepair']),
     );
 
     $engineReject = $makeEngine($problemReject, $lnsReject, $replacement);
@@ -685,8 +692,8 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
 
     expect($telemetryReject)->toMatchArray([
         'alns_accepted' => false,
-        'alns_acceptance_policy' => 'strict_improvement',
-        'alns_acceptance_reason' => 'rejected_no_improvement',
+        'alns_acceptance_policy' => 'StrictScoreImprovementAcceptance',
+        'alns_acceptance_reason' => 'rejected_no_score_improvement',
     ])
         ->and($replacement->calls)->toBe(0);
 
@@ -694,8 +701,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
     $lnsAccept = new AdaptiveLargeNeighborhoodSearch(
         destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
         repairOperators: [
-            new class implements RepairOperatorInterface
-            {
+            new class () implements RepairOperatorInterface {
                 public function repair(PartialSolution $partial): Cromossomo
                 {
                     return new Cromossomo([
@@ -710,7 +716,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
                 }
             },
         ],
-        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'BetterRepair'])
+        selector: makeStandaloneFixedAlnsSelectionStrategy(['AdaptiveDestroy', 'BetterRepair']),
     );
 
     $engineAccept = $makeEngine($problemAccept, $lnsAccept, $replacement);
@@ -728,8 +734,8 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
 
     expect($telemetryAccept)->toMatchArray([
         'alns_accepted' => true,
-        'alns_acceptance_policy' => 'strict_improvement',
-        'alns_acceptance_reason' => 'strict_improvement',
+        'alns_acceptance_policy' => 'StrictScoreImprovementAcceptance',
+        'alns_acceptance_reason' => 'accepted_score_improved_same_hard_penalty',
     ])
         ->and($replacement->calls)->toBe(1);
 });
@@ -743,15 +749,16 @@ function makeStandaloneEngine(
     ?AdaptiveLargeNeighborhoodSearch $lns = null,
     int $lnsFrequency = 50,
     ?LandscapeEngine $landscapeEngine = null,
-    ?AdaptiveMutationController $adaptiveMutation = null
+    ?AdaptiveMutationController $adaptiveMutation = null,
 ): GeneticAlgorithmEngine {
     return new GeneticAlgorithmEngine(
+        alnsAcceptance: null,
         problem: $problem,
         selection: $selection ?? makeFirstParentSelection(),
         crossover: makeCopyingCrossover(),
         mutation: $mutation,
         termination: $termination,
-        metrics: new MetricsRecorder,
+        metrics: new MetricsRecorder(),
         elitism: makeNoElitism(),
         adaptiveMutation: $adaptiveMutation ?? new AdaptiveMutationController(baseRate: 0.0, amplification: 0.0, maxRate: 0.0),
         populationEvaluator: new PopulationFitnessEvaluator($problem),
@@ -766,8 +773,7 @@ function makeStandaloneEngine(
 
 function makeStandaloneFakeProblem(): GeneticProblem
 {
-    return new class implements GeneticProblem
-    {
+    return new class () implements GeneticProblem {
         private int $sequence = 1;
 
         public function createIndividual(): Cromossomo
@@ -788,7 +794,7 @@ function makeStandaloneFakeProblem(): GeneticProblem
         {
             $score = (float) array_sum(array_map(
                 static fn (Gene $gene): int => $gene->aulaId(),
-                $individual->genes()
+                $individual->genes(),
             ));
 
             $individual->setFitness($score);
@@ -811,14 +817,23 @@ function makeStandaloneFakeProblem(): GeneticProblem
             return true;
         }
 
-        public function clearFitnessCache(): void {}
+        public function clearFitnessCache(): void
+        {
+        }
+
+        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void
+        {
+        }
+
+        public function clearFitnessDeltaCache(): void
+        {
+        }
     };
 }
 
 function makeFirstParentSelection(): SelectionOperatorInterface
 {
-    return new class implements SelectionOperatorInterface
-    {
+    return new class () implements SelectionOperatorInterface {
         public function select(array $population): Cromossomo
         {
             return $population[0];
@@ -828,8 +843,7 @@ function makeFirstParentSelection(): SelectionOperatorInterface
 
 function makeCopyingCrossover(): CrossoverOperatorInterface
 {
-    return new class implements CrossoverOperatorInterface
-    {
+    return new class () implements CrossoverOperatorInterface {
         public function crossover(Cromossomo $parentA, Cromossomo $parentB): array
         {
             return [$parentA->copy(), $parentB->copy()];
@@ -844,8 +858,7 @@ function makeCopyingCrossover(): CrossoverOperatorInterface
 
 function makeCountingMutationOperator()
 {
-    return new class implements MutationOperatorInterface
-    {
+    return new class () implements MutationOperatorInterface {
         public int $calls = 0;
 
         public function mutate(Cromossomo $individual): Cromossomo
@@ -864,8 +877,7 @@ function makeCountingMutationOperator()
 
 function makeNoElitism(): ElitismStrategyInterface
 {
-    return new class implements ElitismStrategyInterface
-    {
+    return new class () implements ElitismStrategyInterface {
         public function selectElites(array $population): array
         {
             return [];
@@ -875,17 +887,19 @@ function makeNoElitism(): ElitismStrategyInterface
 
 function makeNoopReplacement(): ReplacementStrategyInterface
 {
-    return new class implements ReplacementStrategyInterface
-    {
-        public function replace(array &$population, Cromossomo $incoming): void {}
+    return new class () implements ReplacementStrategyInterface {
+        public function replace(array &$population, Cromossomo $incoming): void
+        {
+        }
     };
 }
 
 function makeStandaloneTerminationCriterion(int $maxGenerationExclusive): TerminationCriterionInterface
 {
-    return new class($maxGenerationExclusive) implements TerminationCriterionInterface
-    {
-        public function __construct(private readonly int $maxGenerationExclusive) {}
+    return new class ($maxGenerationExclusive) implements TerminationCriterionInterface {
+        public function __construct(private readonly int $maxGenerationExclusive)
+        {
+        }
 
         public function shouldTerminate(int $generation, array $population): bool
         {
@@ -906,8 +920,7 @@ function makeStandaloneTerminationCriterion(int $maxGenerationExclusive): Termin
 
 function makeCollectingProgressReporter()
 {
-    return new class implements ProgressReporterInterface
-    {
+    return new class () implements ProgressReporterInterface {
         public array $reports = [];
 
         public function report(array $data): void
@@ -915,15 +928,18 @@ function makeCollectingProgressReporter()
             $this->reports[] = $data;
         }
 
-        public function reportError(AGError $error): void {}
+        public function reportError(AGError $error): void
+        {
+        }
     };
 }
 
 function makeStandaloneFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectionStrategy
 {
-    return new class($selectionOrder) implements OperatorSelectionStrategy
-    {
-        public function __construct(private array $selectionOrder) {}
+    return new class ($selectionOrder) implements OperatorSelectionStrategy {
+        public function __construct(private array $selectionOrder)
+        {
+        }
 
         public function select(array $operators, array $stats): object
         {
@@ -946,9 +962,10 @@ function makeStandaloneFixedAlnsSelectionStrategy(array $selectionOrder): Operat
 
 function makeStandaloneFakeDestroyOperator(string $name): DestroyOperatorInterface
 {
-    return new class($name) implements DestroyOperatorInterface
-    {
-        public function __construct(private readonly string $name) {}
+    return new class ($name) implements DestroyOperatorInterface {
+        public function __construct(private readonly string $name)
+        {
+        }
 
         public function destroy(Cromossomo $solution): PartialSolution
         {
@@ -964,9 +981,10 @@ function makeStandaloneFakeDestroyOperator(string $name): DestroyOperatorInterfa
 
 function makeStandaloneFakeRepairOperator(string $name): RepairOperatorInterface
 {
-    return new class($name) implements RepairOperatorInterface
-    {
-        public function __construct(private readonly string $name) {}
+    return new class ($name) implements RepairOperatorInterface {
+        public function __construct(private readonly string $name)
+        {
+        }
 
         public function repair(PartialSolution $partial): Cromossomo
         {
