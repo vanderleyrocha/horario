@@ -56,6 +56,7 @@ Projeto Laravel 12 + Livewire modular com AG desacoplado.
 
 ---
 
+
 # FASE 1 — Modelagem
 
 ## Objetivo
