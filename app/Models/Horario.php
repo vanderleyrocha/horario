@@ -111,6 +111,11 @@ class Horario extends Model
         return $this->hasMany(ScheduleExecution::class);
     }
 
+    public function scheduleConstraints(): HasMany
+    {
+        return $this->hasMany(\App\Models\ScheduleConstraint::class);
+    }
+
     public function lastExecution(): HasOne
     {
         return $this->hasOne(ScheduleExecution::class)->latestOfMany();

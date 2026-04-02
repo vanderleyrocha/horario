@@ -23,7 +23,9 @@ final class ScheduleData
         public readonly int $totalLessons,
         public readonly int $totalProfessors,
         public readonly int $totalClasses,
+        public readonly array $customConstraints = [],
         public readonly bool $groupDisciplines = false,
         public readonly int $maxConsecutiveLessons = 1,
-    ) {}
+    ) {
+    }
 }

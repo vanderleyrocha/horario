@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Repair;
 
+use App\Modules\AG\Domain\Repair\Contracts\RepairHeuristicExtension;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
@@ -27,6 +28,19 @@ final class GreedyRepairOperator
      * @var callable|null
      */
     private $activeFitnessProbe = null;
+
+    /**
+     * @var array<int, RepairHeuristicExtension>
+     */
+    private readonly array $extensions;
+
+    /**
+     * @param array<int, RepairHeuristicExtension> $extensions
+     */
+    public function __construct(array $extensions = [])
+    {
+        $this->extensions = $extensions;
+    }
 
     public function repair(
         Cromossomo $chromosome,
@@ -169,6 +183,15 @@ final class GreedyRepairOperator
     {
         $targetMap = $this->buildConflictMap($chromosome);
         $targetMap = $this->mergeRepairTargetMaps($targetMap, $this->buildMandatoryBlockViolationMap($chromosome));
+
+        if ($this->activeData !== null) {
+            foreach ($this->extensions as $extension) {
+                $targetMap = $this->mergeRepairTargetMaps(
+                    $targetMap,
+                    $extension->augmentRepairTargets($chromosome, $this->activeData),
+                );
+            }
+        }
 
         uasort($targetMap, static function (array $left, array $right): int {
             return [
@@ -590,7 +613,7 @@ final class GreedyRepairOperator
         $classSlots = $data->availableSlotsByClass[$gene->turmaId()] ?? [];
         $possible = array_values(array_intersect($profSlots, $classSlots));
 
-        return array_values(array_filter(
+        $possible = array_values(array_filter(
             $possible,
             fn (int $slotId): bool => isset($data->timeSlots[$slotId])
                 && $this->slotSupportsDuration(
@@ -599,6 +622,12 @@ final class GreedyRepairOperator
                     $data,
                 ),
         ));
+
+        foreach ($this->extensions as $extension) {
+            $possible = array_values(array_unique($extension->filterCandidateStartSlots($gene, $data, $possible)));
+        }
+
+        return $possible;
     }
 
     /**
@@ -649,9 +678,38 @@ final class GreedyRepairOperator
         $hardPenalty = $fitness['hard_penalty'] ?? INF;
         $softPenalty = $fitness['soft_penalty'] ?? INF;
         $remainingViolations = $this->countRemainingTargetViolations($chromosome, $sourceGeneIndex, $violationTypes);
+        $extensionPenalty = $this->extensionPenaltyForCandidate($chromosome, $candidate, $sourceGeneIndex, $violationTypes);
         $conflictScore = $this->sameEntityLoadScore($chromosome, $candidate, $sourceGeneIndex);
 
-        return [$hardPenalty, $remainingViolations, $softPenalty, $conflictScore];
+        return [$hardPenalty, $remainingViolations, $extensionPenalty, $softPenalty, $conflictScore];
+    }
+
+    /**
+     * @param string[] $violationTypes
+     */
+    private function extensionPenaltyForCandidate(
+        Cromossomo $chromosome,
+        Gene $candidate,
+        int $sourceGeneIndex,
+        array $violationTypes,
+    ): float {
+        if ($this->activeData === null) {
+            return 0.0;
+        }
+
+        $penalty = 0.0;
+
+        foreach ($this->extensions as $extension) {
+            $penalty += $extension->candidateRankingPenalty(
+                $chromosome,
+                $candidate,
+                $sourceGeneIndex,
+                $violationTypes,
+                $this->activeData,
+            );
+        }
+
+        return $penalty;
     }
 
     /**
@@ -672,6 +730,17 @@ final class GreedyRepairOperator
 
         if (in_array('mandatory_block', $violationTypes, true) && $this->isGeneInMandatoryBlockViolation($chromosome, $geneIndex)) {
             $remaining++;
+        }
+
+        if ($this->activeData !== null) {
+            foreach ($this->extensions as $extension) {
+                $remaining += $extension->countTargetViolations(
+                    $chromosome,
+                    $geneIndex,
+                    $violationTypes,
+                    $this->activeData,
+                );
+            }
         }
 
         return $remaining;

@@ -8,6 +8,7 @@ use App\Models\Horario;
 use App\Models\Professor;
 use App\Models\Turma;
 use App\Modules\Horarios\Domain\ValueObjects\ClassData;
+use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ProfessorData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
@@ -15,7 +16,10 @@ use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 
 final class ScheduleDataBuilder
 {
-    public function build(Horario $horario): ScheduleData
+    /**
+     * @param array<int, CustomConstraintData> $customConstraints
+     */
+    public function build(Horario $horario, array $customConstraints = []): ScheduleData
     {
         $config = $horario->configuracaoHorario;
 
@@ -80,24 +84,25 @@ final class ScheduleDataBuilder
         $availableSlotsByClass = $this->buildAvailability($classes, $timeSlots, $restrictionsByClass);
 
         return new ScheduleData(
-            lessons: $lessons,
-            professors: $professors,
-            classes: $classes,
-            timeSlots: $timeSlots,
-            restrictions: $restrictions,
-            lessonsByProfessor: $lessonsByProfessor,
-            lessonsByClass: $lessonsByClass,
-            restrictionsByProfessor: $restrictionsByProfessor,
-            restrictionsByClass: $restrictionsByClass,
-            expectedLoadByLesson: $expectedLoadByLesson,
-            availableSlotsByProfessor: $availableSlotsByProfessor,
-            availableSlotsByClass: $availableSlotsByClass,
-            totalTimeSlots: count($timeSlots),
-            totalLessons: count($lessons),
-            totalProfessors: count($professors),
-            totalClasses: count($classes),
-            groupDisciplines: (bool) ($config->agrupar_disciplinas ?? false),
-            maxConsecutiveLessons: max(1, (int) ($config->max_aulas_seguidas ?? 1)),
+            $lessons,
+            $professors,
+            $classes,
+            $timeSlots,
+            $restrictions,
+            $lessonsByProfessor,
+            $lessonsByClass,
+            $restrictionsByProfessor,
+            $restrictionsByClass,
+            $expectedLoadByLesson,
+            $availableSlotsByProfessor,
+            $availableSlotsByClass,
+            count($timeSlots),
+            count($lessons),
+            count($professors),
+            count($classes),
+            $customConstraints,
+            (bool) ($config->agrupar_disciplinas ?? false),
+            max(1, (int) ($config->max_aulas_seguidas ?? 1)),
         );
     }
 
@@ -134,7 +139,7 @@ final class ScheduleDataBuilder
             $slot = new TimeSlot(
                 id: $slotId,
                 day: $dia,
-                lessonNumber: $periodo
+                lessonNumber: $periodo,
             );
 
             // ✅ AÇÃO 08: Usar entidade_type e status corretos

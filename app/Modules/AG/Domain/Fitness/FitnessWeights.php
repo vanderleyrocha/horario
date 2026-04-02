@@ -55,6 +55,7 @@ final class FitnessWeights {
             \App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule::class => 10.0,
             \App\Modules\Horarios\Domain\Evaluation\HardRules\WorkloadExceededRule::class => 8.0,
             \App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule::class => 6.0,
+            \App\Modules\Horarios\Domain\Evaluation\HardRules\CustomConstraintHardRule::class => 1.0,
 
             // Soft Rules
             \App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule::class => 2.0,
@@ -62,6 +63,7 @@ final class FitnessWeights {
             \App\Modules\Horarios\Domain\Evaluation\SoftRules\MaxLessonsPerDayRule::class => 1.5,
             \App\Modules\Horarios\Domain\Evaluation\SoftRules\ConsecutiveLessonRule::class => 1.0,
             \App\Modules\Horarios\Domain\Evaluation\SoftRules\PreferredTimeRule::class => 1.0,
+            \App\Modules\Horarios\Domain\Evaluation\SoftRules\CustomConstraintSoftRule::class => 1.0,
         ]);
     }
 }

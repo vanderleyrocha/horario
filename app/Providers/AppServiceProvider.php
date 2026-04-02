@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Modules\Horarios\Infrastructure\Constraints\Repositories\EloquentScheduleConstraintRepository;
 use App\Modules\Horarios\UI\Livewire\Aulas as HorariosAulas;
 use App\Modules\Horarios\UI\Livewire\Configurar;
 use App\Modules\Horarios\UI\Livewire\Create;
@@ -22,7 +23,13 @@ use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
+    public function register(): void
+    {
+        $this->app->bind(
+            'App\\Modules\\Horarios\\Domain\\Constraints\\Repositories\\ScheduleConstraintRepository',
+            EloquentScheduleConstraintRepository::class,
+        );
+    }
 
     public function boot(): void
     {

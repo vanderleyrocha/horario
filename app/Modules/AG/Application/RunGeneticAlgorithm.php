@@ -53,23 +53,40 @@ use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator;
 use App\Modules\AG\Infrastructure\Progress\NullProgressReporter;
 use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
+use App\Modules\Horarios\Application\Constraints\ConstraintSolverPayloadMapper;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\ConstraintEvaluationPipeline;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\MutualExclusionConstraintEvaluator;
+use App\Modules\Horarios\Domain\Constraints\Repair\CustomConstraintRepairExtension;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\SyncSameTimeslotConstraintEvaluator;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\TimePlacementConstraintEvaluator;
+use App\Modules\Horarios\Application\LoadActiveScheduleConstraintsAction;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule;
+use App\Modules\Horarios\Domain\Evaluation\HardRules\CustomConstraintHardRule;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\TeacherConflictRule;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\WorkloadExceededRule;
 use App\Modules\Horarios\Domain\Evaluation\SoftRules\ConsecutiveLessonRule;
+use App\Modules\Horarios\Domain\Evaluation\SoftRules\CustomConstraintSoftRule;
 use App\Modules\Horarios\Domain\Evaluation\SoftRules\DistributionRule;
 use App\Modules\Horarios\Domain\Evaluation\SoftRules\MaxLessonsPerDayRule;
 use App\Modules\Horarios\Domain\Evaluation\SoftRules\PreferredTimeRule;
 use App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule;
 use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
+use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 final class RunGeneticAlgorithm
 {
+    public function __construct(
+        private readonly ScheduleDataBuilder $scheduleDataBuilder,
+        private readonly LoadActiveScheduleConstraintsAction $loadActiveScheduleConstraints,
+        private readonly ConstraintSolverPayloadMapper $constraintSolverPayloadMapper,
+    ) {
+    }
+
     public function execute(Horario $horario, ?ProgressReporterInterface $progress = null, ?ExecutionMetricsRecorder $executionMetrics = null): array
     {
         Log::info('RunGeneticAlgorithm::execute() iniciado');
@@ -95,34 +112,46 @@ final class RunGeneticAlgorithm
                     'mutation_rate' => $config->taxaMutacao,
                     'elite_count' => $config->eliteCount(),
                     'islands' => $islandCount,
-                ]
+                ],
             );
         }
 
         $progress = $progress ?? new NullProgressReporter();
 
-        $scheduleData = (new ScheduleDataBuilder())->build($horario);
+        $constraintSnapshots = $this->loadConstraintSnapshots($horario, $executionId);
+
+        $scheduleData = $this->scheduleDataBuilder->build($horario, $constraintSnapshots);
 
         $maxLessonsPerDay = (int) ($horario->configuracaoHorario?->aulas_por_dia ?? 7);
+
+        $constraintPipeline = new ConstraintEvaluationPipeline([
+            new SyncSameTimeslotConstraintEvaluator(),
+            new MutualExclusionConstraintEvaluator(),
+            new TimePlacementConstraintEvaluator(),
+        ]);
 
         $fitnessRules = [
             new TeacherConflictRule(),
             new ClassConflictRule(),
             new WorkloadExceededRule(),
             new MandatoryBlockViolationRule(),
+            new CustomConstraintHardRule($constraintPipeline),
             new WindowPenaltyRule(),
             new DistributionRule(),
             new MaxLessonsPerDayRule($maxLessonsPerDay),
             new ConsecutiveLessonRule(),
             new PreferredTimeRule(),
+            new CustomConstraintSoftRule($constraintPipeline),
         ];
 
         $fitnessEvaluator = new FitnessEvaluator(
             weights: FitnessWeights::default(),
-            rules: $fitnessRules
+            rules: $fitnessRules,
         );
 
-        $repairOperator = new GreedyRepairOperator();
+        $repairOperator = new GreedyRepairOperator([
+            new CustomConstraintRepairExtension(),
+        ]);
 
         $problem = new ScheduleProblem(
             data: $scheduleData,
@@ -130,7 +159,7 @@ final class RunGeneticAlgorithm
             fitnessEvaluator: $fitnessEvaluator,
             repairOperator: $repairOperator,
             progress: $progress,
-            executionId: $executionId
+            executionId: $executionId,
         );
 
         $distance = new GeneticDistance();
@@ -149,7 +178,7 @@ final class RunGeneticAlgorithm
             maxGenerations: $config->numeroGeracoes,
             populationStatistics: new PopulationStatistics(
                 new HashDiversityCalculator(),
-                new PopulationEntropyCalculator()
+                new PopulationEntropyCalculator(),
             ),
             targetFitness: $config->targetFitness,
             maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement,
@@ -157,12 +186,12 @@ final class RunGeneticAlgorithm
             varianceWindowSize: (int) config('ag.termination_variance_window', 8),
             minGenerationsBeforeVarianceCheck: (int) config('ag.termination_min_generations_before_variance', 20),
             minDiversity: (float) config('ag.termination_min_diversity', 0.08),
-            minEntropy: (float) config('ag.termination_min_entropy', 0.10)
+            minEntropy: (float) config('ag.termination_min_entropy', 0.10),
         );
 
         $islandEngine = new IslandModelEngine(
             migrationPolicy: new BestIndividualsMigration(2),
-            migrationInterval: 25
+            migrationInterval: 25,
         );
 
         $baseLnsFrequency = $this->resolveBaseLnsFrequency($config->numeroGeracoes);
@@ -177,14 +206,14 @@ final class RunGeneticAlgorithm
                     diversityCalculator: new HashDiversityCalculator(),
                     entropyCalculator: new PopulationEntropyCalculator(),
                     diversitySamplingInterval: 5,
-                    diversityCollapseThreshold: 0.05
-                )
+                    diversityCollapseThreshold: 0.05,
+                ),
             );
 
             $mutation = new AdaptiveDiversityMutation(
                 structured: new StructuredSwapMutation(),
                 swap: new GeneSwapMutation(),
-                conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6)
+                conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6),
             );
 
             $tracker = new OperatorPerformanceTracker();
@@ -194,7 +223,7 @@ final class RunGeneticAlgorithm
             $hyperHeuristic = new LearningHyperHeuristicController(
                 $tracker,
                 $selectionStrategy,
-                $rewardCalculator
+                $rewardCalculator,
             );
 
             $hyperHeuristic->registerOperators([
@@ -212,7 +241,7 @@ final class RunGeneticAlgorithm
             $adaptiveMutation = new AdaptiveMutationController(
                 baseRate: 0.02,
                 amplification: 0.25,
-                maxRate: 0.35
+                maxRate: 0.35,
             );
 
             // ✅ AÇÃO 07: Condicional parallel evaluation por population_size threshold
@@ -238,7 +267,7 @@ final class RunGeneticAlgorithm
                 [
                     new LNSRepairAdapter($repairOperator, $scheduleData),
                     new RegretInsertionOperator($scheduleData),
-                ]
+                ],
             );
 
             $alnsAcceptance = new StrictScoreImprovementAcceptance();
@@ -247,7 +276,7 @@ final class RunGeneticAlgorithm
                 new LandscapeAnalyzer(),
                 new LandscapeDetector(),
                 new LandscapeResponseStrategy(),
-                new LandscapeMemory()
+                new LandscapeMemory(),
             );
 
             $engine = new GeneticAlgorithmEngine(
@@ -267,7 +296,7 @@ final class RunGeneticAlgorithm
                 progress: $progress,
                 lnsFrequency: $baseLnsFrequency,
                 executionMetrics: $executionMetrics,
-                landscapeEngine: $landscapeEngine
+                landscapeEngine: $landscapeEngine,
             );
 
             $islandEngine->addIsland(
@@ -275,8 +304,8 @@ final class RunGeneticAlgorithm
                     $i + 1,
                     engine: $engine,
                     populationSize: $config->tamanhoPopulacao,
-                    replacement: $replacement
-                )
+                    replacement: $replacement,
+                ),
             );
 
             $metricsGlobal[] = $metrics;
@@ -293,9 +322,33 @@ final class RunGeneticAlgorithm
             'best_fitness' => $best->fitness(),
             'generation_metrics' => array_map(
                 fn ($m) => $m->generationData(),
-                $metricsGlobal
+                $metricsGlobal,
             ),
         ];
+    }
+
+    /**
+     * @return array<int, CustomConstraintData>
+     */
+    private function loadConstraintSnapshots(Horario $horario, ?int $executionId): array
+    {
+        $constraints = $this->loadActiveScheduleConstraints->execute($horario->id);
+        $snapshots = $this->constraintSolverPayloadMapper->mapCollection($constraints);
+
+        $typeBreakdown = [];
+
+        foreach ($snapshots as $snapshot) {
+            $typeBreakdown[$snapshot->type] = ($typeBreakdown[$snapshot->type] ?? 0) + 1;
+        }
+
+        Log::info('solver.custom_constraints.loaded', [
+            'horario_id' => $horario->id,
+            'execution_id' => $executionId,
+            'constraint_count' => count($snapshots),
+            'type_breakdown' => $typeBreakdown,
+        ]);
+
+        return $snapshots;
     }
 
     private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem): Cromossomo
@@ -308,7 +361,7 @@ final class RunGeneticAlgorithm
             $candidate = $problem->repairWithTelemetry(
                 $candidate,
                 reportProgress: true,
-                source: 'final_repair'
+                source: 'final_repair',
             );
 
             $result = $problem->evaluate($candidate);
@@ -338,7 +391,7 @@ final class RunGeneticAlgorithm
 
         throw new RuntimeException(sprintf(
             'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
-            $lastHardPenalty
+            $lastHardPenalty,
         ));
     }
 
@@ -348,7 +401,7 @@ final class RunGeneticAlgorithm
 
         return min(
             max(2, $configured),
-            max(2, (int) ceil(max(1, $maxGenerations) / 2))
+            max(2, (int) ceil(max(1, $maxGenerations) / 2)),
         );
     }
 }

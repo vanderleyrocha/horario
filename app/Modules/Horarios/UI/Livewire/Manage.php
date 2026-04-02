@@ -13,6 +13,7 @@ class Manage extends Component
 {
     private const ALLOWED_TABS = [
         'overview',
+        'constraints',
         'config',
         'aulas',
         'restricoes',
@@ -163,6 +164,7 @@ class Manage extends Component
     {
         return [
             'overview' => 'Visão Geral',
+            'constraints' => 'Constraints',
             'config' => 'Configuração',
             'aulas' => 'Aulas',
             'restricoes' => 'Restrições',

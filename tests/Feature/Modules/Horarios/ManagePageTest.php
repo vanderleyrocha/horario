@@ -22,7 +22,7 @@ test('authenticated users can access horarios manage page tabs', function () {
 
     $this->actingAs($user);
 
-    $tabs = ['overview', 'config', 'aulas', 'restricoes', 'algoritmo', 'diagnostico'];
+    $tabs = ['overview', 'constraints', 'config', 'aulas', 'restricoes', 'algoritmo', 'diagnostico'];
 
     foreach ($tabs as $tab) {
         $this->get(route('horarios.manage', $horario) . '?tab=' . $tab)

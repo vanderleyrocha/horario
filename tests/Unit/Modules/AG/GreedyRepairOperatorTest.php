@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\AG\Domain\Repair\Contracts\RepairHeuristicExtension;
 use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
@@ -142,6 +143,68 @@ it('aborts the repair early when no progress is made under an explicit no-progre
         ->and($telemetry['abort_reason'])->toBe('no_progress')
         ->and($telemetry['passes_without_progress'])->toBe(1)
         ->and($events)->toContain('repair_aborted');
+});
+
+it('allows repair extensions to add targets and restrict candidate slots', function (): void {
+    $chromosome = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+    ]);
+
+    $extension = new class () implements RepairHeuristicExtension {
+        public function augmentRepairTargets(Cromossomo $chromosome, ScheduleData $data): array
+        {
+            return [
+                0 => [
+                    'index' => 0,
+                    'count' => 1,
+                    'duration' => 1,
+                    'peers' => [],
+                    'violations' => ['custom_constraint'],
+                ],
+            ];
+        }
+
+        public function filterCandidateStartSlots(Gene $gene, ScheduleData $data, array $slotIds): array
+        {
+            return array_values(array_filter(
+                $slotIds,
+                static fn (int $slotId): bool => $slotId !== 2,
+            ));
+        }
+
+        public function candidateRankingPenalty(
+            Cromossomo $chromosome,
+            Gene $candidate,
+            int $sourceGeneIndex,
+            array $violationTypes,
+            ScheduleData $data,
+        ): float {
+            return $candidate->periodoDia() === 3 ? 0.0 : 50.0;
+        }
+
+        public function countTargetViolations(
+            Cromossomo $chromosome,
+            int $geneIndex,
+            array $violationTypes,
+            ScheduleData $data,
+        ): int {
+            if (! in_array('custom_constraint', $violationTypes, true)) {
+                return 0;
+            }
+
+            $gene = $chromosome->genes()[$geneIndex] ?? null;
+
+            return $gene !== null && $gene->periodoDia() === 1 ? 1 : 0;
+        }
+    };
+
+    $repair = new GreedyRepairOperator([$extension]);
+    $repaired = $repair->repair($chromosome, makeRelocationScheduleData());
+    $telemetry = $repair->lastTelemetry();
+
+    expect($repaired->genes()[0]->periodoDia())->toBe(3)
+        ->and($telemetry['repair_target_summary_before']['custom_constraint'] ?? 0)->toBe(1)
+        ->and($telemetry['relocations'])->toBe(1);
 });
 
 function makeRelocationScheduleData(): ScheduleData

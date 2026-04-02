@@ -70,6 +70,10 @@
                     @include('modules.horarios.livewire.tabs.overview')
                 @break
 
+                @case('constraints')
+                    @livewire(\App\Modules\Horarios\UI\Livewire\GerenciarConstraints::class, ['horario' => $horario], key('horarios-constraints-' . $horario->id))
+                @break
+
                 @case('config')
                     @livewire(\App\Modules\Horarios\UI\Livewire\Configurar::class, ['horario' => $horario])
                 @break

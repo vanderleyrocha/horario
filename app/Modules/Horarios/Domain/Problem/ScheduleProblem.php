@@ -16,6 +16,7 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
+use App\Modules\Horarios\Domain\Constraints\Analysis\ConstraintFeasibilityAnalyzer;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
@@ -1452,6 +1453,13 @@ final class ScheduleProblem implements GeneticProblem
                 throw new \RuntimeException($this->lastBuildFailure);
             }
 
+            if (! empty($this->cachedDiagnostics['constraint_infeasibilities'])) {
+                $first = $this->cachedDiagnostics['constraint_infeasibilities'][0];
+                $this->lastBuildFailure = $first['message'];
+
+                throw new \RuntimeException($this->lastBuildFailure);
+            }
+
             if (! empty($this->cachedDiagnostics['blocked'])) {
                 $first = $this->cachedDiagnostics['blocked'][0];
                 $this->lastBuildFailure = "Diagnostico preventivo: aula {$first['lesson_id']} tem {$first['candidate_slots']} slots viaveis para {$first['weekly_occurrences']} ocorrencias.";
@@ -1484,11 +1492,17 @@ final class ScheduleProblem implements GeneticProblem
         $structuralInfeasibilities = $this->buildStructuralInfeasibilityDiagnostics();
         $classLoadPressure = $this->buildEntityLoadPressureSummary(false);
         $professorLoadPressure = $this->buildEntityLoadPressureSummary(true);
+        $constraintFeasibility = (new ConstraintFeasibilityAnalyzer())->analyze($this->data);
+        $constraintInfeasibilities = $constraintFeasibility->blockingIssues();
+        $constraintWarnings = $constraintFeasibility->warnings();
 
         Log::info('schedule.initial_population.diagnosis', [
             'queue_size' => count($queue),
             'hardest_lessons' => array_slice($diagnostics, 0, 10),
             'structural_infeasibilities' => $structuralInfeasibilities,
+            'constraint_infeasibilities' => array_slice($constraintInfeasibilities, 0, 10),
+            'constraint_warnings' => array_slice($constraintWarnings, 0, 10),
+            'constraint_risk_contribution' => $constraintFeasibility->riskContribution(),
             'tightest_classes' => array_slice($classLoadPressure, 0, 5),
             'tightest_professors' => array_slice($professorLoadPressure, 0, 5),
         ]);
@@ -1497,6 +1511,8 @@ final class ScheduleProblem implements GeneticProblem
             'queue_size' => count($queue),
             'hardest_lessons' => array_slice($diagnostics, 0, 5),
             'structural_infeasibilities' => array_slice($structuralInfeasibilities, 0, 5),
+            'constraint_infeasibilities' => array_slice($constraintInfeasibilities, 0, 5),
+            'constraint_warnings' => array_slice($constraintWarnings, 0, 5),
         ]);
 
         $blocked = array_filter($diagnostics, static fn (array $item) => $item['candidate_slots'] < $item['weekly_occurrences']);
@@ -1505,12 +1521,21 @@ final class ScheduleProblem implements GeneticProblem
             'diagnostics' => $diagnostics,
             'blocked' => $blocked,
             'structural_infeasibilities' => $structuralInfeasibilities,
+            'constraint_infeasibilities' => $constraintInfeasibilities,
+            'constraint_warnings' => $constraintWarnings,
             'tightest_classes' => $classLoadPressure,
             'tightest_professors' => $professorLoadPressure,
         ];
 
         if (! empty($structuralInfeasibilities)) {
             $first = $structuralInfeasibilities[0];
+            $this->lastBuildFailure = $first['message'];
+
+            throw new \RuntimeException($this->lastBuildFailure);
+        }
+
+        if (! empty($constraintInfeasibilities)) {
+            $first = $constraintInfeasibilities[0];
             $this->lastBuildFailure = $first['message'];
 
             throw new \RuntimeException($this->lastBuildFailure);
