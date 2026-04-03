@@ -6,6 +6,8 @@ use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessWeights;
 use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
+use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
@@ -42,7 +44,60 @@ it('retries the initial population build when the quality gate rejects the candi
 
     expect($progress->stages())->toContain('quality_gate_rejected')
         ->and($rejectedPayloads)->toHaveCount($rejectedPayloads[0]['attempt_limit'] ?? 0)
-        ->and($rejectedPayloads[0]['max_hard_penalty'])->toBe(12.0);
+        ->and($rejectedPayloads[0]['max_hard_penalty'])->toBe(12.0)
+        ->and($rejectedPayloads[0]['decision'] ?? null)->toBe('rejected')
+        ->and($rejectedPayloads[0])->toHaveKey('dominant_reason')
+        ->and($rejectedPayloads[0])->toHaveKey('supporting_signals');
+});
+
+it('does not use score as rejection reason when hard thresholds are the actual gate criteria', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 20.0,
+        softPenalty: 0.0,
+    );
+
+    $candidate = new Cromossomo([
+        new Gene(1, 10, 20, 31, 1, 1, 1),
+    ]);
+
+    $qualityGate = scheduleProblemInvokePrivate($problem, 'evaluateInitialPopulationQualityGate', [
+        $candidate,
+        1,
+        1,
+        ['hard_conflict_allocations' => 0],
+        false,
+    ]);
+
+    expect($qualityGate['passes'])->toBeFalse()
+        ->and($qualityGate['rejection_reasons'])->toContain('hard_penalty_above_limit')
+        ->and($qualityGate['rejection_reasons'])->not->toContain('score_below_viable_threshold')
+        ->and($qualityGate['decision'])->toBe('rejected')
+        ->and($qualityGate['dominant_reason'])->toBe('hard_penalty_above_limit')
+        ->and($qualityGate['dominant_rejection_reason'])->toBe('hard_penalty_above_limit')
+        ->and($qualityGate['supporting_signals']['score_below_viable_threshold'] ?? null)->toBeTrue();
+});
+
+it('identifies hard conflicts as dominant rejection reason when conflict excess is the strongest blocker', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 13.0,
+        softPenalty: 0.0,
+    );
+
+    $candidate = new Cromossomo([
+        new Gene(1, 10, 20, 31, 1, 1, 1),
+    ]);
+
+    $qualityGate = scheduleProblemInvokePrivate($problem, 'evaluateInitialPopulationQualityGate', [
+        $candidate,
+        1,
+        10,
+        ['hard_conflict_allocations' => 10],
+        false,
+    ]);
+
+    expect($qualityGate['passes'])->toBeFalse()
+        ->and($qualityGate['rejection_reasons'])->toContain('hard_penalty_above_limit', 'hard_conflicts_above_limit')
+        ->and($qualityGate['dominant_rejection_reason'])->toBe('hard_conflicts_above_limit');
 });
 
 it('reduces the attempt budget adaptively after repeated degraded builds', function (): void {

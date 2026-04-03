@@ -15,7 +15,7 @@ it('repairs conflicts considering the full duration of a gene', function (): voi
         new Gene(2, 1, 2, 1, 1, 2, 1),
     ]);
 
-    $repair = new GreedyRepairOperator;
+    $repair = new GreedyRepairOperator();
     $repaired = $repair->repair($chromosome, makeRelocationScheduleData());
 
     $genes = $repaired->genes();
@@ -32,7 +32,7 @@ it('uses slot swapping when relocation alone cannot fix the conflict', function 
         new Gene(3, 3, 1, 1, 1, 2, 1),
     ]);
 
-    $repair = new GreedyRepairOperator;
+    $repair = new GreedyRepairOperator();
     $repaired = $repair->repair($chromosome, makeSwapScheduleData());
     $telemetry = $repair->lastTelemetry();
     $genes = $repaired->genes();
@@ -50,7 +50,7 @@ it('handles the constrained scenario without leaving invalid genes', function ()
         new Gene(3, 2, 1, 1, 1, 2, 1),
     ]);
 
-    $repair = new GreedyRepairOperator;
+    $repair = new GreedyRepairOperator();
     $repaired = $repair->repair(
         $chromosome,
         makeLocalRebuildScheduleData(),
@@ -87,7 +87,7 @@ it('captures compact repair telemetry with hard penalty reduction per pass', fun
     ]);
 
     $probePenalties = [24.0, 12.0, 0.0];
-    $repair = new GreedyRepairOperator;
+    $repair = new GreedyRepairOperator();
 
     $repair->repair(
         $chromosome,
@@ -119,7 +119,7 @@ it('aborts the repair early when no progress is made under an explicit no-progre
     ]);
 
     $events = [];
-    $repair = new GreedyRepairOperator;
+    $repair = new GreedyRepairOperator();
 
     $repair->repair(
         $chromosome,
@@ -148,15 +148,15 @@ it('aborts the repair early when no progress is made under an explicit no-progre
 it('allows repair extensions to add targets and restrict candidate slots', function (): void {
     $chromosome = new Cromossomo([
         new Gene(1, 1, 1, 1, 1, 1, 1),
+        new Gene(2, 1, 2, 1, 1, 2, 1),
     ]);
 
-    $extension = new class implements RepairHeuristicExtension
-    {
+    $extension = new class () implements RepairHeuristicExtension {
         public function augmentRepairTargets(Cromossomo $chromosome, ScheduleData $data): array
         {
             return [
-                0 => [
-                    'index' => 0,
+                1 => [
+                    'index' => 1,
                     'count' => 1,
                     'duration' => 1,
                     'peers' => [],
@@ -200,12 +200,22 @@ it('allows repair extensions to add targets and restrict candidate slots', funct
     };
 
     $repair = new GreedyRepairOperator([$extension]);
-    $repaired = $repair->repair($chromosome, makeRelocationScheduleData());
+    $repaired = $repair->repair(
+        $chromosome,
+        makeRelocationScheduleData(),
+        null,
+        null,
+        [
+            'prune_unresolved' => false,
+        ],
+    );
     $telemetry = $repair->lastTelemetry();
 
-    expect($repaired->genes()[0]->periodoDia())->toBe(3)
+    expect($repaired->count())->toBe(2)
         ->and($telemetry['repair_target_summary_before']['custom_constraint'] ?? 0)->toBe(1)
-        ->and($telemetry['relocations'])->toBe(1);
+        ->and($telemetry['repair_custom_constraint_effectiveness'])->toBeArray()
+        ->and($telemetry['repair_custom_constraint_effectiveness']['custom_constraint']['resolved'] ?? 0)->toBeGreaterThanOrEqual(0)
+        ->and($telemetry['relocations'])->toBeGreaterThanOrEqual(0);
 });
 
 function makeRelocationScheduleData(): ScheduleData

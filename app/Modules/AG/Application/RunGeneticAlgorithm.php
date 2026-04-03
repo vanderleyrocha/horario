@@ -11,6 +11,7 @@ use App\Modules\AG\Domain\Evolution\IslandModel\BestIndividualsMigration;
 use App\Modules\AG\Domain\Evolution\IslandModel\Island;
 use App\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine;
 use App\Modules\AG\Domain\Evolution\IslandModel\IslandProfile;
+use App\Modules\AG\Domain\Evolution\IslandModel\ProfileAwareBestIndividualsMigration;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessWeights;
 use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
@@ -78,7 +79,6 @@ use App\Modules\Horarios\Domain\Evaluation\SoftRules\WindowPenaltyRule;
 use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
 use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 final class RunGeneticAlgorithm
 {
@@ -151,9 +151,13 @@ final class RunGeneticAlgorithm
             rules: $fitnessRules,
         );
 
-        $repairOperator = new GreedyRepairOperator([
-            new CustomConstraintRepairExtension(),
-        ]);
+        $repairExtensions = [];
+
+        if ((bool) config('ag.initial_population.custom_constraint_repair_extension_enabled', true)) {
+            $repairExtensions[] = new CustomConstraintRepairExtension();
+        }
+
+        $repairOperator = new GreedyRepairOperator($repairExtensions);
 
         $problem = new ScheduleProblem(
             data: $scheduleData,
@@ -191,9 +195,21 @@ final class RunGeneticAlgorithm
             minEntropy: (float) config('ag.termination_min_entropy', 0.10),
         );
 
+        $migrationInterval = max(1, (int) config('ag.migration.interval', config('ag.migration_interval', 5)));
+        $migrationStrategy = (string) config('ag.migration.strategy', 'profile_aware_best');
+
+        $migrationPolicy = match ($migrationStrategy) {
+            'best' => new BestIndividualsMigration(2),
+            default => new ProfileAwareBestIndividualsMigration([
+                IslandProfile::Conservative->value => max(1, (int) config('ag.migration.profile_aware.conservative_migrants', 1)),
+                IslandProfile::Balanced->value => max(1, (int) config('ag.migration.profile_aware.balanced_migrants', 2)),
+                IslandProfile::Exploratory->value => max(1, (int) config('ag.migration.profile_aware.exploratory_migrants', 3)),
+            ]),
+        };
+
         $islandEngine = new IslandModelEngine(
-            migrationPolicy: new BestIndividualsMigration(2),
-            migrationInterval: 5,
+            migrationPolicy: $migrationPolicy,
+            migrationInterval: $migrationInterval,
         );
 
         $baseLnsFrequency = $this->resolveBaseLnsFrequency($config->numeroGeracoes);
@@ -317,6 +333,7 @@ final class RunGeneticAlgorithm
                     engine: $engine,
                     populationSize: $config->tamanhoPopulacao,
                     replacement: $replacement,
+                    profile: $islandProfile,
                 ),
             );
 
@@ -341,11 +358,12 @@ final class RunGeneticAlgorithm
         $islandEngine->setExecutionId($executionId);
 
         $best = $islandEngine->run($config->numeroGeracoes);
-        $best = $this->finalizeBestSolution($best, $problem);
+        $finalResult = $this->finalizeBestSolution($best, $problem);
 
         return [
-            'best' => $best,
-            'best_fitness' => $best->fitness(),
+            'best' => $finalResult['candidate'],
+            'best_fitness' => $finalResult['candidate']->fitness(),
+            'viable' => $finalResult['viable'],
             'generation_metrics' => array_map(
                 fn ($m) => $m->generationData(),
                 $metricsGlobal,
@@ -377,9 +395,14 @@ final class RunGeneticAlgorithm
         return $snapshots;
     }
 
-    private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem): Cromossomo
+    /**
+     * @return array{candidate: Cromossomo, viable: bool}
+     */
+    private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem): array
     {
         $candidate = $best->copy();
+        $bestCandidate = $best->copy();
+        $bestHardPenalty = INF;
         $attempts = 3;
         $lastHardPenalty = INF;
 
@@ -394,6 +417,11 @@ final class RunGeneticAlgorithm
             $lastHardPenalty = $result->hardPenalty();
             $repairTelemetry = $problem->lastRepairTelemetry();
 
+            if ($result->hardPenalty() < $bestHardPenalty) {
+                $bestHardPenalty = $result->hardPenalty();
+                $bestCandidate = $candidate->copy();
+            }
+
             if ($result->hardPenalty() <= 0.0 && $problem->isFeasible($candidate)) {
                 Log::info('solver.final_repair_succeeded', [
                     'attempt' => $attempt,
@@ -403,7 +431,7 @@ final class RunGeneticAlgorithm
                     'repair' => $repairTelemetry,
                 ]);
 
-                return $candidate;
+                return ['candidate' => $candidate, 'viable' => true];
             }
 
             Log::warning('solver.final_repair_attempt_failed', [
@@ -415,10 +443,14 @@ final class RunGeneticAlgorithm
             ]);
         }
 
-        throw new RuntimeException(sprintf(
-            'Solver finalizou sem solucao viavel apos reparo final (hard_penalty=%.4f).',
-            $lastHardPenalty,
-        ));
+        Log::critical('solver.final_repair_partial_result', [
+            'hard_penalty' => $bestHardPenalty < INF ? $bestHardPenalty : $lastHardPenalty,
+            'score' => $bestCandidate->fitness(),
+            'attempts' => $attempts,
+            'note' => 'Persistindo melhor individuo disponivel com hard_penalty > 0. Verificar violacoes de custom constraints.',
+        ]);
+
+        return ['candidate' => $bestCandidate, 'viable' => false];
     }
 
     private function resolveBaseLnsFrequency(int $maxGenerations): int

@@ -18,6 +18,7 @@ use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\AG\Support\Exceptions\ExecutionCancelledException;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Constraints\Analysis\ConstraintFeasibilityAnalyzer;
+use App\Modules\Horarios\Domain\Problem\DTO\InitialQualityGateExplainability;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
@@ -236,6 +237,19 @@ final class ScheduleProblem implements GeneticProblem
         'exploratory' => ['success' => 0, 'attempts' => 0],
     ];
 
+    /**
+     * @var array<string, array{success: int, attempts: int}>
+     */
+    private array $constructorStrategyHistory = [
+        'difficulty_default' => ['success' => 0, 'attempts' => 0],
+        'critical_professor_first' => ['success' => 0, 'attempts' => 0],
+        'mandatory_blocks_first' => ['success' => 0, 'attempts' => 0],
+    ];
+
+    private string $currentConstructorStrategy = 'difficulty_default';
+
+    private string $currentConstructorReason = 'default_order';
+
     // ─── Melhoria 1: salvage de tentativas fracassadas ──────────────────────
 
     /** Genes livres de conflito da melhor tentativa rejeitada até o momento. */
@@ -270,6 +284,9 @@ final class ScheduleProblem implements GeneticProblem
         $this->currentInitialPopulationQualityGatePasses = 0;
         $this->currentInitialPopulationQualityGateRejections = 0;
         $queue = $this->buildPlacementQueue();
+        [$queue, $constructorDecision] = $this->applyConstructorPortfolio($queue);
+        $this->currentConstructorStrategy = $constructorDecision['strategy'];
+        $this->currentConstructorReason = $constructorDecision['reason'];
         $bestRejectedAttempt = null;
         $this->currentBuildAttemptLimit = $this->resolveAdaptiveBuildAttemptLimit();
 
@@ -330,6 +347,8 @@ final class ScheduleProblem implements GeneticProblem
                 'attempt_limit' => $this->currentBuildAttemptLimit,
                 'attempt_started_at' => $attemptStartedAt,
                 'rcl_sizes' => [],
+                'constructor_strategy' => $this->currentConstructorStrategy,
+                'constructor_reason' => $this->currentConstructorReason,
             ];
 
             Log::info('schedule.initial_population.grasp.start', $telemetry);
@@ -340,6 +359,8 @@ final class ScheduleProblem implements GeneticProblem
                 'alpha_policy' => $telemetry['alpha_profile'],
                 'alpha_reason' => $telemetry['alpha_reason'],
                 'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
+                'constructor_strategy' => $telemetry['constructor_strategy'],
+                'constructor_reason' => $telemetry['constructor_reason'],
                 'queue_size' => count($queue),
                 'attempt_limit' => $this->currentBuildAttemptLimit,
                 'allocations' => 0,
@@ -467,6 +488,8 @@ final class ScheduleProblem implements GeneticProblem
                         'alpha_reason' => $telemetry['alpha_reason'],
                         'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
                         'alpha_impact' => $this->alphaImpactSummary($telemetry),
+                        'constructor_strategy' => $telemetry['constructor_strategy'],
+                        'constructor_reason' => $telemetry['constructor_reason'],
                         'queue_size' => count($queue),
                         'attempt_limit' => $this->currentBuildAttemptLimit,
                         'allocations' => $telemetry['allocations'],
@@ -503,6 +526,7 @@ final class ScheduleProblem implements GeneticProblem
 
                     // Melhoria 2: registra sucesso no portfólio de alpha profiles
                     $this->recordAlphaProfileOutcome($telemetry['alpha_profile'], true);
+                    $this->recordConstructorStrategyOutcome($telemetry['constructor_strategy'], true);
 
                     return $candidate;
                 }
@@ -515,12 +539,15 @@ final class ScheduleProblem implements GeneticProblem
                     'soft_penalty' => $qualityGate['soft_penalty'],
                     'score' => $qualityGate['score'],
                     'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                    'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
+                    'rejection_reasons' => $qualityGate['rejection_reasons'],
                     'repair_skipped' => $repairSkipped,
                     'message' => $this->lastBuildFailure,
                 ]);
 
                 // Melhoria 2: registra falha no portfólio de alpha profiles
                 $this->recordAlphaProfileOutcome($telemetry['alpha_profile'], false);
+                $this->recordConstructorStrategyOutcome($telemetry['constructor_strategy'], false);
 
                 // Melhoria 1: tenta extrair gene salvageable desta tentativa fracassada
                 $this->updateSalvageFromCandidate($candidate, (float) $qualityGate['hard_penalty'], count($queue));
@@ -551,7 +578,9 @@ final class ScheduleProblem implements GeneticProblem
                     'viable' => $qualityGate['viable'],
                     'viable_score_threshold' => $qualityGate['viable_score_threshold'],
                     'repair_skipped' => $repairSkipped,
+                    'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
                     'rejection_reasons' => $qualityGate['rejection_reasons'],
+                    'supporting_signals' => $qualityGate['supporting_signals'],
                     'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
                 ]);
 
@@ -569,8 +598,12 @@ final class ScheduleProblem implements GeneticProblem
                     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                     'viable' => $qualityGate['viable'],
                     'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                    'decision' => $qualityGate['decision'],
+                    'dominant_reason' => $qualityGate['dominant_reason'],
                     'repair_skipped' => $repairSkipped,
+                    'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
                     'rejection_reasons' => $qualityGate['rejection_reasons'],
+                    'supporting_signals' => $qualityGate['supporting_signals'],
                     'message' => $this->lastBuildFailure,
                 ]);
             } else {
@@ -600,6 +633,8 @@ final class ScheduleProblem implements GeneticProblem
                 'alpha_reason' => $telemetry['alpha_reason'],
                 'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
                 'alpha_impact' => $this->alphaImpactSummary($telemetry),
+                'constructor_strategy' => $telemetry['constructor_strategy'],
+                'constructor_reason' => $telemetry['constructor_reason'],
                 'elapsed_ms' => $this->attemptElapsedMs($telemetry),
                 'allocations' => $telemetry['allocations'],
                 'queue_size' => $telemetry['queue_size'],
@@ -619,6 +654,8 @@ final class ScheduleProblem implements GeneticProblem
                 'alpha_reason' => $telemetry['alpha_reason'],
                 'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
                 'alpha_impact' => $this->alphaImpactSummary($telemetry),
+                'constructor_strategy' => $telemetry['constructor_strategy'],
+                'constructor_reason' => $telemetry['constructor_reason'],
                 'queue_size' => count($queue),
                 'attempt_limit' => $this->currentBuildAttemptLimit,
                 'allocations' => $telemetry['allocations'],
@@ -691,6 +728,10 @@ final class ScheduleProblem implements GeneticProblem
                 'hard_penalty' => $qualityGate['hard_penalty'],
                 'soft_penalty' => $qualityGate['soft_penalty'],
                 'fitness_score' => $qualityGate['score'],
+                'decision' => $qualityGate['decision'],
+                'dominant_reason' => $qualityGate['dominant_reason'],
+                'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
+                'rejection_reasons' => $qualityGate['rejection_reasons'],
                 'message' => 'Seed reutilizado nao passou no quality gate.',
             ]);
         }
@@ -769,7 +810,9 @@ final class ScheduleProblem implements GeneticProblem
             'soft_penalty' => $qualityGate['soft_penalty'],
             'score' => $qualityGate['score'],
             'hard_conflicts' => $hardConflicts,
+            'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
             'rejection_reasons' => $qualityGate['rejection_reasons'],
+            'supporting_signals' => $qualityGate['supporting_signals'],
         ]);
 
         $this->reportInitialPopulationProgress([
@@ -779,6 +822,10 @@ final class ScheduleProblem implements GeneticProblem
             'hard_penalty' => $qualityGate['hard_penalty'],
             'soft_penalty' => $qualityGate['soft_penalty'],
             'fitness_score' => $qualityGate['score'],
+            'decision' => $qualityGate['decision'],
+            'dominant_reason' => $qualityGate['dominant_reason'],
+            'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
+            'rejection_reasons' => $qualityGate['rejection_reasons'],
             'message' => 'Seed historico nao passou no quality gate atual.',
         ]);
 
@@ -1362,6 +1409,8 @@ final class ScheduleProblem implements GeneticProblem
                     'execution_id' => $this->executionId,
                     'attempt' => $telemetry['attempt'],
                     'alpha' => $telemetry['alpha'],
+                    'constructor_strategy' => $telemetry['constructor_strategy'],
+                    'constructor_reason' => $telemetry['constructor_reason'],
                     'allocations' => $telemetry['allocations'],
                     'queue_size' => $telemetry['queue_size'],
                     'remaining_queue' => max(0, $telemetry['queue_size'] - $telemetry['allocations']),
@@ -1377,6 +1426,8 @@ final class ScheduleProblem implements GeneticProblem
                     'stage' => 'grasp_progress',
                     'attempt' => $telemetry['attempt'],
                     'alpha' => $telemetry['alpha'],
+                    'constructor_strategy' => $telemetry['constructor_strategy'],
+                    'constructor_reason' => $telemetry['constructor_reason'],
                     'allocations' => $telemetry['allocations'],
                     'queue_size' => $telemetry['queue_size'],
                     'forced_allocations' => $telemetry['forced_allocations'],
@@ -2962,6 +3013,7 @@ final class ScheduleProblem implements GeneticProblem
             'invalid_genes_after' => $telemetry['invalid_genes_after'] ?? null,
             'repair_target_summary_before' => $telemetry['repair_target_summary_before'] ?? null,
             'repair_target_summary_after' => $telemetry['repair_target_summary_after'] ?? null,
+            'repair_custom_constraint_effectiveness' => $telemetry['repair_custom_constraint_effectiveness'] ?? null,
             'unrepairable_workload_classes' => $telemetry['unrepairable_workload_classes'] ?? [],
             'relocations' => $telemetry['relocations'] ?? 0,
             'swaps' => $telemetry['swaps'] ?? 0,
@@ -2976,6 +3028,9 @@ final class ScheduleProblem implements GeneticProblem
                 'relocations' => $pass['relocations'],
                 'swaps' => $pass['swaps'],
                 'local_rebuilds' => $pass['local_rebuilds'],
+                'repair_target_summary_before' => $pass['repair_target_summary_before'] ?? null,
+                'repair_target_summary_after' => $pass['repair_target_summary_after'] ?? null,
+                'repair_custom_constraint_effectiveness' => $pass['repair_custom_constraint_effectiveness'] ?? null,
             ], $telemetry['passes'] ?? []),
         ]);
     }
@@ -3010,32 +3065,33 @@ final class ScheduleProblem implements GeneticProblem
             ? self::INITIAL_QUALITY_GATE_RELAXED_VIABLE_SCORE_THRESHOLD
             : self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD;
 
+        $hardConflictAllocations = (int) ($telemetry['hard_conflict_allocations'] ?? 0);
+        $hardPenaltyWithinLimit = $result->hardPenalty() <= $thresholds['max_hard_penalty'];
+        $hardConflictsWithinLimit = $hardConflictAllocations <= $thresholds['max_hard_conflict_allocations'];
         $fitnessScoreViable = $result->score() >= $viableScoreThreshold;
-        $rejectionReasons = [];
-
-        if ($result->hardPenalty() > $thresholds['max_hard_penalty']) {
-            $rejectionReasons[] = 'hard_penalty_above_limit';
-        }
-
-        if (($telemetry['hard_conflict_allocations'] ?? 0) > $thresholds['max_hard_conflict_allocations']) {
-            $rejectionReasons[] = 'hard_conflicts_above_limit';
-        }
-
-        if (! $fitnessScoreViable) {
-            $rejectionReasons[] = 'score_below_viable_threshold';
-        }
+        $passes = $hardPenaltyWithinLimit && $hardConflictsWithinLimit;
+        $explainability = InitialQualityGateExplainability::fromThresholdComparison(
+            passes: $passes,
+            hardPenalty: $result->hardPenalty(),
+            maxHardPenalty: (float) $thresholds['max_hard_penalty'],
+            hardConflictAllocations: $hardConflictAllocations,
+            maxHardConflictAllocations: (int) $thresholds['max_hard_conflict_allocations'],
+            scoreBelowViableThreshold: ! $fitnessScoreViable,
+        );
 
         $qualityGate = [
-            'passes' => $result->hardPenalty() <= $thresholds['max_hard_penalty']
-                && ($telemetry['hard_conflict_allocations'] ?? 0) <= $thresholds['max_hard_conflict_allocations'],
+            'passes' => $passes,
             'hard_penalty' => $result->hardPenalty(),
             'soft_penalty' => $result->softPenalty(),
             'score' => $result->score(),
             'max_hard_penalty' => $thresholds['max_hard_penalty'],
             'max_hard_conflict_allocations' => $thresholds['max_hard_conflict_allocations'],
+            'hard_conflict_allocations' => $hardConflictAllocations,
             'viable' => $fitnessScoreViable,
             'viable_score_threshold' => $viableScoreThreshold,
-            'rejection_reasons' => $rejectionReasons,
+            ...$explainability->toArray(),
+            // Backward compatibility with existing logs/UI/tests.
+            'dominant_rejection_reason' => $explainability->dominantReason(),
             'relaxed_phase' => $isRelaxedPhase,
         ];
 
@@ -3060,10 +3116,12 @@ final class ScheduleProblem implements GeneticProblem
     {
         $reasons = $qualityGate['rejection_reasons'] ?? [];
         $reasonSummary = $reasons === [] ? 'motivo_nao_identificado' : implode(', ', $reasons);
+        $dominantReason = $qualityGate['dominant_rejection_reason'] ?? 'nao_informado';
 
         return sprintf(
-            'Quality gate rejeitou tentativa %d: motivos=%s; hard_penalty=%.4f (limite=%.4f), hard_conflicts=%d (limite=%d), score=%.4f (faixa viavel >= %.1f).',
+            'Quality gate rejeitou tentativa %d: motivo_dominante=%s; motivos=%s; hard_penalty=%.4f (limite=%.4f), hard_conflicts=%d (limite=%d), score=%.4f (faixa viavel >= %.1f).',
             $attempt,
+            $dominantReason,
             $reasonSummary,
             $qualityGate['hard_penalty'],
             $qualityGate['max_hard_penalty'],
@@ -3253,6 +3311,7 @@ final class ScheduleProblem implements GeneticProblem
             'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
             'repair_target_summary_before' => $telemetry['repair_target_summary_before'] ?? null,
             'repair_target_summary_after' => $telemetry['repair_target_summary_after'] ?? null,
+            'repair_custom_constraint_effectiveness' => $telemetry['repair_custom_constraint_effectiveness'] ?? null,
             'unrepairable_workload_classes' => $telemetry['unrepairable_workload_classes'] ?? [],
             'pass_count' => count($telemetry['passes'] ?? []),
         ];
@@ -3282,6 +3341,8 @@ final class ScheduleProblem implements GeneticProblem
             'alpha_history_stress_score' => (float) ($telemetry['alpha_history_stress_score'] ?? 0.0),
             'alpha_queue_pressure_score' => (float) ($telemetry['alpha_queue_pressure_score'] ?? 0.0),
             'alpha_impact' => $this->alphaImpactSummary($telemetry),
+            'constructor_strategy' => (string) ($telemetry['constructor_strategy'] ?? 'difficulty_default'),
+            'constructor_reason' => (string) ($telemetry['constructor_reason'] ?? 'unknown'),
             'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
         ], $extra);
 
@@ -3402,6 +3463,9 @@ final class ScheduleProblem implements GeneticProblem
                 'class_available_days' => $lesson['class_available_days'],
             ], $hardestLessons),
             'hybrid_cp_assignment' => $hybridSignal,
+            'constructor_strategy' => $this->currentConstructorStrategy,
+            'constructor_reason' => $this->currentConstructorReason,
+            'constructor_strategy_history' => $this->constructorStrategyHistory,
             'likely_bottlenecks' => array_values(array_unique($likelyBottlenecks)),
             'optimization_suggestions' => array_values(array_unique($optimizationSuggestions)),
         ];
@@ -3566,6 +3630,131 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         return $bestProfile;
+    }
+
+    /**
+     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @return array{0: array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>, 1: array{strategy: string, reason: string}}
+     */
+    private function applyConstructorPortfolio(array $queue): array
+    {
+        if (! (bool) config('ag.initial_population.constructor_portfolio_enabled', true) || $queue === []) {
+            return [$queue, ['strategy' => 'difficulty_default', 'reason' => 'portfolio_disabled_or_empty_queue']];
+        }
+
+        $preferredStrategies = match ($this->islandProfile) {
+            IslandProfile::Conservative => ['mandatory_blocks_first', 'difficulty_default', 'critical_professor_first'],
+            IslandProfile::Exploratory => ['critical_professor_first', 'difficulty_default', 'mandatory_blocks_first'],
+            IslandProfile::Balanced => ['difficulty_default', 'critical_professor_first', 'mandatory_blocks_first'],
+        };
+
+        // Usa a melhor taxa historica quando houver evidencias suficientes para o perfil.
+        $bestHistoryStrategy = null;
+        $bestHistoryRate = -1.0;
+
+        foreach ($preferredStrategies as $strategy) {
+            $history = $this->constructorStrategyHistory[$strategy] ?? ['success' => 0, 'attempts' => 0];
+
+            if (($history['attempts'] ?? 0) < 3) {
+                continue;
+            }
+
+            $rate = ($history['attempts'] ?? 0) > 0
+                ? ((int) $history['success']) / ((int) $history['attempts'])
+                : 0.0;
+
+            if ($rate > $bestHistoryRate) {
+                $bestHistoryRate = $rate;
+                $bestHistoryStrategy = $strategy;
+            }
+        }
+
+        $strategy = $bestHistoryStrategy ?? $preferredStrategies[0];
+        $reason = $bestHistoryStrategy !== null ? 'portfolio_history_bias' : 'island_profile_default';
+
+        return match ($strategy) {
+            'critical_professor_first' => [$this->reorderQueueCriticalProfessorFirst($queue), ['strategy' => $strategy, 'reason' => $reason]],
+            'mandatory_blocks_first' => [$this->reorderQueueMandatoryBlocksFirst($queue), ['strategy' => $strategy, 'reason' => $reason]],
+            default => [$queue, ['strategy' => 'difficulty_default', 'reason' => $reason]],
+        };
+    }
+
+    /**
+     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
+     */
+    private function reorderQueueCriticalProfessorFirst(array $queue): array
+    {
+        usort($queue, function (array $left, array $right): int {
+            $leftLesson = $left['lesson'];
+            $rightLesson = $right['lesson'];
+
+            $leftCriticalPressure = round(
+                $this->totalDemandForProfessor($leftLesson->professorId) / max(1, $this->availabilitySlotCount($leftLesson->professorId, true)),
+                4,
+            );
+            $rightCriticalPressure = round(
+                $this->totalDemandForProfessor($rightLesson->professorId) / max(1, $this->availabilitySlotCount($rightLesson->professorId, true)),
+                4,
+            );
+
+            return [
+                -$leftCriticalPressure,
+                -$leftLesson->weeklyOccurrences,
+                -$leftLesson->requiredSlots,
+                $left['candidate_count'],
+                $leftLesson->id,
+            ] <=> [
+                -$rightCriticalPressure,
+                -$rightLesson->weeklyOccurrences,
+                -$rightLesson->requiredSlots,
+                $right['candidate_count'],
+                $rightLesson->id,
+            ];
+        });
+
+        return $queue;
+    }
+
+    /**
+     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
+     */
+    private function reorderQueueMandatoryBlocksFirst(array $queue): array
+    {
+        usort($queue, static function (array $left, array $right): int {
+            $leftLesson = $left['lesson'];
+            $rightLesson = $right['lesson'];
+
+            return [
+                -($leftLesson->requiresConsecutive ? 1 : 0),
+                -$leftLesson->requiredSlots,
+                -$leftLesson->weeklyOccurrences,
+                $left['candidate_count'],
+                $leftLesson->id,
+            ] <=> [
+                -($rightLesson->requiresConsecutive ? 1 : 0),
+                -$rightLesson->requiredSlots,
+                -$rightLesson->weeklyOccurrences,
+                $right['candidate_count'],
+                $rightLesson->id,
+            ];
+        });
+
+        return $queue;
+    }
+
+    private function recordConstructorStrategyOutcome(string $strategy, bool $success): void
+    {
+        if (! isset($this->constructorStrategyHistory[$strategy])) {
+            return;
+        }
+
+        $this->constructorStrategyHistory[$strategy]['attempts']++;
+
+        if ($success) {
+            $this->constructorStrategyHistory[$strategy]['success']++;
+        }
     }
 
     // ─── Melhoria 1: salvage de tentativas fracassadas ────────────────────────
@@ -3734,6 +3923,8 @@ final class ScheduleProblem implements GeneticProblem
             'attempt_limit' => $this->currentBuildAttemptLimit,
             'attempt_started_at' => microtime(true),
             'rcl_sizes' => [],
+            'constructor_strategy' => $this->currentConstructorStrategy,
+            'constructor_reason' => $this->currentConstructorReason,
         ];
 
         if (! $this->constructWithGrasp($remainingQueue, $alpha, $assignedGenes, $teacherBusy, $classBusy, $telemetry)) {
@@ -3774,6 +3965,10 @@ final class ScheduleProblem implements GeneticProblem
         $this->reportInitialPopulationProgress([
             'stage' => 'salvage_rejected',
             'hard_penalty' => $qualityGate['hard_penalty'],
+            'decision' => $qualityGate['decision'],
+            'dominant_reason' => $qualityGate['dominant_reason'],
+            'dominant_rejection_reason' => $qualityGate['dominant_rejection_reason'],
+            'rejection_reasons' => $qualityGate['rejection_reasons'],
             'queue_size' => count($queue),
         ]);
 
@@ -3801,21 +3996,27 @@ final class ScheduleProblem implements GeneticProblem
             return;
         }
 
-        $cached = cache()->get("ag.nogoods.{$horarioId}");
+        $loadedKeys = [];
 
-        if (! is_array($cached)) {
-            return;
-        }
+        foreach ($this->resolveNogoodCacheKeys($horarioId) as $cacheKey) {
+            $cached = cache()->get($cacheKey);
 
-        foreach (['lesson_slot', 'professor_slot', 'class_slot'] as $type) {
-            if (! is_array($cached[$type] ?? null)) {
+            if (! is_array($cached)) {
                 continue;
             }
 
-            foreach ($cached[$type] as $key => $count) {
-                $this->initialPopulationNogoods[$type][(string) $key] =
-                    ($this->initialPopulationNogoods[$type][(string) $key] ?? 0) + (int) $count;
+            foreach (['lesson_slot', 'professor_slot', 'class_slot'] as $type) {
+                if (! is_array($cached[$type] ?? null)) {
+                    continue;
+                }
+
+                foreach ($cached[$type] as $key => $count) {
+                    $this->initialPopulationNogoods[$type][(string) $key] =
+                        ($this->initialPopulationNogoods[$type][(string) $key] ?? 0) + (int) $count;
+                }
             }
+
+            $loadedKeys[] = $cacheKey;
         }
 
         $totalLoaded = array_sum(array_map('count', $this->initialPopulationNogoods));
@@ -3827,6 +4028,7 @@ final class ScheduleProblem implements GeneticProblem
             'professor_slot_count' => count($this->initialPopulationNogoods['professor_slot']),
             'class_slot_count' => count($this->initialPopulationNogoods['class_slot']),
             'total_loaded' => $totalLoaded,
+            'cache_keys' => $loadedKeys,
         ]);
     }
 
@@ -3851,14 +4053,19 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         $capped = $this->capNogoodsForPersistence($this->initialPopulationNogoods);
-        $ttl = now()->addDays(7);
+        $ttlDays = max(1, (int) config('ag.initial_population.nogoods_signature_cache_ttl_days', 7));
+        $ttl = now()->addDays($ttlDays);
+        $cacheKeys = $this->resolveNogoodCacheKeys($horarioId);
 
-        cache()->put("ag.nogoods.{$horarioId}", $capped, $ttl);
+        foreach ($cacheKeys as $cacheKey) {
+            cache()->put($cacheKey, $capped, $ttl);
+        }
 
         Log::debug('schedule.initial_population.nogoods.persisted', [
             'execution_id' => $this->executionId,
             'horario_id' => $horarioId,
             'total_nogoods' => $totalNogoods,
+            'cache_keys' => $cacheKeys,
         ]);
     }
 
@@ -3870,7 +4077,7 @@ final class ScheduleProblem implements GeneticProblem
      */
     private function capNogoodsForPersistence(array $nogoods): array
     {
-        $maxPerType = 500;
+        $maxPerType = max(1, (int) config('ag.initial_population.nogoods_signature_max_entries_per_type', 500));
         $capped = [];
 
         foreach (['lesson_slot', 'professor_slot', 'class_slot'] as $type) {
@@ -3880,5 +4087,51 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         return $capped;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function resolveNogoodCacheKeys(int $horarioId): array
+    {
+        $keys = ["ag.nogoods.{$horarioId}"];
+
+        if (! (bool) config('ag.initial_population.nogoods_signature_enabled', true)) {
+            return $keys;
+        }
+
+        $signature = $this->scenarioSignatureForNogoods();
+
+        if ($signature !== null) {
+            $keys[] = "ag.nogoods.signature.{$signature}";
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    private function scenarioSignatureForNogoods(): ?string
+    {
+        if ($this->data->totalLessons <= 0 || $this->data->totalTimeSlots <= 0) {
+            return null;
+        }
+
+        $constraintTypeBreakdown = [];
+
+        foreach ($this->data->customConstraints as $constraint) {
+            $type = strtoupper((string) $constraint->type);
+            $constraintTypeBreakdown[$type] = ($constraintTypeBreakdown[$type] ?? 0) + 1;
+        }
+
+        ksort($constraintTypeBreakdown);
+
+        $payload = [
+            'lessons' => $this->data->totalLessons,
+            'timeslots' => $this->data->totalTimeSlots,
+            'professors' => $this->data->totalProfessors,
+            'classes' => $this->data->totalClasses,
+            'constraints' => $constraintTypeBreakdown,
+        ];
+
+        return sha1(json_encode($payload));
     }
 }

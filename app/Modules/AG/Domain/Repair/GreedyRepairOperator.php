@@ -35,7 +35,7 @@ final class GreedyRepairOperator
     private readonly array $extensions;
 
     /**
-     * @param  array<int, RepairHeuristicExtension>  $extensions
+     * @param array<int, RepairHeuristicExtension> $extensions
      */
     public function __construct(array $extensions = [])
     {
@@ -304,8 +304,8 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $baseMap
-     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $extraMap
+     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $baseMap
+     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $extraMap
      * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
      */
     private function mergeRepairTargetMaps(array $baseMap, array $extraMap): array
@@ -332,8 +332,8 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  array<int|string, mixed>  $indexMap
-     * @param  array<int, array{index:int,count:int,duration:int,peers:int[]}>  $conflicts
+     * @param array<int|string, mixed> $indexMap
+     * @param array<int, array{index:int,count:int,duration:int,peers:int[]}> $conflicts
      */
     private function accumulateConflicts(array $indexMap, Cromossomo $chromosome, array &$conflicts): void
     {
@@ -551,7 +551,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  int[]  $ignoredIndexes
+     * @param int[] $ignoredIndexes
      */
     private function findBestRelocation(
         Cromossomo $chromosome,
@@ -631,7 +631,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  int[]  $neighborhoodIndexes
+     * @param int[] $neighborhoodIndexes
      * @return int[]
      */
     private function orderNeighborhoodForRebuild(Cromossomo $chromosome, ScheduleData $data, array $neighborhoodIndexes): array
@@ -669,7 +669,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  string[]  $violationTypes
+     * @param string[] $violationTypes
      * @return array{0: float, 1: int, 2: float, 3: int}
      */
     private function buildRepairRanking(Cromossomo $chromosome, Gene $candidate, int $sourceGeneIndex, array $violationTypes): array
@@ -685,7 +685,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  string[]  $violationTypes
+     * @param string[] $violationTypes
      */
     private function extensionPenaltyForCandidate(
         Cromossomo $chromosome,
@@ -713,7 +713,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  string[]  $violationTypes
+     * @param string[] $violationTypes
      */
     private function countRemainingTargetViolations(Cromossomo $chromosome, int $geneIndex, array $violationTypes): int
     {
@@ -747,7 +747,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  string[]  $violationTypes
+     * @param string[] $violationTypes
      */
     private function isRepairTargetResolved(Cromossomo $chromosome, int $geneIndex, array $violationTypes): bool
     {
@@ -760,7 +760,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  int[]  $ignoredIndexes
+     * @param int[] $ignoredIndexes
      */
     private function isValid(Cromossomo $cromossomo, Gene $gene, ?int $sourceGeneIndex = null, array $ignoredIndexes = []): bool
     {
@@ -787,7 +787,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  int[]  $ignoredIndexes
+     * @param int[] $ignoredIndexes
      */
     private function hasExternalOccupation(
         array $indexMap,
@@ -865,12 +865,16 @@ final class GreedyRepairOperator
             'swaps' => 0,
             'local_rebuilds' => 0,
             'repair_target_summary_before' => $this->summarizeRepairTargets($repairTargets),
+            'repair_custom_constraint_effectiveness' => $this->buildCustomConstraintEffectiveness(
+                $this->summarizeRepairTargets($repairTargets),
+                $this->summarizeRepairTargets($repairTargets),
+            ),
             'unrepairable_workload_classes' => $this->detectWorkloadExceededClasses($chromosome),
         ];
     }
 
     /**
-     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
+     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $repairTargets
      * @return array<string, mixed>
      */
     private function startPassTelemetry(int $pass, Cromossomo $chromosome, array $repairTargets, ?callable $fitnessProbe): array
@@ -892,13 +896,18 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  array<string, mixed>  $passTelemetry
+     * @param array<string, mixed> $passTelemetry
      */
     private function finishPassTelemetry(array &$passTelemetry, Cromossomo $chromosome, ?callable $fitnessProbe): void
     {
         $fitness = $this->probeFitness($chromosome, $fitnessProbe);
         $passTelemetry['invalid_genes_after'] = count($this->prioritizeRepairTargets($chromosome));
         $passTelemetry['hard_penalty_after'] = $fitness['hard_penalty'] ?? null;
+        $passTelemetry['repair_target_summary_after'] = $this->summarizeRepairTargets($this->prioritizeRepairTargets($chromosome));
+        $passTelemetry['repair_custom_constraint_effectiveness'] = $this->buildCustomConstraintEffectiveness(
+            $passTelemetry['repair_target_summary_before'] ?? [],
+            $passTelemetry['repair_target_summary_after'] ?? [],
+        );
 
         if (
             isset($passTelemetry['hard_penalty_before'], $passTelemetry['hard_penalty_after'])
@@ -927,11 +936,15 @@ final class GreedyRepairOperator
         $this->lastTelemetry['aborted'] = (bool) ($this->lastTelemetry['aborted'] ?? false);
         $this->lastTelemetry['abort_reason'] = $this->lastTelemetry['abort_reason'] ?? null;
         $this->lastTelemetry['repair_target_summary_after'] = $this->summarizeRepairTargets($repairTargets);
+        $this->lastTelemetry['repair_custom_constraint_effectiveness'] = $this->buildCustomConstraintEffectiveness(
+            $this->lastTelemetry['repair_target_summary_before'] ?? [],
+            $this->lastTelemetry['repair_target_summary_after'] ?? [],
+        );
         $this->lastTelemetry['unrepairable_workload_classes'] = $this->detectWorkloadExceededClasses($chromosome);
     }
 
     /**
-     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
+     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $repairTargets
      * @return array<string, int>
      */
     private function summarizeRepairTargets(array $repairTargets): array
@@ -948,6 +961,59 @@ final class GreedyRepairOperator
         }
 
         return $summary;
+    }
+
+    /**
+     * @param array<string, int> $before
+     * @param array<string, int> $after
+     * @return array<string, mixed>
+     */
+    private function buildCustomConstraintEffectiveness(array $before, array $after): array
+    {
+        $types = [];
+
+        foreach ([array_keys($before), array_keys($after)] as $keys) {
+            foreach ($keys as $key) {
+                if (str_starts_with((string) $key, 'custom_')) {
+                    $types[] = (string) $key;
+                }
+            }
+        }
+
+        $types = array_values(array_unique($types));
+        sort($types);
+
+        $byType = [];
+        $totals = ['before' => 0, 'after' => 0, 'resolved' => 0];
+
+        foreach ($types as $type) {
+            $beforeCount = max(0, (int) ($before[$type] ?? 0));
+            $afterCount = max(0, (int) ($after[$type] ?? 0));
+            $resolved = max(0, $beforeCount - $afterCount);
+
+            $byType[$type] = [
+                'before' => $beforeCount,
+                'after' => $afterCount,
+                'resolved' => $resolved,
+                'resolution_rate' => $beforeCount > 0
+                    ? round($resolved / $beforeCount, 4)
+                    : null,
+            ];
+
+            $totals['before'] += $beforeCount;
+            $totals['after'] += $afterCount;
+            $totals['resolved'] += $resolved;
+        }
+
+        $totals['resolution_rate'] = $totals['before'] > 0
+            ? round($totals['resolved'] / $totals['before'], 4)
+            : null;
+
+        return [
+            'types' => $types,
+            'by_type' => $byType,
+            'totals' => $totals,
+        ];
     }
 
     /**
@@ -975,7 +1041,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  array<string, mixed>  $passTelemetry
+     * @param array<string, mixed> $passTelemetry
      */
     private function emitHeartbeat(?callable $progressHeartbeat, string $event, array $passTelemetry): void
     {
@@ -999,7 +1065,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param  array<string, mixed>  $passTelemetry
+     * @param array<string, mixed> $passTelemetry
      */
     private function emitProgressHeartbeat(
         ?callable $progressHeartbeat,

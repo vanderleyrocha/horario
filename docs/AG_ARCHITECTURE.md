@@ -32,7 +32,7 @@ Hoje a arquitetura cobre, de ponta a ponta:
 - análise de landscape e resposta adaptativa
 - persistência transacional da melhor solução com validação final de integridade
 - cache, banco e logs para progresso e métricas
-- integração com constraints customizadas no solver, fitness, viabilidade e preparação de repair
+- integração com constraints customizadas no solver, fitness, viabilidade e repair especializado
 - nogoods persistentes entre execuções (cache com TTL de 7 dias)
 - batch quality report da população inicial com veredito automatizado
 - perfis de ilha com parâmetros GRASP e de mutação diferenciados
@@ -255,7 +255,7 @@ O solver já recebe e aplica constraints customizadas em três grupos:
 - MUTUAL_EXCLUSION
 - TIME_PLACEMENT
 
-Além do fitness, elas também entram no diagnóstico prévio de viabilidade e na preparação de repair futuro.
+Além do fitness, elas também entram no diagnóstico prévio de viabilidade e no repair especializado durante a evolução.
 
 ### Delta Fitness
 
@@ -349,7 +349,7 @@ O GreedyRepairOperator já executa:
 - abort por falta de progresso
 - abort por orçamento de tempo
 
-### Extensão futura já preparada
+### Extensão especializada para constraints customizadas
 
 Foi introduzido um contrato de extensão:
 
@@ -362,7 +362,13 @@ Ele permite:
 - injetar penalidade de ranking
 - contar violações remanescentes específicas
 
-O módulo Horários já registra CustomConstraintRepairExtension como placeholder para repair especializado de constraints.
+O módulo Horários registra `CustomConstraintRepairExtension` com heurísticas efetivas para:
+
+- gerar targets de repair para violações de `TIME_PLACEMENT`, `MUTUAL_EXCLUSION` e `SYNC_SAME_TIMESLOT`
+- filtrar slots candidatos com base em janelas de `TIME_PLACEMENT` (REQUIRED/FORBIDDEN)
+- contar violações remanescentes customizadas no ranking interno do repair
+
+Esse comportamento roda dentro do `GreedyRepairOperator` sem acoplar regras de domínio no núcleo do AG.
 
 ## Modelo de Ilhas
 
@@ -492,7 +498,7 @@ Isso cria uma última barreira de integridade antes de gravar alocações finais
 
 ## Limitações e Riscos Atuais
 
-- repair especializado para constraints customizadas ainda é preparatório (infraestrutura existe, mas não efetivo no `GreedyRepairOperator`)
+- repair especializado para constraints customizadas já está ativo, mas ainda sem benchmark A/B dedicado por cenário
 - a quantidade de heurísticas e parâmetros cresceu bastante; calibração e diagnóstico de interações complexas são custosos sem benchmark reproduzível
 - avaliação delta fitness existe na infraestrutura, mas o ganho real de performance depende de medir cobertura real de uso nos operadores
 - a construção inicial, embora muito mais sofisticada, ainda é serial — em cenários grandes, é o principal gargalo de latência
@@ -542,11 +548,11 @@ Todas as melhorias de alto ROI para a população inicial e para o modelo de ilh
 
 O ciclo atual (Sprints 1–4 + Melhorias 1–4) foi concluído. Todas as melhorias de alta prioridade para a população inicial e para o modelo de ilhas estão implementadas e cobertas por testes. As oportunidades abaixo são o próximo horizonte natural de evolução.
 
-### A. Repair especializado para constraints customizadas (Alta viabilidade / Alto ROI)
+### A. Benchmark do repair customizado por cenário (Alta viabilidade / Alto ROI)
 
-A infraestrutura já existe (`RepairHeuristicExtension`, `CustomConstraintRepairExtension`), mas o `GreedyRepairOperator` ainda não a invoca efetivamente para constraints SYNC_SAME_TIMESLOT, MUTUAL_EXCLUSION e TIME_PLACEMENT. Ativar esse caminho pode reduzir drasticamente o custo de repair quando constraints customizadas são abundantes.
+O repair especializado para constraints customizadas já está ativo via `CustomConstraintRepairExtension`. O próximo passo é medir, com cenários reproduzíveis, o impacto em latência e convergência quando há alta densidade de constraints `SYNC_SAME_TIMESLOT`, `MUTUAL_EXCLUSION` e `TIME_PLACEMENT`.
 
-**Esforço:** Médio | **Risco:** Baixo-Médio | **ROI:** Alto
+**Esforço:** Baixo-Médio | **Risco:** Baixo | **ROI:** Alto
 
 ### B. Benchmark A/B reproduzível por cenário (Alta viabilidade / ROI operacional)
 
@@ -670,7 +676,7 @@ O foco do ciclo concluído foi a fase de construção inicial e o modelo de ilha
 
 O próximo horizonte de evolução é diferente: não se trata mais de cobrir técnicas ausentes, mas de:
 
-1. **Ativar o que está preparado** — repair especializado para constraints customizadas já tem infraestrutura; falta conectá-la efetivamente.
+1. **Medir o que foi ativado** — repair especializado para constraints customizadas já está em produção no `GreedyRepairOperator`; o próximo passo é benchmark A/B por cenário.
 2. **Medir com rigor** — benchmark reproduzível por cenário para quantificar ganho real de cada ajuste e orientar calibração.
 3. **Diversificar construtores além do alpha** — portfólio estruturalmente heterogêneo (regret puro, blocos obrigatórios first, professores críticos first) para aumentar diversidade real entre ilhas.
 4. **Reduzir latência** — construção paralela da população inicial como próximo salto de performance em cenários grandes.

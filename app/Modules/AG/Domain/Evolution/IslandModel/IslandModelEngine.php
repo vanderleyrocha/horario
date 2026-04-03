@@ -24,24 +24,25 @@ final class IslandModelEngine
 
     private ?int $executionId = null;
 
-    // 🔧 PRIORIDADE 5: Rastreamento de terminação antecipada
-    private float $previousBestFitness = -999999.0;
+    private ?float $bestFitnessEver = null;
 
-    private int $generationsSinceImprovement = 0;
+    private int $lastSignificantImprovementGeneration = 0;
 
-    /** @var array<float> */
-    private array $fitnessHistory = [];
+    /** @var array<int, array<string, mixed>> */
+    private array $stagnationWindow = [];
 
-    private const STAGNATION_THRESHOLD = 15;
+    private bool $stagnationBurstArmed = false;
 
-    private const FITNESS_DEGRADATION_THRESHOLD = -5.0;
+    private ?int $stagnationBurstStartedAtGeneration = null;
 
-    private const VIABLE_FITNESS_THRESHOLD = 50.0;
+    /** @var array<string, mixed>|null */
+    private ?array $lastStagnationEvaluation = null;
 
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
         private readonly int $migrationInterval = 20,
-    ) {}
+    ) {
+    }
 
     public function addIsland(Island $island): void
     {
@@ -119,41 +120,6 @@ final class IslandModelEngine
                 $globalPopulation = array_merge($globalPopulation, $island->population());
             }
 
-            // 🔧 PRIORIDADE 5: Detecção de terminação antecipada e restart
-            if ($globalBest !== null) {
-                $this->trackFitnessHistory($globalBest->fitness());
-
-                // Verificar terminação antecipada se viável (score >= 50)
-                if ($this->isViableSolution($globalBest)) {
-                    Log::info('Solução viável detectada! Terminando gerações antecipadamente.', [
-                        'generation' => $generation,
-                        'fitness' => $globalBest->fitness(),
-                    ]);
-                    break;  // ← Sair do loop, solução viável encontrada
-                }
-
-                // Detectar estagnação (sem melhoria por N gerações)
-                if ($this->detectStagnation($globalBest->fitness())) {
-                    Log::warning('Estagnação detectada! Acionando restart com preservação de elite.', [
-                        'generation' => $generation,
-                        'generations_without_improvement' => $this->generationsSinceImprovement,
-                    ]);
-
-                    // Trigger restart preservando 10% de elite
-                    $this->performRestartCycle($this->islands, $globalPopulation);
-                    $this->generationsSinceImprovement = 0;  // Reset contador
-                }
-
-                // Monitorar degradação de fitness (fitness piorando)
-                if ($this->detectFitnessDegradation()) {
-                    Log::info('Degradação de fitness detectada. Considerando switch de operadores ALNS.', [
-                        'generation' => $generation,
-                        'degradation_delta' => $this->calculateFitnessDelta(),
-                    ]);
-                    // Nota: O switch de operadores é feito pelo LearningHyperHeuristicController
-                }
-            }
-
             if ($generation % $this->migrationInterval === 0) {
                 $this->migrationPolicy->migrate($this->islands);
             }
@@ -229,6 +195,18 @@ final class IslandModelEngine
                     'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
                 ]);
 
+                $avgAlnsImprovement = empty($alnsImprovements)
+                    ? null
+                    : (array_sum($alnsImprovements) / count($alnsImprovements));
+
+                $stagnationDecision = $this->evaluateStagnationPolicy(
+                    generation: $generation,
+                    bestFitness: $metricsDto->bestFitness,
+                    diversity: $metricsDto->diversity,
+                    entropy: $metricsDto->entropy,
+                    avgAlnsImprovement: $avgAlnsImprovement,
+                );
+
                 Log::info('ga.islands.generation.completed', [
                     'execution_id' => $this->executionId,
                     'global_generation' => $generation,
@@ -244,128 +222,214 @@ final class IslandModelEngine
                     'operator_reward' => empty($operatorRewards) ? 0.0 : array_sum($operatorRewards) / count($operatorRewards),
                     'alns_destroy_operator' => $alnsDestroyOperator,
                     'alns_repair_operator' => $alnsRepairOperator,
-                    'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
+                    'alns_improvement' => $avgAlnsImprovement,
                     'island_best_fitness' => $islandBestFitness,
                     'migration_due' => $generation % $this->migrationInterval === 0,
+                    'stagnation_window_ready' => $stagnationDecision['window_ready'],
+                    'stagnation_triggered' => $stagnationDecision['triggered'],
+                    'stagnation_burst_armed' => $stagnationDecision['burst_armed'],
+                    'stagnation_burst_phase' => $stagnationDecision['burst_phase'],
+                    'stagnation_early_stop' => $stagnationDecision['early_stop'],
+                    'stagnation_reason' => $stagnationDecision['reason'],
                 ]);
+
+                if ($stagnationDecision['early_stop']) {
+                    Log::warning('ga.stagnation.early_stop', [
+                        'execution_id' => $this->executionId,
+                        'generation' => $generation,
+                        'max_generations' => $generations,
+                        'best_fitness' => $metricsDto->bestFitness,
+                        'window_size' => $stagnationDecision['window_size'],
+                        'patience_generations' => $stagnationDecision['patience_generations'],
+                        'reason' => $stagnationDecision['reason'],
+                    ]);
+
+                    break;
+                }
             }
         }
 
         return $globalBest;
     }
 
-    // 🔧 PRIORIDADE 5: Métodos auxiliares para early termination
-
     /**
-     * Verifica se a solução é viável (score >= 50.0).
-     * Uma solução viável tem nenhuma ou poucas violações de restrições rígidas.
+     * @return array<string, mixed>
      */
-    private function isViableSolution(Cromossomo $chromosome): bool
-    {
-        // Score >= 50.0 indica viabilidade (calculado pela FitnessEvaluator)
-        return $chromosome->fitness() >= self::VIABLE_FITNESS_THRESHOLD;
-    }
+    private function evaluateStagnationPolicy(
+        int $generation,
+        float $bestFitness,
+        float $diversity,
+        float $entropy,
+        ?float $avgAlnsImprovement,
+    ): array {
+        $enabled = (bool) config('ag.stagnation_policy.enabled', true);
+        $windowSize = max(3, (int) config('ag.stagnation_policy.window_size', 5));
+        $minGenerations = max(1, (int) config('ag.stagnation_policy.min_generations_before_detection', 8));
+        $patience = max(1, (int) config('ag.stagnation_policy.patience_generations', 5));
+        $epsilon = max(0.0, (float) config('ag.stagnation_policy.improvement_epsilon', 0.0005));
+        $diversityHighThreshold = max(0.0, min(1.0, (float) config('ag.stagnation_policy.diversity_high_threshold', 0.95)));
+        $diversityStabilityTolerance = max(0.0, min(1.0, (float) config('ag.stagnation_policy.diversity_stability_tolerance', 0.02)));
+        $requireAlnsNoGain = (bool) config('ag.stagnation_policy.require_alns_no_gain', true);
 
-    /**
-     * Detecta estagnação: sem melhoria no best fitness por N gerações.
-     * Retorna true se deve pausar a busca e fazer restart.
-     */
-    private function detectStagnation(float $currentBestFitness): bool
-    {
-        if ($currentBestFitness > $this->previousBestFitness) {
-            // Houve melhoria! Reset contador
-            $this->previousBestFitness = $currentBestFitness;
-            $this->generationsSinceImprovement = 0;
+        $burstEnabled = (bool) config('ag.stagnation_policy.burst.enabled', true);
+        $burstGenerations = max(1, (int) config('ag.stagnation_policy.burst.generations', 3));
+        $burstMutationMultiplier = max(1.0, (float) config('ag.stagnation_policy.burst.mutation_multiplier', 1.35));
+        $burstSelectionPressureMultiplier = max(0.34, min(1.0, (float) config('ag.stagnation_policy.burst.selection_pressure_multiplier', 0.85)));
+        $burstForceAlns = (bool) config('ag.stagnation_policy.burst.force_alns', true);
 
-            return false;
+        if (! $enabled) {
+            return [
+                'window_ready' => false,
+                'triggered' => false,
+                'burst_armed' => false,
+                'burst_phase' => 'disabled',
+                'early_stop' => false,
+                'window_size' => $windowSize,
+                'patience_generations' => $patience,
+                'reason' => 'stagnation_policy_disabled',
+            ];
         }
 
-        // Sem melhoria
-        $this->generationsSinceImprovement++;
+        if ($this->bestFitnessEver === null || ($bestFitness - $this->bestFitnessEver) > $epsilon) {
+            $this->bestFitnessEver = $bestFitness;
+            $this->lastSignificantImprovementGeneration = $generation;
 
-        return $this->generationsSinceImprovement >= self::STAGNATION_THRESHOLD;
-    }
+            if ($this->stagnationBurstArmed) {
+                Log::info('ga.stagnation.burst_released_after_improvement', [
+                    'execution_id' => $this->executionId,
+                    'generation' => $generation,
+                    'best_fitness' => $bestFitness,
+                ]);
+            }
 
-    /**
-     * Realiza ciclo de restart preservando 10% de elite.
-     * - Mantém os 10% melhores indivíduos
-     * - Gera 90% de nova população
-     * - Reinicializa as ilhas
-     *
-     * @param  Island[]  $islands
-     * @param  Cromossomo[]  $globalPopulation
-     */
-    private function performRestartCycle(array $islands, array $globalPopulation): void
-    {
-        if (empty($globalPopulation)) {
-            return;
+            $this->stagnationBurstArmed = false;
+            $this->stagnationBurstStartedAtGeneration = null;
         }
 
-        // Ordenar população por fitness (melhor primeiro)
-        usort($globalPopulation, static function (Cromossomo $a, Cromossomo $b): int {
-            return $b->fitness() <=> $a->fitness();
-        });
+        $this->stagnationWindow[] = [
+            'generation' => $generation,
+            'best_fitness' => $bestFitness,
+            'diversity' => $diversity,
+            'entropy' => $entropy,
+            'alns_improvement' => $avgAlnsImprovement,
+        ];
 
-        // Preservar elite (10% melhores)
-        $eliteCount = max(1, (int) (count($globalPopulation) * 0.10));
-        $elite = array_slice($globalPopulation, 0, $eliteCount);
-
-        Log::info('Restart cycle: preservando elite', [
-            'total_population' => count($globalPopulation),
-            'elite_count' => $eliteCount,
-            'elite_fitness' => array_map(fn (Cromossomo $c) => $c->fitness(), $elite),
-        ]);
-
-        // Redistribuir elite entre as ilhas, e gerar 90% nova população
-        // Cada ilha mantém seus indivíduos mas some nova população aleatória
-        foreach ($islands as $island) {
-            $island->reinitializeWithElite($elite);
-        }
-    }
-
-    /**
-     * Detecta degradação de fitness (piora significativa).
-     * Retorna true se a média de fitness recente piorou mais de 5.0 pontos.
-     */
-    private function detectFitnessDegradation(): bool
-    {
-        if (count($this->fitnessHistory) < 2) {
-            return false;
+        while (count($this->stagnationWindow) > $windowSize) {
+            array_shift($this->stagnationWindow);
         }
 
-        $delta = $this->calculateFitnessDelta();
+        $windowReady = count($this->stagnationWindow) >= $windowSize;
+        $patienceReached = ($generation - $this->lastSignificantImprovementGeneration) >= $patience;
 
-        return $delta < self::FITNESS_DEGRADATION_THRESHOLD;
-    }
+        $bestValues = array_values(array_map(
+            static fn (array $item): float => (float) $item['best_fitness'],
+            $this->stagnationWindow,
+        ));
+        $bestDeltaWindow = $bestValues === [] ? 0.0 : max($bestValues) - min($bestValues);
 
-    /**
-     * Calcula o delta de fitness entre a geração atual e a anterior.
-     */
-    private function calculateFitnessDelta(): float
-    {
-        if (count($this->fitnessHistory) < 2) {
-            return 0.0;
+        $diversityValues = array_values(array_map(
+            static fn (array $item): float => (float) $item['diversity'],
+            $this->stagnationWindow,
+        ));
+        $diversityMin = $diversityValues === [] ? 0.0 : min($diversityValues);
+        $diversitySpan = $diversityValues === [] ? 0.0 : (max($diversityValues) - min($diversityValues));
+
+        $alnsValues = array_values(array_map(
+            static fn (array $item): ?float => is_numeric($item['alns_improvement']) ? (float) $item['alns_improvement'] : null,
+            $this->stagnationWindow,
+        ));
+
+        $alnsNoGain = true;
+
+        if ($requireAlnsNoGain) {
+            foreach ($alnsValues as $value) {
+                if ($value !== null && $value > $epsilon) {
+                    $alnsNoGain = false;
+
+                    break;
+                }
+            }
         }
 
-        $lastIndex = count($this->fitnessHistory) - 1;
-        $current = $this->fitnessHistory[$lastIndex];
-        $previous = $this->fitnessHistory[$lastIndex - 1];
+        $triggered = $generation >= $minGenerations
+            && $windowReady
+            && $patienceReached
+            && $bestDeltaWindow <= $epsilon
+            && $diversityMin >= $diversityHighThreshold
+            && $diversitySpan <= $diversityStabilityTolerance
+            && (! $requireAlnsNoGain || $alnsNoGain);
 
-        return round($current - $previous, 2);
-    }
+        $burstPhase = 'idle';
+        $earlyStop = false;
+        $reason = 'insufficient_evidence';
 
-    /**
-     * Rastreia o histórico de fitness para detecção de degradação.
-     * Mantém um histórico das últimas 20 gerações.
-     */
-    private function trackFitnessHistory(float $fitness): void
-    {
-        $this->fitnessHistory[] = $fitness;
+        if ($triggered && $burstEnabled && ! $this->stagnationBurstArmed) {
+            $reason = 'stagnation_triggered_starting_burst';
+            $burstPhase = 'arming';
+            $this->stagnationBurstArmed = true;
+            $this->stagnationBurstStartedAtGeneration = $generation;
 
-        // Manter apenas últimas 20 gerações
-        if (count($this->fitnessHistory) > 20) {
-            array_shift($this->fitnessHistory);
+            foreach ($this->islands as $island) {
+                $island->activateStagnationBurst(
+                    generation: $generation,
+                    durationGenerations: $burstGenerations,
+                    mutationMultiplier: $burstMutationMultiplier,
+                    selectionPressureMultiplier: $burstSelectionPressureMultiplier,
+                    forceAlns: $burstForceAlns,
+                    reason: 'global_stagnation_detected',
+                );
+            }
+
+            Log::warning('ga.stagnation.burst_started', [
+                'execution_id' => $this->executionId,
+                'generation' => $generation,
+                'burst_generations' => $burstGenerations,
+                'mutation_multiplier' => $burstMutationMultiplier,
+                'selection_pressure_multiplier' => $burstSelectionPressureMultiplier,
+                'force_alns' => $burstForceAlns,
+                'best_delta_window' => $bestDeltaWindow,
+                'diversity_min' => $diversityMin,
+                'diversity_span' => $diversitySpan,
+            ]);
+        } elseif ($this->stagnationBurstArmed) {
+            $burstPhase = 'running';
+            $elapsedBurstGenerations = max(0, $generation - (int) ($this->stagnationBurstStartedAtGeneration ?? $generation));
+
+            if ($elapsedBurstGenerations >= $burstGenerations && $triggered) {
+                $earlyStop = true;
+                $burstPhase = 'completed_without_gain';
+                $reason = 'stagnation_persisted_after_burst';
+            } elseif ($elapsedBurstGenerations >= $burstGenerations && ! $triggered) {
+                $burstPhase = 'completed_recovered';
+                $reason = 'burst_recovered_search';
+                $this->stagnationBurstArmed = false;
+                $this->stagnationBurstStartedAtGeneration = null;
+            } else {
+                $reason = 'burst_running_waiting_reassessment';
+            }
+        } elseif ($triggered && ! $burstEnabled) {
+            $earlyStop = true;
+            $reason = 'stagnation_triggered_without_burst';
+            $burstPhase = 'disabled';
+        } elseif ($triggered) {
+            $reason = 'stagnation_triggered';
         }
+
+        $this->lastStagnationEvaluation = [
+            'window_ready' => $windowReady,
+            'triggered' => $triggered,
+            'burst_armed' => $this->stagnationBurstArmed,
+            'burst_phase' => $burstPhase,
+            'early_stop' => $earlyStop,
+            'reason' => $reason,
+            'best_delta_window' => $bestDeltaWindow,
+            'diversity_min' => $diversityMin,
+            'diversity_span' => $diversitySpan,
+            'window_size' => $windowSize,
+            'patience_generations' => $patience,
+        ];
+
+        return $this->lastStagnationEvaluation;
     }
 
     private function assertNotCancelled(): void

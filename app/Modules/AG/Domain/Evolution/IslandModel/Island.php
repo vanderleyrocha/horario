@@ -14,8 +14,13 @@ final class Island
 {
     private array $population = [];
 
-    public function __construct(private int $islandNum, private readonly GeneticAlgorithmEngine $engine, private readonly int $populationSize, private readonly ReplacementStrategyInterface $replacement)
-    {
+    public function __construct(
+        private int $islandNum,
+        private readonly GeneticAlgorithmEngine $engine,
+        private readonly int $populationSize,
+        private readonly ReplacementStrategyInterface $replacement,
+        private readonly IslandProfile $profile = IslandProfile::Balanced,
+    ) {
         $this->engine->setIslandContext($this->islandNum);
     }
 
@@ -44,7 +49,7 @@ final class Island
      * - Mantém os indivíduos de elite (tipicamente 10% da população)
      * - Gera novos indivíduos para completar o tamanho da população (90%)
      *
-     * @param  Cromossomo[]  $elite  - Indivíduos a serem preservados
+     * @param Cromossomo[] $elite - Indivíduos a serem preservados
      */
     public function reinitializeWithElite(array $elite): void
     {
@@ -78,6 +83,24 @@ final class Island
         return $this->best();
     }
 
+    public function activateStagnationBurst(
+        int $generation,
+        int $durationGenerations,
+        float $mutationMultiplier,
+        float $selectionPressureMultiplier,
+        bool $forceAlns,
+        string $reason,
+    ): void {
+        $this->engine->activateStagnationBurst(
+            generation: $generation,
+            durationGenerations: $durationGenerations,
+            mutationMultiplier: $mutationMultiplier,
+            selectionPressureMultiplier: $selectionPressureMultiplier,
+            forceAlns: $forceAlns,
+            reason: $reason,
+        );
+    }
+
     public function best(): Cromossomo
     {
         usort($this->population, fn ($a, $b) => $b->fitness() <=> $a->fitness());
@@ -108,5 +131,10 @@ final class Island
     public function getislandNum(): int
     {
         return $this->islandNum;
+    }
+
+    public function profile(): IslandProfile
+    {
+        return $this->profile;
     }
 }

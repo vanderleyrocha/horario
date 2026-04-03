@@ -80,6 +80,11 @@ final class GeneticAlgorithmEngine
 
     private ?int $islandId = null;
 
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $activeStagnationBurst = null;
+
     public function __construct(
         private ?AlnsAcceptanceCriterion $alnsAcceptance,
         private readonly GeneticProblem $problem,
@@ -528,6 +533,38 @@ final class GeneticAlgorithmEngine
         $this->islandId = $islandId;
     }
 
+    public function activateStagnationBurst(
+        int $generation,
+        int $durationGenerations,
+        float $mutationMultiplier,
+        float $selectionPressureMultiplier,
+        bool $forceAlns,
+        string $reason,
+    ): void {
+        $duration = max(1, $durationGenerations);
+
+        $this->activeStagnationBurst = [
+            'activated_generation' => $generation,
+            'duration_generations' => $duration,
+            'remaining_generations' => $duration,
+            'mutation_multiplier' => max(1.0, $mutationMultiplier),
+            'selection_pressure_multiplier' => max(0.34, min(1.0, $selectionPressureMultiplier)),
+            'force_alns' => $forceAlns,
+            'reason' => $reason,
+        ];
+
+        Log::info('ga.stagnation_burst.armed', [
+            'execution_id' => $this->executionMetrics?->getExecutionId(),
+            'island_id' => $this->islandId,
+            'generation' => $generation,
+            'duration_generations' => $duration,
+            'mutation_multiplier' => $this->activeStagnationBurst['mutation_multiplier'],
+            'selection_pressure_multiplier' => $this->activeStagnationBurst['selection_pressure_multiplier'],
+            'force_alns' => $forceAlns,
+            'reason' => $reason,
+        ]);
+    }
+
     /**
      * Sprint 4: Define o perfil de ilha para orientar a construção GRASP e mutação.
      *
@@ -561,6 +598,8 @@ final class GeneticAlgorithmEngine
     public function evolveGeneration(array $population, int $populationSize): array
     {
         $this->assertNotCancelled();
+
+        $stagnationBurst = $this->stagnationBurstState();
 
         $currentGeneration = $this->evolutionGeneration;
         $generationStep = $this->executeGenerationStep(
@@ -627,6 +666,18 @@ final class GeneticAlgorithmEngine
             landscapeObservation: $observationPayload,
             activateDynamicLns: $activateDynamicLns,
         );
+
+        if (($stagnationBurst['active'] ?? false) === true && ($stagnationBurst['force_alns'] ?? false) === true) {
+            $alnsTrigger['alns_trigger_eligible'] = true;
+            $alnsTrigger['alns_triggered'] = true;
+            $alnsTrigger['alns_trigger_reason'] = 'stagnation_burst_forced_alns';
+            $alnsTrigger['alns_effective_frequency'] = 1;
+            $alnsTrigger['alns_adaptive_profile'] = [
+                'strategy' => 'stagnation_burst',
+                'reason' => $stagnationBurst['reason'] ?? 'stagnation_detected',
+            ];
+        }
+
         $telemetry += $alnsTrigger;
 
         $mutationShockActivation = $this->resolveRealMutationShockActivation(
@@ -712,7 +763,12 @@ final class GeneticAlgorithmEngine
             'elite_similarity' => $generationStep['elite_similarity'],
             'selection_pressure_effective_multiplier' => $generationStep['selection_pressure_effective_multiplier'] ?? null,
             'selection_pressure_effective_tournament_size' => $generationStep['selection_pressure_effective_tournament_size'] ?? null,
+            'stagnation_burst_active' => $generationStep['stagnation_burst_active'] ?? false,
+            'stagnation_burst_remaining_generations_before' => $generationStep['stagnation_burst_remaining_generations_before'] ?? null,
+            'stagnation_burst_remaining_generations_after' => $generationStep['stagnation_burst_remaining_generations_after'] ?? null,
         ] + $telemetry;
+
+        $this->consumeStagnationBurstGeneration();
 
         $this->evolutionGeneration++;
 
@@ -1278,11 +1334,7 @@ final class GeneticAlgorithmEngine
      */
     private function adaptiveAlnsCooldownBrake(array $recentEffectiveness): array
     {
-        $sampleSize = (int) ($recentEffectiveness['sample_size'] ?? 0);
-        $meanImprovement = (float) ($recentEffectiveness['mean_improvement'] ?? 0.0);
-        $successRate = (float) ($recentEffectiveness['success_rate'] ?? 0.0);
-
-        if ($sampleSize < 3) {
+        if (! (bool) config('ag.alns_adaptive.enabled', true)) {
             return [
                 'applied' => false,
                 'extra_generations' => 0,
@@ -1290,18 +1342,37 @@ final class GeneticAlgorithmEngine
             ];
         }
 
-        if ($meanImprovement <= -5.0 || ($meanImprovement <= 0.0 && $successRate <= 0.15)) {
+        $sampleSize = (int) ($recentEffectiveness['sample_size'] ?? 0);
+        $meanImprovement = (float) ($recentEffectiveness['mean_improvement'] ?? 0.0);
+        $successRate = (float) ($recentEffectiveness['success_rate'] ?? 0.0);
+        $minSampleSize = max(1, (int) config('ag.alns_adaptive.cooldown_brake_min_sample_size', 3));
+        $negativeImprovement = (float) config('ag.alns_adaptive.cooldown_brake_negative_improvement', -5.0);
+        $nonPositiveImprovement = (float) config('ag.alns_adaptive.cooldown_brake_non_positive_improvement', 0.0);
+        $veryLowSuccessRate = (float) config('ag.alns_adaptive.cooldown_brake_very_low_success_rate', 0.15);
+        $lowSuccessRate = (float) config('ag.alns_adaptive.cooldown_brake_low_success_rate', 0.34);
+        $extraGenerationsNegative = max(0, (int) config('ag.alns_adaptive.cooldown_brake_extra_generations_negative_return', 3));
+        $extraGenerationsLowReturn = max(0, (int) config('ag.alns_adaptive.cooldown_brake_extra_generations_low_return', 2));
+
+        if ($sampleSize < $minSampleSize) {
+            return [
+                'applied' => false,
+                'extra_generations' => 0,
+                'reason' => null,
+            ];
+        }
+
+        if ($meanImprovement <= $negativeImprovement || ($meanImprovement <= $nonPositiveImprovement && $successRate <= $veryLowSuccessRate)) {
             return [
                 'applied' => true,
-                'extra_generations' => 3,
+                'extra_generations' => $extraGenerationsNegative,
                 'reason' => 'Recent ALNS outcomes are consistently negative or null.',
             ];
         }
 
-        if ($meanImprovement <= 0.0 || $successRate <= 0.34) {
+        if ($meanImprovement <= $nonPositiveImprovement || $successRate <= $lowSuccessRate) {
             return [
                 'applied' => true,
-                'extra_generations' => 2,
+                'extra_generations' => $extraGenerationsLowReturn,
                 'reason' => 'Recent ALNS outcomes show low return for the current search pattern.',
             ];
         }
@@ -1322,11 +1393,17 @@ final class GeneticAlgorithmEngine
         ?array $landscapeObservation,
         bool $activateDynamicLns,
     ): ?int {
+        if (! (bool) config('ag.alns_adaptive.enabled', true)) {
+            return null;
+        }
+
         if (! $this->hasLandscapePressure($landscapeState, $landscapeObservation, $activateDynamicLns)) {
             return null;
         }
 
-        return max(2, (int) ceil($budgetFrequency / 2));
+        $divisor = max(1, (int) config('ag.alns_adaptive.landscape_frequency_divisor', 2));
+
+        return max(2, (int) ceil($budgetFrequency / $divisor));
     }
 
     /**
@@ -1796,13 +1873,32 @@ final class GeneticAlgorithmEngine
     private function executeGenerationStep(array $population, int $populationSize): array
     {
         $generation = $this->evolutionGeneration;
+        $stagnationBurst = $this->stagnationBurstState();
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
         $baseMutationRate = $this->adaptiveMutation->computeRate($entropy, $diversity);
+
+        if (($stagnationBurst['active'] ?? false) === true) {
+            $baseMutationRate = max(
+                0.001,
+                min(0.9, $baseMutationRate * (float) ($stagnationBurst['mutation_multiplier'] ?? 1.0)),
+            );
+        }
+
         $mutationShock = $this->consumeActiveMutationShock($baseMutationRate, $generation);
         $mutationRate = $mutationShock['mutation_rate'];
+
+        $selectionPressureMultiplier = $this->currentSelectionPressureMultiplier;
+
+        if (($stagnationBurst['active'] ?? false) === true) {
+            $selectionPressureMultiplier = min(
+                max(0.34, $selectionPressureMultiplier),
+                max(0.34, min(1.0, $selectionPressureMultiplier * (float) ($stagnationBurst['selection_pressure_multiplier'] ?? 1.0))),
+            );
+        }
+
         $selectionPressure = $this->consumeActiveSelectionPressureReduction(
-            $this->currentSelectionPressureMultiplier,
+            $selectionPressureMultiplier,
             $generation,
         );
         $generationStartedAt = microtime(true);
@@ -1912,7 +2008,59 @@ final class GeneticAlgorithmEngine
             'operator_reward' => $this->summarizeOperatorReward($allRewards),
             'diversity' => $diversity,
             'entropy' => $entropy,
+            'stagnation_burst_active' => $stagnationBurst['active'] ?? false,
+            'stagnation_burst_force_alns' => $stagnationBurst['force_alns'] ?? false,
+            'stagnation_burst_reason' => $stagnationBurst['reason'] ?? null,
+            'stagnation_burst_remaining_generations_before' => $stagnationBurst['remaining_generations'] ?? null,
+            'stagnation_burst_mutation_multiplier' => $stagnationBurst['mutation_multiplier'] ?? null,
+            'stagnation_burst_selection_pressure_multiplier' => $stagnationBurst['selection_pressure_multiplier'] ?? null,
         ] + $trajectorySignals + $mutationShock['telemetry'] + $selectionPressure['telemetry'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function stagnationBurstState(): array
+    {
+        if (! is_array($this->activeStagnationBurst)) {
+            return [
+                'active' => false,
+            ];
+        }
+
+        $remaining = (int) ($this->activeStagnationBurst['remaining_generations'] ?? 0);
+
+        if ($remaining <= 0) {
+            return [
+                'active' => false,
+            ];
+        }
+
+        return [
+            'active' => true,
+            'remaining_generations' => $remaining,
+            'mutation_multiplier' => (float) ($this->activeStagnationBurst['mutation_multiplier'] ?? 1.0),
+            'selection_pressure_multiplier' => (float) ($this->activeStagnationBurst['selection_pressure_multiplier'] ?? 1.0),
+            'force_alns' => (bool) ($this->activeStagnationBurst['force_alns'] ?? false),
+            'reason' => (string) ($this->activeStagnationBurst['reason'] ?? 'stagnation_detected'),
+        ];
+    }
+
+    private function consumeStagnationBurstGeneration(): void
+    {
+        if (! is_array($this->activeStagnationBurst)) {
+            return;
+        }
+
+        $remaining = max(0, (int) ($this->activeStagnationBurst['remaining_generations'] ?? 0) - 1);
+
+        if ($remaining <= 0) {
+            $this->activeStagnationBurst = null;
+
+            return;
+        }
+
+        $this->activeStagnationBurst['remaining_generations'] = $remaining;
     }
 
     /**

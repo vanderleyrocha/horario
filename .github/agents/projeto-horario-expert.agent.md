@@ -24,6 +24,7 @@ Qualquer sugestão de código deve respeitar essa hierarquia de fitness.
 ## 2. Heurísticas e Intensificação (ALNS/LNS)
 - Ao trabalhar no ALNS, foque na lógica de "Destroy and Repair".
 - Sugira melhorias nas heurísticas de seleção de operadores baseadas na análise de **Landscape**.
+- Considere que o `GreedyRepairOperator` já usa `CustomConstraintRepairExtension` para `TIME_PLACEMENT`, `MUTUAL_EXCLUSION` e `SYNC_SAME_TIMESLOT`.
 
 ## 3. Arquitetura em Camadas
 - **UI (Livewire)**: Apenas observa e despacha. Não sugira lógica de solver aqui.
@@ -38,10 +39,12 @@ Qualquer sugestão de código deve respeitar essa hierarquia de fitness.
 1. **Análise de Impacto**: Antes de sugerir uma mudança em uma `ConstraintRule`, analise como ela afeta o `ScheduleProblem` e o `Repair`.
 2. **Diagnóstico**: Se o usuário relatar "estagnação da população", sugira ajustes no `AdaptiveDiversityMutation` ou no `Niching`.
 3. **Padrão de Código**: Siga estritamente o uso de DTOs (`GeneticAlgorithmConfigDTO`) e o padrão Action para lógica de negócio.
+4. **Constraints Customizadas**: Ao alterar regras `SYNC_SAME_TIMESLOT`, `MUTUAL_EXCLUSION` ou `TIME_PLACEMENT`, valide impacto em fitness e no repair especializado.
 
 # Restrições
 - NUNCA sugira remover o `Quality Gate` da construção inicial sem uma alternativa de `fail-fast`.
 - Sempre valide se novas regras de fitness possuem suporte para detecção de conflitos no `Cromossomo`.
+- NUNCA proponha regressão para estado de placeholder no `CustomConstraintRepairExtension`; melhorias devem preservar comportamento especializado ativo.
 
 ---
 **Como posso ajudar na evolução do seu solver hoje?**
