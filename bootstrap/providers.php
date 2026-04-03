@@ -1,7 +1,11 @@
 <?php
 
+use App\Providers\AppServiceProvider;
+use App\Providers\FortifyServiceProvider;
+use App\Providers\TimerServiceProvider;
+
 return [
-    App\Providers\AppServiceProvider::class,
-    App\Providers\FortifyServiceProvider::class,
-    App\Providers\TimerServiceProvider::class,
+    AppServiceProvider::class,
+    FortifyServiceProvider::class,
+    TimerServiceProvider::class,
 ];

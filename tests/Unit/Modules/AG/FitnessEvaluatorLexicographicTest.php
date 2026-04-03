@@ -15,7 +15,7 @@ use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 
 it('keeps any feasible solution above any infeasible solution', function (): void {
     $evaluator = new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(1.0),
             makeFixedSoftPenaltyRule(40.0),
@@ -28,7 +28,7 @@ it('keeps any feasible solution above any infeasible solution', function (): voi
     $infeasible = $evaluator->evaluate($chromosome, $context);
 
     $feasibleEvaluator = new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(0.0),
             makeFixedSoftPenaltyRule(40.0),
@@ -49,7 +49,7 @@ it('preserves score gradient between infeasible solutions', function (): void {
     $context = makeEvalContext();
 
     $lessInfeasible = (new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(1.0),
             makeFixedSoftPenaltyRule(10.0),
@@ -57,7 +57,7 @@ it('preserves score gradient between infeasible solutions', function (): void {
     ))->evaluate($chromosome, $context);
 
     $moreInfeasible = (new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(8.0),
             makeFixedSoftPenaltyRule(40.0),
@@ -76,7 +76,7 @@ it('keeps feasible score gradient even under very high soft penalties', function
     $context = makeEvalContext();
 
     $highSoft = (new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(0.0),
             makeFixedSoftPenaltyRule(1000.0),
@@ -84,7 +84,7 @@ it('keeps feasible score gradient even under very high soft penalties', function
     ))->evaluate($chromosome, $context);
 
     $higherSoft = (new FitnessEvaluator(
-        weights: new FitnessWeights(),
+        weights: new FitnessWeights,
         rules: [
             makeFixedHardPenaltyRule(0.0),
             makeFixedSoftPenaltyRule(1001.0),
@@ -127,7 +127,7 @@ function makeEvalContext(): EvaluationContext
 
 function makeFixedHardPenaltyRule(float $penalty): HardRuleInterface
 {
-    return new class ($penalty) implements HardRuleInterface
+    return new class($penalty) implements HardRuleInterface
     {
         public function __construct(private readonly float $penalty) {}
 
@@ -145,7 +145,7 @@ function makeFixedHardPenaltyRule(float $penalty): HardRuleInterface
 
 function makeFixedSoftPenaltyRule(float $penalty): SoftRuleInterface
 {
-    return new class ($penalty) implements SoftRuleInterface
+    return new class($penalty) implements SoftRuleInterface
     {
         public function __construct(private readonly float $penalty) {}
 

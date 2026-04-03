@@ -2,17 +2,18 @@
 
 namespace Database\Factories;
 
+use App\Models\Horario;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Horario>
+ * @extends Factory<Horario>
  */
 class HorarioFactory extends Factory
 {
     public function definition(): array
     {
         return [
-            'nome' => $this->faker->sentence(3) . ' ' . $this->faker->year(),
+            'nome' => $this->faker->sentence(3).' '.$this->faker->year(),
             'ano' => $this->faker->year(),
             'semestre' => $this->faker->numberBetween(1, 2),
             'status' => 'rascunho', // Valor padrão do enum

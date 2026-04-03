@@ -10,6 +10,7 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 final class VarianceBasedTerminationCriterion implements TerminationCriterionInterface
 {
     private int $generationsWithoutImprovement = 0;
+
     private float $bestFitnessSeen = -INF;
 
     /**
@@ -27,11 +28,10 @@ final class VarianceBasedTerminationCriterion implements TerminationCriterionInt
         private readonly int $minGenerationsBeforeVarianceCheck = 20,
         private readonly ?float $minDiversity = 0.08,
         private readonly ?float $minEntropy = 0.10
-    ) {
-    }
+    ) {}
 
     /**
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
     public function shouldTerminate(int $generation, array $population): bool
     {
@@ -111,4 +111,3 @@ final class VarianceBasedTerminationCriterion implements TerminationCriterionInt
         $this->varianceWindow = array_slice($this->varianceWindow, -$this->varianceWindowSize);
     }
 }
-

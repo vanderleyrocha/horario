@@ -9,7 +9,7 @@ it('uses the consolidated risk model when building the feasibility report', func
         fakeLesson(3, 2, 2, 'tripla', 4),
     ];
 
-    $report = (new ScheduleFeasibilityAnalyzer())->analisar($aulas, dias: 5, temposPorDia: 5);
+    $report = (new ScheduleFeasibilityAnalyzer)->analisar($aulas, dias: 5, temposPorDia: 5);
     $payload = $report->toArray();
 
     expect($report->riskIndex())->toBeGreaterThan(0)

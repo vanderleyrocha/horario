@@ -31,5 +31,5 @@ it('bloqueia persistencia quando houver conflito de turma no mesmo slot', functi
 
     expect(function () use ($service, $cromossomoComConflito): void {
         $service->persist(Horario::factory()->make(), $cromossomoComConflito, 999);
-    })->toThrow(\RuntimeException::class, 'Conflito de turma');
+    })->toThrow(RuntimeException::class, 'Conflito de turma');
 });

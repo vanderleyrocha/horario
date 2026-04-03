@@ -9,6 +9,7 @@ use App\Modules\AG\Application\Progress\EvolutionProgress;
 use App\Modules\AG\Domain\Contracts\FitnessEvaluatorInterface;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use App\Modules\AG\Domain\Evolution\IslandModel\IslandProfile;
 use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\Acceptance\AlnsAcceptanceCriterion;
 use App\Modules\AG\Domain\Intensification\LNS\ALNS\Acceptance\StrictScoreImprovementAcceptance;
@@ -36,15 +37,23 @@ use Illuminate\Support\Facades\Log;
 final class GeneticAlgorithmEngine
 {
     private const INITIAL_POPULATION_LOG_SAMPLE_SIZE = 3;
+
     private const INITIAL_POPULATION_MAX_DUPLICATE_RETRIES = 4;
+
     private const OPERATIONAL_HEARTBEAT_INTERVAL_SECONDS = 30;
+
     private const LONG_RUNNING_OPERATION_LOG_INTERVAL_SECONDS = 300;
+
     private const CANCELLATION_CHECK_INTERVAL_SECONDS = 2;
 
     private array $mutationPool;
+
     private array $lastEvolutionTelemetry = [];
+
     private int $evolutionGeneration = 0;
+
     private ?int $lastAlnsGeneration = null;
+
     private ?int $lastMutationShockGeneration = null;
 
     /**
@@ -53,6 +62,7 @@ final class GeneticAlgorithmEngine
     private ?array $activeMutationShock = null;
 
     private float $currentSelectionPressureMultiplier = 1.0;
+
     private ?int $lastSelectionPressureReductionGeneration = null;
 
     /**
@@ -61,13 +71,17 @@ final class GeneticAlgorithmEngine
     private ?array $activeSelectionPressureReduction = null;
 
     private ?float $lastOperationalHeartbeatAt = null;
+
     private ?float $lastLongRunningOperationLogAt = null;
+
     private ?float $lastCancellationCheckAt = null;
+
     private ?string $lastKnownExecutionStatus = null;
+
     private ?int $islandId = null;
 
     public function __construct(
-        private ?AlnsAcceptanceCriterion $alnsAcceptance = null,
+        private ?AlnsAcceptanceCriterion $alnsAcceptance,
         private readonly GeneticProblem $problem,
         private readonly SelectionOperatorInterface $selection,
         private readonly CrossoverOperatorInterface $crossover,
@@ -93,8 +107,13 @@ final class GeneticAlgorithmEngine
     public function run(int $populationSize): Cromossomo
     {
         $this->assertNotCancelled();
+        $ini_time = microtime(true);
         $population = $this->initializePopulation($populationSize);
-
+        Log::info('ga.evolution.started', [
+            'execution_id' => $this->executionMetrics?->getExecutionId(),
+            'population_size' => count($population),
+            'initialization_time_seconds' => round(microtime(true) - $ini_time, 2),
+        ]);
         $generation = 0;
 
         while (true) {
@@ -196,6 +215,10 @@ final class GeneticAlgorithmEngine
         $duplicateSourceCounts = [];
         $acceptedDuplicateSourceCounts = [];
         $sourceExamples = [];
+        $totalGraspAttempts = 0;
+        $qualityGateEvaluations = 0;
+        $qualityGatePassed = 0;
+        $qualityGateRejected = 0;
 
         for ($i = 0; $i < $size; $i++) {
             $this->assertNotCancelled();
@@ -203,14 +226,31 @@ final class GeneticAlgorithmEngine
             $individual = null;
 
             for ($attempt = 1; $attempt <= self::INITIAL_POPULATION_MAX_DUPLICATE_RETRIES + 1; $attempt++) {
+                $init_start_time = microtime(true);
                 $candidate = $this->problem->createIndividual();
+                Log::debug('ga.initial_population.candidate_created', [
+                    'candidate_index' => $i,
+                    'attempt' => $attempt,
+                    'execution_id' => $this->executionMetrics?->getExecutionId(),
+                    'candidate_signature_prefix' => substr($candidate->signature(), 0, 12),
+                    'candidate_gene_count' => $candidate->count(),
+                    'initial_population_time_seconds' => round(microtime(true) - $init_start_time, 4),
+                ]);
                 $candidate = $this->problem->repair($candidate);
                 $source = $this->resolveInitialPopulationSource();
+                $buildStats = $this->resolveInitialPopulationBuildStats();
                 $signature = $candidate->signature();
 
                 if (! isset($seenSignatures[$signature])) {
                     $individual = $candidate;
                     $seenSignatures[$signature] = true;
+                    $this->accumulateInitialPopulationBuildStats(
+                        totalGraspAttempts: $totalGraspAttempts,
+                        qualityGateEvaluations: $qualityGateEvaluations,
+                        qualityGatePassed: $qualityGatePassed,
+                        qualityGateRejected: $qualityGateRejected,
+                        buildStats: $buildStats,
+                    );
                     $this->incrementInitialPopulationCounter($sourceCounts, $source);
                     $this->rememberInitialPopulationSourceExample($sourceExamples, $source, $candidate, false);
                     break;
@@ -221,11 +261,19 @@ final class GeneticAlgorithmEngine
 
                 if ($attempt <= self::INITIAL_POPULATION_MAX_DUPLICATE_RETRIES) {
                     $duplicateRetries++;
+
                     continue;
                 }
 
                 $individual = $candidate;
                 $acceptedDuplicates++;
+                $this->accumulateInitialPopulationBuildStats(
+                    totalGraspAttempts: $totalGraspAttempts,
+                    qualityGateEvaluations: $qualityGateEvaluations,
+                    qualityGatePassed: $qualityGatePassed,
+                    qualityGateRejected: $qualityGateRejected,
+                    buildStats: $buildStats,
+                );
                 $this->incrementInitialPopulationCounter($sourceCounts, $source);
                 $this->incrementInitialPopulationCounter($acceptedDuplicateSourceCounts, $source);
                 break;
@@ -261,13 +309,113 @@ final class GeneticAlgorithmEngine
             'duplicate_source_counts' => $duplicateSourceCounts,
             'accepted_duplicate_source_counts' => $acceptedDuplicateSourceCounts,
             'source_examples' => $sourceExamples,
+            'total_grasp_attempts' => $totalGraspAttempts,
+            'avg_grasp_attempts_per_individual' => count($population) === 0
+                ? null
+                : round($totalGraspAttempts / count($population), 4),
+            'quality_gate_evaluations' => $qualityGateEvaluations,
+            'quality_gate_passed' => $qualityGatePassed,
+            'quality_gate_rejected' => $qualityGateRejected,
+            'quality_gate_success_rate' => $qualityGateEvaluations === 0
+                ? null
+                : round($qualityGatePassed / $qualityGateEvaluations, 4),
             'best_fitness' => $fitnessValues === [] ? null : max($fitnessValues),
             'avg_fitness' => $fitnessValues === []
                 ? null
                 : array_sum($fitnessValues) / count($fitnessValues),
+            'initial_population_avg_score' => $fitnessValues === []
+                ? null
+                : array_sum($fitnessValues) / count($fitnessValues),
         ]);
 
+        // Sprint 3: publicar métricas de qualidade do batch
+        $batchQuality = $this->computeInitialPopulationBatchQuality(
+            fitnessValues: $fitnessValues,
+            uniqueCount: count($seenSignatures),
+            populationSize: count($population),
+        );
+
+        Log::info('schedule.initial_population.batch_quality', array_merge(
+            [
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'island_id' => $this->islandId,
+            ],
+            $batchQuality,
+        ));
+
+        $this->progress?->report(array_merge(
+            [
+                'phase' => 'initial_population',
+                'stage' => 'batch_quality',
+                'execution_id' => $this->executionMetrics?->getExecutionId(),
+                'island_id' => $this->islandId,
+            ],
+            $batchQuality,
+        ));
+
         return $population;
+    }
+
+    /**
+     * Sprint 3: Calcula métricas de qualidade do batch da população inicial.
+     *
+     * Avalia diversidade estrutural (signatures únicas) e dispersão de fitness,
+     * emitindo um veredito que identifica problemas (convergência prematura, etc.).
+     *
+     * @param float[] $fitnessValues
+     * @return array<string, mixed>
+     */
+    private function computeInitialPopulationBatchQuality(array $fitnessValues, int $uniqueCount, int $populationSize): array
+    {
+        if ($populationSize === 0 || $fitnessValues === []) {
+            return [
+                'uniqueness_ratio' => 0.0,
+                'fitness_min' => null,
+                'fitness_max' => null,
+                'fitness_avg' => null,
+                'fitness_std_dev' => null,
+                'fitness_coefficient_of_variation' => null,
+                'verdict' => 'empty',
+                'issues' => [],
+            ];
+        }
+
+        $uniquenessRatio = round($uniqueCount / $populationSize, 4);
+        $avg = array_sum($fitnessValues) / $populationSize;
+        $min = min($fitnessValues);
+        $max = max($fitnessValues);
+
+        $variance = array_sum(
+            array_map(static fn (float $v): float => ($v - $avg) ** 2, $fitnessValues),
+        ) / $populationSize;
+
+        $stdDev = sqrt($variance);
+        $coefficientOfVariation = $avg > 0.0 ? round($stdDev / $avg, 4) : 0.0;
+
+        $issues = [];
+
+        if ($uniquenessRatio < 0.75) {
+            $issues[] = 'low_signature_diversity';
+        }
+
+        if ($populationSize >= 4 && $stdDev < 0.5) {
+            $issues[] = 'fitness_collapsed';
+        }
+
+        if ($populationSize >= 4 && $coefficientOfVariation < 0.01) {
+            $issues[] = 'low_fitness_dispersion';
+        }
+
+        return [
+            'uniqueness_ratio' => $uniquenessRatio,
+            'fitness_min' => round($min, 4),
+            'fitness_max' => round($max, 4),
+            'fitness_avg' => round($avg, 4),
+            'fitness_std_dev' => round($stdDev, 4),
+            'fitness_coefficient_of_variation' => $coefficientOfVariation,
+            'verdict' => $issues === [] ? 'ok' : implode('|', $issues),
+            'issues' => $issues,
+        ];
     }
 
     private function resolveInitialPopulationSource(): string
@@ -283,6 +431,47 @@ final class GeneticAlgorithmEngine
         }
 
         return $source;
+    }
+
+    /**
+     * @return array{
+     *     grasp_attempts_used: int,
+     *     quality_gate_evaluations: int,
+     *     quality_gate_passed: int,
+     *     quality_gate_rejected: int,
+     *     source: string
+     * }
+     */
+    private function resolveInitialPopulationBuildStats(): array
+    {
+        if (! $this->problem instanceof ScheduleProblem) {
+            return [
+                'grasp_attempts_used' => 0,
+                'quality_gate_evaluations' => 0,
+                'quality_gate_passed' => 0,
+                'quality_gate_rejected' => 0,
+                'source' => 'unknown',
+            ];
+        }
+
+        return $this->problem->lastInitialPopulationBuildStats();
+    }
+
+    /**
+     * @param array{
+     *     grasp_attempts_used: int,
+     *     quality_gate_evaluations: int,
+     *     quality_gate_passed: int,
+     *     quality_gate_rejected: int,
+     *     source: string
+     * } $buildStats
+     */
+    private function accumulateInitialPopulationBuildStats(int &$totalGraspAttempts, int &$qualityGateEvaluations, int &$qualityGatePassed, int &$qualityGateRejected, array $buildStats): void
+    {
+        $totalGraspAttempts += (int) ($buildStats['grasp_attempts_used'] ?? 0);
+        $qualityGateEvaluations += (int) ($buildStats['quality_gate_evaluations'] ?? 0);
+        $qualityGatePassed += (int) ($buildStats['quality_gate_passed'] ?? 0);
+        $qualityGateRejected += (int) ($buildStats['quality_gate_rejected'] ?? 0);
     }
 
     /**
@@ -337,6 +526,26 @@ final class GeneticAlgorithmEngine
     public function setIslandContext(int $islandId): void
     {
         $this->islandId = $islandId;
+    }
+
+    /**
+     * Sprint 4: Define o perfil de ilha para orientar a construção GRASP e mutação.
+     *
+     * Conservative → alpha baixo, mutação moderada (convergência rápida).
+     * Exploratory  → alpha alto, mutação elevada (diversidade).
+     * Balanced     → configuração padrão.
+     */
+    public function setIslandProfile(IslandProfile $profile): void
+    {
+        if ($this->problem instanceof ScheduleProblem) {
+            $this->problem->setIslandProfile($profile);
+        }
+
+        Log::info('ga.island.profile_set', [
+            'island_id' => $this->islandId,
+            'profile' => $profile->value,
+            'label' => $profile->label(),
+        ]);
     }
 
     public function currentEvolutionGeneration(): int
@@ -1589,7 +1798,7 @@ final class GeneticAlgorithmEngine
         $generation = $this->evolutionGeneration;
         $entropy = $this->metrics->lastEntropy();
         $diversity = $this->metrics->lastDiversity();
-        $baseMutationRate = $this->adaptiveMutation->computeRate($entropy);
+        $baseMutationRate = $this->adaptiveMutation->computeRate($entropy, $diversity);
         $mutationShock = $this->consumeActiveMutationShock($baseMutationRate, $generation);
         $mutationRate = $mutationShock['mutation_rate'];
         $selectionPressure = $this->consumeActiveSelectionPressureReduction(

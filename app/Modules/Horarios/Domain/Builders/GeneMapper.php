@@ -14,7 +14,7 @@ final class GeneMapper
     {
         $configuracao = $horario->configuracaoHorario;
 
-        if (!$configuracao) {
+        if (! $configuracao) {
             throw new InvalidArgumentException(
                 "Configuração do horário não encontrada para o Horário ID {$horario->id}."
             );

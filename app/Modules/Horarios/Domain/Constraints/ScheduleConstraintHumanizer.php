@@ -115,7 +115,7 @@ final class ScheduleConstraintHumanizer
     }
 
     /**
-     * @param list<int> $lessonIds
+     * @param  list<int>  $lessonIds
      */
     private function formatLessonGroup(array $lessonIds, string $label): string
     {
@@ -135,11 +135,11 @@ final class ScheduleConstraintHumanizer
         $parts = [];
 
         if ($constraint->window()->days() !== []) {
-            $parts[] = 'dias ' . implode(', ', $constraint->window()->days());
+            $parts[] = 'dias '.implode(', ', $constraint->window()->days());
         }
 
         if ($constraint->window()->periods() !== []) {
-            $parts[] = 'tempos ' . implode(', ', $constraint->window()->periods());
+            $parts[] = 'tempos '.implode(', ', $constraint->window()->periods());
         }
 
         return implode(' e ', $parts);

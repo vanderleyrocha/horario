@@ -7,7 +7,7 @@ class DateTimeHelper
     /**
      * Formats the elapsed time since a given start time.
      *
-     * @param float $startTime The start time obtained from microtime(true).
+     * @param  float  $startTime  The start time obtained from microtime(true).
      * @return string The formatted elapsed time string.
      */
     public static function formatElapsedTime(float $startTime): string

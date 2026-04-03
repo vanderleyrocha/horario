@@ -19,6 +19,5 @@ final class CreateScheduleConstraintInput
         public readonly bool $isActive,
         public readonly array $payload,
         public readonly ?int $actorId = null,
-    ) {
-    }
+    ) {}
 }

@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2026_02_01_001_create_configuracoes_horario_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -43,7 +44,7 @@ return new class extends Migration
             $table->integer('elitism_count')->default(10);
             $table->float('target_fitness')->default(95.0);
             $table->integer('max_generations_without_improvement')->default(50);
-        
+
             $table->timestamps();
 
             // Índices

@@ -41,8 +41,7 @@ final class IslandModelEngine
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
         private readonly int $migrationInterval = 20,
-    ) {
-    }
+    ) {}
 
     public function addIsland(Island $island): void
     {
@@ -293,8 +292,8 @@ final class IslandModelEngine
      * - Gera 90% de nova população
      * - Reinicializa as ilhas
      *
-     * @param Island[] $islands
-     * @param Cromossomo[] $globalPopulation
+     * @param  Island[]  $islands
+     * @param  Cromossomo[]  $globalPopulation
      */
     private function performRestartCycle(array $islands, array $globalPopulation): void
     {

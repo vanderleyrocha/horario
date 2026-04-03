@@ -13,8 +13,8 @@ it('terminates when variance window collapses with low diversity and entropy', f
     $criterion = new VarianceBasedTerminationCriterion(
         maxGenerations: 500,
         populationStatistics: new PopulationStatistics(
-            new HashDiversityCalculator(),
-            new PopulationEntropyCalculator()
+            new HashDiversityCalculator,
+            new PopulationEntropyCalculator
         ),
         targetFitness: 0.0,
         maxGenerationsWithoutImprovement: 500,
@@ -46,8 +46,8 @@ it('does not terminate by variance when diversity remains high', function (): vo
     $criterion = new VarianceBasedTerminationCriterion(
         maxGenerations: 500,
         populationStatistics: new PopulationStatistics(
-            new HashDiversityCalculator(),
-            new PopulationEntropyCalculator()
+            new HashDiversityCalculator,
+            new PopulationEntropyCalculator
         ),
         targetFitness: 0.0,
         maxGenerationsWithoutImprovement: 500,

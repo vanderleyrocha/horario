@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('schedule_executions', function (Blueprint $table) {
@@ -31,7 +32,7 @@ return new class () extends Migration {
             $table->enum('status', [
                 'running',
                 'finished',
-                'failed'
+                'failed',
             ])->default('running');
 
             /*
@@ -74,7 +75,7 @@ return new class () extends Migration {
 
             $table->index('horario_id');
             $table->index('status');
-            $table->index(['horario_id','created_at']);
+            $table->index(['horario_id', 'created_at']);
         });
     }
 

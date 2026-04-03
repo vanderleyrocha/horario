@@ -10,8 +10,7 @@ final class ListScheduleConstraintsAction
 {
     public function __construct(
         private readonly ScheduleConstraintRepository $repository,
-    ) {
-    }
+    ) {}
 
     public function execute(int $horarioId): array
     {

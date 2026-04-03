@@ -17,11 +17,12 @@ final class PopulationStatistics
         private readonly ?DiversityCalculatorInterface $diversityCalculator = null,
         private readonly ?PopulationEntropyCalculator $entropyCalculator = null,
         private readonly int $diversitySamplingInterval = 1,
-        private readonly ?float $diversityCollapseThreshold = null
-    ) {}
+        private readonly ?float $diversityCollapseThreshold = null,
+    ) {
+    }
 
     /**
-     * @param  Cromossomo[]  $population
+     * @param Cromossomo[] $population
      */
     public function calculate(array $population, ?int $generation = null, bool $forceDiversityRefresh = false): array
     {
@@ -45,7 +46,7 @@ final class PopulationStatistics
     }
 
     /**
-     * @param  Cromossomo[]  $population
+     * @param Cromossomo[] $population
      */
     public function toGenerationMetrics(
         int $generation,
@@ -53,7 +54,7 @@ final class PopulationStatistics
         float $mutationRate,
         int $stagnation,
         ?string $landscapeState = null,
-        bool $forceDiversityRefresh = false
+        bool $forceDiversityRefresh = false,
     ): GenerationMetrics {
         $stats = $this->calculate($population, $generation, $forceDiversityRefresh);
 
@@ -66,12 +67,12 @@ final class PopulationStatistics
             entropy: (float) $stats['entropy'],
             mutationRate: $mutationRate,
             stagnation: $stagnation,
-            landscapeState: $landscapeState
+            landscapeState: $landscapeState,
         );
     }
 
     /**
-     * @param  Cromossomo[]  $population
+     * @param Cromossomo[] $population
      * @return array{best: float, average: float, variance: float}
      */
     private function calculateFitnessSummary(array $population): array
@@ -100,7 +101,7 @@ final class PopulationStatistics
     }
 
     /**
-     * @param  Cromossomo[]  $population
+     * @param Cromossomo[] $population
      */
     private function resolveDiversity(array $population, ?int $generation, bool $forceRefresh = false): float
     {
@@ -121,7 +122,8 @@ final class PopulationStatistics
             $this->diversityCollapseThreshold !== null &&
             $this->lastDiversity <= $this->diversityCollapseThreshold
         ) {
-            return $this->lastDiversity;
+            // Diversidade colapsada: forçar recálculo toda geração para detectar recuperação.
+            return $this->storeDiversity($this->diversityCalculator->calculate($population), $generation);
         }
 
         if ($this->lastDiversity === null || $this->lastDiversityGeneration < 0) {

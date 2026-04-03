@@ -23,8 +23,7 @@ final class ScheduleConstraintData
         public readonly ?int $updatedBy = null,
         public readonly ?string $createdAt = null,
         public readonly ?string $updatedAt = null,
-    ) {
-    }
+    ) {}
 
     public function toArray(): array
     {

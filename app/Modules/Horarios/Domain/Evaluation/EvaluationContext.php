@@ -6,22 +6,22 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 
-final class EvaluationContext {
-
+final class EvaluationContext
+{
     public function __construct(
         private readonly Cromossomo $cromossomo,
         private readonly ScheduleData $data,
         private readonly array $cargaEsperada = [],
         private readonly array $diasPreferidos = [],
         private readonly array $temposPreferidos = []
-    ) {
-    }
+    ) {}
 
     /* ============================================================
      | ACESSO AO DOMÍNIO
      ============================================================ */
 
-    public function data(): ScheduleData {
+    public function data(): ScheduleData
+    {
         return $this->data;
     }
 
@@ -29,27 +29,33 @@ final class EvaluationContext {
      | Estrutura base (delegação)
      ============================================================ */
 
-    public function gene(int $index): Gene {
+    public function gene(int $index): Gene
+    {
         return $this->genes()[$index];
     }
 
-    public function genes(): array {
+    public function genes(): array
+    {
         return $this->cromossomo->genes();
     }
 
-    public function professorIndex(): array {
+    public function professorIndex(): array
+    {
         return $this->cromossomo->professorIndex();
     }
 
-    public function turmaIndex(): array {
+    public function turmaIndex(): array
+    {
         return $this->cromossomo->turmaIndex();
     }
 
-    public function cargaProfessor(): array {
+    public function cargaProfessor(): array
+    {
         return $this->cromossomo->cargaProfessor();
     }
 
-    public function cargaTurma(): array {
+    public function cargaTurma(): array
+    {
         return $this->cromossomo->cargaTurma();
     }
 
@@ -57,7 +63,8 @@ final class EvaluationContext {
      | Derivações estruturais adicionais
      ============================================================ */
 
-    public function cargaTurmaPorDia(): array {
+    public function cargaTurmaPorDia(): array
+    {
         $map = [];
 
         foreach ($this->genes() as $gene) {
@@ -70,7 +77,8 @@ final class EvaluationContext {
         return $map;
     }
 
-    public function alocacoesPorAula(): array {
+    public function alocacoesPorAula(): array
+    {
         $map = [];
 
         foreach ($this->genes() as $gene) {
@@ -89,15 +97,15 @@ final class EvaluationContext {
         foreach ($map as &$slots) {
             usort(
                 $slots,
-                fn($a, $b) =>
-                [$a['dia'], $a['periodo']] <=> [$b['dia'], $b['periodo']]
+                fn ($a, $b) => [$a['dia'], $a['periodo']] <=> [$b['dia'], $b['periodo']]
             );
         }
 
         return $map;
     }
 
-    public function totalGenes(): int {
+    public function totalGenes(): int
+    {
         return count($this->genes());
     }
 
@@ -105,19 +113,23 @@ final class EvaluationContext {
      | Dados de configuração
      ============================================================ */
 
-    public function cargaEsperada(): array {
+    public function cargaEsperada(): array
+    {
         return $this->cargaEsperada;
     }
 
-    public function diasPreferidos(): array {
+    public function diasPreferidos(): array
+    {
         return $this->diasPreferidos;
     }
 
-    public function temposPreferidos(): array {
+    public function temposPreferidos(): array
+    {
         return $this->temposPreferidos;
     }
 
-    public function cromossomo(): Cromossomo {
+    public function cromossomo(): Cromossomo
+    {
         return $this->cromossomo;
     }
 }

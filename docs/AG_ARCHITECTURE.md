@@ -4,15 +4,18 @@
 
 O Projeto Horário implementa um solver híbrido para timetabling escolar baseado em:
 
-- algoritmo genético multioperador
-- construção inicial guiada por GRASP
-- intensificação por ALNS/LNS
-- modelo de ilhas com migração periódica
+- algoritmo genético multioperador com ilhas diferenciadas por perfil
+- construção inicial guiada por GRASP com alpha adaptativo, portfólio e salvage
+- intensificação por ALNS/LNS com seleção adaptativa de operadores
+- modelo de ilhas com migração periódica e perfis Conservative/Balanced/Exploratory
 - avaliação lexicográfica hard/soft com suporte a delta fitness
-- telemetria operacional detalhada
+- nogoods persistentes entre execuções (memória de longo prazo)
+- lookahead de custo crítico na alocação GRASP
+- meta de qualidade da população inicial (batch quality, diversidade e dispersão)
+- telemetria operacional detalhada em três camadas (cache, banco, logs)
 - monitoramento Livewire em tempo real
 
-Na prática, o sistema não é apenas um AG clássico. Ele combina construção gulosa randomizada, repair iterativo, hiper-heurísticas, análise de landscape e observabilidade operacional suficiente para diagnosticar gargalos na população inicial e na evolução.
+Na prática, o sistema não é apenas um AG clássico. Ele combina construção gulosa randomizada, repair iterativo, hiper-heurísticas, análise de landscape, portfólio adaptativo de estratégias de construção e observabilidade operacional suficiente para diagnosticar gargalos na população inicial e na evolução.
 
 ## Escopo Real Implementado
 
@@ -23,13 +26,16 @@ Hoje a arquitetura cobre, de ponta a ponta:
 - despacho assíncrono via fila
 - orquestração do solver na camada de aplicação
 - montagem do problema de horários com ScheduleData
-- evolução em ilhas com migração
+- evolução em ilhas com migração periódica (intervalo 5) e perfis diferenciados
 - repair durante a construção inicial e durante a evolução
-- ALNS para intensificação local
+- ALNS para intensificação local com seleção epsilon-greedy de operadores
 - análise de landscape e resposta adaptativa
-- persistência transacional da melhor solução
+- persistência transacional da melhor solução com validação final de integridade
 - cache, banco e logs para progresso e métricas
 - integração com constraints customizadas no solver, fitness, viabilidade e preparação de repair
+- nogoods persistentes entre execuções (cache com TTL de 7 dias)
+- batch quality report da população inicial com veredito automatizado
+- perfis de ilha com parâmetros GRASP e de mutação diferenciados
 
 ## Arquitetura em Camadas
 
@@ -154,38 +160,59 @@ A construção inicial está concentrada em ScheduleProblem e é um dos trechos 
 
 Elementos implementados:
 
-- fila de alocação orientada por dificuldade
+- fila de alocação orientada por dificuldade com live_tightness e avg_slot_contention
 - diagnóstico preventivo antes da construção
-- RCL com alpha aleatório em faixa configurada internamente
+- RCL com alpha adaptativo por contexto (portfólio de perfis aprendidos via epsilon-greedy)
+- lookahead crítico no score de slot: opções=0 gera penalidade de +15, opções=1 penalidade de +2.5
 - fallback controlado para alocações forçadas
 - quality gate para rejeitar sementes ruins cedo
 - fail-fast para interromper tentativas estruturalmente degradadas
 - reaproveitamento de semente aceita da própria execução
 - reaproveitamento de semente histórica de execuções anteriores
+- salvage: genes livres de conflito de tentativas rejeitadas são preservados e reusados como base
 - repair com orçamento operacional
+- nogoods persistentes entre execuções (carregados de cache com TTL de 7 dias)
+- batch quality report publicado após inicialização da população
 - telemetria detalhada da construção
 
-### Heurísticas observadas
+### Alpha Adaptativo e Portfólio de Perfis (Sprint 2 + Melhoria 2)
 
-Entre os sinais encontrados no código, a construção inicial já considera:
+O alpha do GRASP foi evoluído de um sorteio simples para um sistema em dois níveis:
 
-- interseção de disponibilidade de professor e turma
-- dificuldade estrutural por aula
-- pressão de nogoods aprendidos
-- reorder dinâmico da fila
-- uso de regret em partes da instrumentação de construção
-- limites adaptativos de tentativas
+**Nível 1 — pressão adaptativa:** o alpha é ajustado com base na pressão de seleção corrente. Quando a tentativa está travando, o alpha se afasta do valor de pressão para romper bloqueio.
 
-### Quality Gate
+**Nível 2 — portfólio epsilon-greedy:** o sistema mantém um histórico de resultados por perfil de alpha (conservative/balanced/exploratory). Com probabilidade 0.85 escolhe o perfil de maior taxa de sucesso histórica; com 0.15 explora aleatoriamente. Para ativar o portfólio são necessárias ao menos 3 tentativas por perfil.
 
-Antes de aceitar a semente inicial, o solver avalia:
+**Nível 3 — clamping por perfil de ilha (Sprint 4):** os bounds finais de alpha são recortados pelo perfil atribuído a cada ilha (Conservative: 0.15–0.185; Balanced: 0.175–0.215; Exploratory: 0.21–0.25).
 
-- hard penalty total
-- razão de conflitos hard
-- degradação acumulada na tentativa
-- capacidade de repair dentro do orçamento
+### Lookahead Crítico de Alocação (Melhoria 3)
 
-Isso impede que a evolução comece a partir de sementes já muito ruins.
+A função `futureFlexibilityScore()` avalia, para cada slot candidato, o impacto sobre as próximas aulas mais críticas da fila. Slots que eliminam todas as opções de uma aula futura recebem penalidade de +15.0; slots que deixam apenas uma opção recebem +2.5. Slots que preservam 7 ou mais opções encerram a avaliação antecipada (early-exit para economizar CPU).
+
+O score final do slot é: `rewardScore - blockingPenalty`. Valores negativos penalizam o slot diretamente no ranking da RCL.
+
+### Salvage de Tentativas Fracassadas (Melhoria 1)
+
+Quando uma tentativa é rejeitada pelo quality gate, o solver não a descarta inteiramente. O método `updateSalvageFromCandidate()` avalia se a tentativa contém ao menos 40% de genes livres de conflito com hard penalty abaixo de 4× o baseline. Se sim, esses genes são extraídos por `extractConflictFreeGenes()` e armazenados em `$bestSalvageGenes`.
+
+Na próxima tentativa, `tryCreateIndividualFromSalvage()` pré-aloca os genes do salvage e roda o GRASP apenas sobre o subproblema restante, reduzindo custo e aumentando a chance de obter uma semente viável.
+
+### Nogoods Persistentes (Melhoria 4)
+
+O sistema mantém memória de padrões que colapsam repetidamente entre execuções. No início de `createIndividual()` o solver chama `loadNogoodsFromPersistentCache()` para mesclar nogoods de execuções anteriores (chave `ag.nogoods.{horarioId}`, TTL 7 dias) ao mapa em memória. Ao rejeitar uma semente, `persistNogoodsToPersistentCache()` salva os nogoods atualizados (limitados a 500 entradas por tipo, via `capNogoodsForPersistence()`).
+
+### Quality Gate e Batch Quality (Quality Gate + Sprint 3)
+
+**Quality gate individual:** antes de aceitar cada semente, o solver avalia hard penalty total, razão de conflitos hard, degradação acumulada e capacidade de repair dentro do orçamento.
+
+**Batch quality report:** após inicializar toda a população, o `GeneticAlgorithmEngine` computa e publica um report estruturado com:
+- `uniqueness_ratio` — fração de assinaturas estruturais únicas
+- `fitness_min/max/avg/std_dev` — estatísticas de fitness
+- `fitness_coefficient_of_variation` — dispersão relativa
+- `verdict` — `ok`, `low_signature_diversity`, `fitness_collapsed`, `low_fitness_dispersion` ou `empty`
+- `issues[]` — lista de problemas detectados
+
+O report é publicado via `progress.report(phase='initial_population', stage='batch_quality')` e logado em `schedule.initial_population.batch_quality`.
 
 ## Fitness e Avaliação
 
@@ -344,8 +371,25 @@ O solver roda em modelo de ilhas via:
 - IslandModelEngine
 - Island
 - BestIndividualsMigration
+- **IslandProfile** (Conservative / Balanced / Exploratory) — implementado no Sprint 4
 
-O RunGeneticAlgorithm monta múltiplas ilhas e configura migração periódica. Isso aumenta exploração paralela do espaço e reduz convergência prematura local.
+### Perfis de Ilha (Sprint 4)
+
+Cada ilha recebe um perfil diferenciado em `RunGeneticAlgorithm`, determinado pelo índice `$i`:
+
+| Ilha | Perfil | Alpha GRASP | Mutation base | Mutation max |
+|------|--------|-------------|---------------|--------------|
+| 0 | Conservative | 0.15 – 0.185 | 0.015 | 0.28 |
+| 1 | Exploratory | 0.21 – 0.25 | 0.030 | 0.42 |
+| ≥2 | Balanced | 0.175 – 0.215 | 0.020 | 0.35 |
+
+O perfil é propagado via `GeneticAlgorithmEngine::setIslandProfile()` → `ScheduleProblem::setIslandProfile()`. O `AdaptiveMutationController` de cada ilha é instanciado com os parâmetros do perfil. O ScheduleProblem usa o perfil para recortar os bounds finais do alpha GRASP em `resolveAdaptiveAlpha()`.
+
+O log `solver.islands.profiles_configured` é emitido após a configuração de todas as ilhas, com a lista de perfis atribuídos.
+
+### Migração
+
+A migração periódica usa `BestIndividualsMigration(2)` com intervalo de 5 gerações. Isso garante troca de material genético entre ilhas sem suprimir diversidade prematuramente.
 
 ## Critérios de Término
 
@@ -434,127 +478,138 @@ Isso cria uma última barreira de integridade antes de gravar alocações finais
 
 ## Pontos Fortes da Arquitetura Atual
 
-- pipeline completo, assíncrono e observável
-- construção inicial bem mais avançada que um random initializer simples
-- separação razoável entre AG genérico e problema de horários
-- integração madura de métricas, cache e banco
-- landscape e hyper-heuristics já acoplados ao fluxo principal
-- ALNS real, não apenas planejado
-- proteção operacional contra estagnação e sementes ruins
+- pipeline completo, assíncrono e observável de ponta a ponta
+- construção inicial com GRASP adaptativo, lookahead, salvage, portfólio epsilon-greedy e nogoods persistentes
+- ilhas diferenciadas por perfil (Conservative/Balanced/Exploratory) com parâmetros autônomos de alpha e mutação
+- meta de qualidade do batch com veredito automatizado e publicação via progress event
+- separação clara entre AG genérico e problema de horários — ScheduleProblem não vaza para GeneticAlgorithmEngine além da interface GeneticProblem
+- integração madura de métricas, cache, banco e logs estruturados
+- landscape e hyper-heuristics acoplados ao fluxo principal de evolução
+- ALNS real com seleção adaptativa de destroy/repair e critério de aceitação configurável
+- proteção operacional contra estagnação, sementes ruins e execuções degradadas
 - suporte formal a constraints customizadas sem contaminar o núcleo do AG
+- cobertura de testes unitários validada: 104 passed, 0 failed
 
 ## Limitações e Riscos Atuais
 
-- a construção inicial continua sendo a área mais crítica do solver
-- parte da documentação histórica descreve operadores ou frequências que podem não refletir exatamente o wiring atual
-- repair especializado para constraints ainda é preparatório, não efetivo
-- a quantidade de heurísticas cresceu bastante, aumentando custo de calibração e risco de interação difícil de explicar
-- a evolução depende fortemente de uma boa semente inicial; se a construção degrada, o resto do pipeline trabalha em desvantagem
+- repair especializado para constraints customizadas ainda é preparatório (infraestrutura existe, mas não efetivo no `GreedyRepairOperator`)
+- a quantidade de heurísticas e parâmetros cresceu bastante; calibração e diagnóstico de interações complexas são custosos sem benchmark reproduzível
+- avaliação delta fitness existe na infraestrutura, mas o ganho real de performance depende de medir cobertura real de uso nos operadores
+- a construção inicial, embora muito mais sofisticada, ainda é serial — em cenários grandes, é o principal gargalo de latência
+- nogoods persistentes crescem com execuções; o cap de 500 por tipo é conservador e pode limitar o ganho em cenários com muitas repetições
 
 ## Sugestões de Melhoria
 
 ### Melhorias gerais
 
 - consolidar uma matriz oficial de operadores realmente ativos por execução, para reduzir distância entre documentação e wiring real
-- adicionar um relatório automático pós-execução com custo por fase: população inicial, evolução, ALNS, repair final e persistência
+- instrumentar melhor tempo por operador (cpu/wall), não apenas por geração
 - separar mais explicitamente telemetria operacional de telemetria científica do AG, facilitando leitura por perfis diferentes
-- instrumentar melhor tempo por operador, não apenas por geração
-- criar benchmark reproduzível com cenários padronizados para comparar ajustes de heurística
+- revisar periodicamente a documentação para mantê-la aderente ao wiring real do RunGeneticAlgorithm e do GeneticAlgorithmEngine
+- considerar um modo "debug verboso" ativável por config para logar decisões internas do portfólio e do salvage em diagnóstico
 
-### Melhorias prioritárias na geração da população inicial
+### Status de Implementação (Abr/2026)
 
-Esta é a principal recomendação.
+Todas as melhorias de alto ROI para a população inicial e para o modelo de ilhas foram implementadas:
 
-#### 1. Portfólio de construtores iniciais
+| Ciclo | Item | Status | Arquivo principal |
+|-------|------|--------|-------------------|
+| Sprint 1 | Ranking rico de candidate slots (live_tightness, contention) | ✅ Implementado | ScheduleProblem |
+| Sprint 2 | Alpha adaptativo por contexto e pressão | ✅ Implementado | ScheduleProblem::resolveAdaptiveAlpha() |
+| Sprint 3 | Meta de qualidade da população (batch quality) | ✅ Implementado | GeneticAlgorithmEngine::computeInitialPopulationBatchQuality() |
+| Sprint 4 | Perfis de ilha (Conservative/Balanced/Exploratory) | ✅ Implementado | IslandProfile, RunGeneticAlgorithm, GeneticAlgorithmEngine |
+| Melhoria 1 | Salvage de tentativas fracassadas | ✅ Implementado | ScheduleProblem::tryCreateIndividualFromSalvage() |
+| Melhoria 2 | Portfólio adaptativo de alpha (epsilon-greedy) | ✅ Implementado | ScheduleProblem::portfolioBiasedAlphaProfile() |
+| Melhoria 3 | Lookahead crítico de alocação (1-2 passos) | ✅ Implementado | ScheduleProblem::futureFlexibilityScore() |
+| Melhoria 4 | Nogoods persistentes entre execuções | ✅ Implementado | ScheduleProblem::loadNogoodsFromPersistentCache() |
 
-Hoje o GRASP é o centro da construção. Vale adicionar um portfólio de construtores e distribuir sementes entre estratégias diferentes, por exemplo:
+### Cobertura de Testes
 
-- GRASP padrão
-- construtor por regret inserção desde o início
-- construtor por blocos obrigatórios primeiro
-- construtor orientado a professores críticos
-- construtor orientado a turmas críticas
-
-Isso reduz correlação entre sementes e aumenta diversidade estrutural real, não apenas diversidade superficial.
-
-#### 2. Alpha adaptativo por contexto, não só aleatório
-
-Em vez de apenas sortear alpha numa faixa fixa, usar sinais da própria tentativa:
-
-- se a fila está muito apertada, reduzir aleatoriedade
-- se a tentativa anterior colapsou cedo, aumentar diversidade
-- se há reaproveitamento de semente, usar alpha mais conservador
-
-Na prática, isso transforma o GRASP em um construtor mais responsivo ao estado do problema.
-
-#### 3. Lookahead curto no momento da alocação
-
-O custo local de um slot não deveria considerar apenas conflito imediato. Sugestão:
-
-- penalizar slots que destroem opções das próximas aulas mais críticas
-- medir consumo de capacidade compartilhada por professor e turma
-- incorporar risco de bloquear blocos consecutivos futuros
-
-Um lookahead de 1 ou 2 passos já tende a melhorar bastante a qualidade das sementes.
-
-#### 4. Reaproveitamento parcial de tentativas fracassadas
-
-Atualmente há fail-fast, quality gate e repair, mas ainda há espaço para uma estratégia de salvage mais explícita:
-
-- preservar prefixos viáveis da tentativa
-- congelar alocações estruturalmente boas
-- reconstruir apenas o subproblema restante
-
-Isso evita jogar fora tentativas quase úteis quando o colapso acontece tarde.
-
-#### 5. Seeds estratificadas para as ilhas
-
-As ilhas se beneficiariam mais se recebessem populações iniciais com perfis diferentes, por exemplo:
-
-- ilha mais conservadora, baixa aleatoriedade
-- ilha mais exploratória, alta aleatoriedade
-- ilha orientada a blocos consecutivos
-- ilha orientada a distribuição por turma
-
-Hoje o modelo de ilhas já existe; falta explorar melhor a diversidade no nascimento das populações.
-
-#### 6. Candidate slots com ranking mais rico
-
-O ranking de slots candidatos da população inicial pode evoluir para considerar explicitamente:
-
-- pressão de constraints customizadas
-- saturação do primeiro tempo
-- elasticidade restante da turma e do professor
-- probabilidade de repair posterior bem-sucedido
-
-Isso aproximaria construção inicial e repair, reduzindo decisões localmente baratas, mas globalmente ruins.
-
-#### 7. Aprendizado de nogoods mais forte entre execuções
-
-Já existe sinal de reaproveitamento histórico. O próximo passo seria consolidar memória mais útil sobre:
-
-- padrões de slot que colapsam repetidamente
-- combinações aula-professor-turma com alto índice de falha
-- seeds históricas por perfil de configuração
-
-Isso pode reduzir dramaticamente o custo das primeiras tentativas em cenários recorrentes.
-
-#### 8. Meta de qualidade da população, não só do indivíduo
-
-Além de aceitar um indivíduo que passa no quality gate, vale medir a população inicial como conjunto:
-
-- diversidade estrutural mínima
-- cobertura de diferentes regiões do espaço
-- distribuição de hard penalty entre sementes
-
-Hoje é possível começar a evolução com sementes viáveis, mas excessivamente parecidas. Isso tende a reduzir o ganho do modelo de ilhas e do fitness sharing.
+| Arquivo de teste | Escopo |
+|-----------------|--------|
+| GeneticAlgorithmEngineStandaloneTest | Engine standalone, batch_quality report, Sprint 3 |
+| IslandProfileTest | Enum IslandProfile, ranges alpha/mutação, Sprint 4 |
+| RunGeneticAlgorithmConstraintLoadingTest | Carregamento de constraints no solver |
+| AlnsTelemetryTest | Telemetria ALNS |
+| FitnessEvaluatorLexicographicTest | Score lexicográfico hard/soft |
+| VarianceBasedTerminationCriterionTest | Critério de término por variância |
+| LandscapeObservationTest | Observação e memória de landscape |
+| HyperHeuristicContractTest | Contratos da hiper-heurística |
+| ConstraintFeasibilityAnalyzerTest | Analyzer de viabilidade de constraints |
 
 ## Próximos Passos Recomendados
 
-1. Tratar a população inicial como subsistema próprio, com benchmark e tuning dedicados.
-2. Consolidar relatório operacional por execução com custo por fase e principais gargalos.
-3. Ativar, em fases futuras, repair especializado para constraints customizadas usando a infraestrutura de extensão já preparada.
-4. Revisar periodicamente a documentação para mantê-la aderente ao wiring real do RunGeneticAlgorithm e do GeneticAlgorithmEngine.
+
+O ciclo atual (Sprints 1–4 + Melhorias 1–4) foi concluído. Todas as melhorias de alta prioridade para a população inicial e para o modelo de ilhas estão implementadas e cobertas por testes. As oportunidades abaixo são o próximo horizonte natural de evolução.
+
+### A. Repair especializado para constraints customizadas (Alta viabilidade / Alto ROI)
+
+A infraestrutura já existe (`RepairHeuristicExtension`, `CustomConstraintRepairExtension`), mas o `GreedyRepairOperator` ainda não a invoca efetivamente para constraints SYNC_SAME_TIMESLOT, MUTUAL_EXCLUSION e TIME_PLACEMENT. Ativar esse caminho pode reduzir drasticamente o custo de repair quando constraints customizadas são abundantes.
+
+**Esforço:** Médio | **Risco:** Baixo-Médio | **ROI:** Alto
+
+### B. Benchmark A/B reproduzível por cenário (Alta viabilidade / ROI operacional)
+
+Criar um conjunto de cenários canônicos (ex: escola pequena, escola média com constraints, escola com blocos obrigatórios pesados) e um runner comparativo que mede custo por fase: população inicial, evolução, ALNS, repair, persistência. Isso permitiria quantificar o ganho de cada ciclo de melhoria e orientar decisões de configuração.
+
+**Esforço:** Médio | **Risco:** Baixo | **ROI:** Alto (operacional e diagnóstico)
+
+### C. Portfólio de construtores estruturalmente distintos (Alta viabilidade / Alto ROI futuro)
+
+O portfólio atual diferencia apenas pelo alpha do GRASP. O próximo passo é ter construtores com estratégias distintas de ordenação inicial:
+
+- construtor orientado a blocos obrigatórios desde a primeira rodada
+- construtor orientado a professores com disponibilidade restrita
+- construtor orientado a turmas com maior número de conflitos potenciais
+- construtor por regret inserção pura desde o início (sem GRASP)
+
+Isso aumenta a diversidade estrutural real entre ilhas, não apenas diversidade superficial de alpha.
+
+**Esforço:** Alto | **Risco:** Médio | **ROI:** Alto (em cenários complexos)
+
+### D. Estratégia de migração diferenciada por perfil de ilha (Média viabilidade / Médio ROI)
+
+Hoje a migração é simétrica (BestIndividualsMigration entre todas as ilhas). Um refinamento natural é:
+
+- ilha Exploratory envia apenas para Balanced (não para Conservative)
+- ilha Conservative recebe apenas de Balanced (filtra o "ruído" exploratório)
+- medir e logar impacto de cada evento de migração no fitness da ilha receptora
+
+**Esforço:** Médio | **Risco:** Baixo-Médio | **ROI:** Médio-Alto
+
+### E. Nogoods por perfil de configuração / turno (Média viabilidade / Médio ROI)
+
+Os nogoods persistentes hoje são salvos por `horarioId`. Uma versão mais poderosa salvaria por "perfil de problema" (ex: número de turmas, turnos, constraints ativas), permitindo transferência de conhecimento entre horários estruturalmente similares de anos letivos diferentes.
+
+**Esforço:** Médio | **Risco:** Baixo | **ROI:** Médio-Alto
+
+### F. Relatório pós-execução estruturado com custo por fase (Alta viabilidade / Alto ROI operacional)
+
+A telemetria em logs já está rica. Falta um relatório consolidado ao final de cada execução que mostre:
+
+- tempo e custo (tentativas, rejeições) da fase de população inicial por ilha
+- gerações totais e contribuição do ALNS versus evolução pura
+- número de migrações e seu efeito no fitness
+- resumo de nogoods aprendidos e persistidos
+- perfil de island utilizado e taxa de qualidade de batch por ilha
+
+Esse relatório informaria tanto operadores quanto o desenvolvimento do solver.
+
+**Esforço:** Baixo-Médio | **Risco:** Nenhum | **ROI:** Alto (operacional)
+
+### G. Avaliação paralela da população inicial (Alta viabilidade técnica / Médio-Alto ROI)
+
+A construção dos indivíduos da população inicial é hoje serial. Com coroutines ou pools de workers, seria possível construir os N indivíduos em paralelo, reduzindo o tempo da fase mais lenta do solver.
+
+**Pré-requisito:** garantir imutabilidade de ScheduleData e isolamento do estado de ScheduleProblem por instância.
+
+**Esforço:** Alto | **Risco:** Médio (concorrência) | **ROI:** Alto (latência)
+
+### H. Adaptive ALNS com frequência orientada por landscape (Média viabilidade / Médio ROI)
+
+Hoje o ALNS opera com frequência fixa (`lnsFrequency`). Uma evolução natural é disparar ALNS com frequência maior quando o landscape detecta estagnação e menor quando há progresso consistente. A infraestrutura de landscape já produz `LandscapeMetrics` que poderiam orientar esse ajuste.
+
+**Esforço:** Médio | **Risco:** Baixo | **ROI:** Médio
 
 ## Arquivos Mais Relevantes
 
@@ -603,13 +658,19 @@ Hoje é possível começar a evolução com sementes viáveis, mas excessivament
 - app/Modules/Horarios/Application/LoadActiveScheduleConstraintsAction.php
 - app/Modules/Horarios/Application/Constraints/ConstraintSolverPayloadMapper.php
 
+### Perfis de ilha
+
+- app/Modules/AG/Domain/Evolution/IslandModel/IslandProfile.php
+
 ## Conclusão
 
-A arquitetura do AG do Projeto Horário já está em um estágio avançado. Ela vai muito além de um algoritmo genético simples e incorpora mecanismos modernos de intensificação, diversidade, observabilidade e adaptação.
+A arquitetura do AG do Projeto Horário completou um ciclo completo de maturação (Sprints 1–4 + Melhorias 1–4). Ela vai muito além de um algoritmo genético simples e incorpora mecanismos modernos de intensificação, diversidade, observabilidade e adaptação.
 
-O principal ponto de atenção não é a ausência de técnicas, mas sim a necessidade de calibrar e fortalecer a geração da população inicial, porque ela continua sendo o principal determinante da eficiência do restante do pipeline.
+O foco do ciclo concluído foi a fase de construção inicial e o modelo de ilhas, que eram os principais determinantes da eficiência do pipeline. Com portfólio adaptativo, lookahead, salvage, nogoods persistentes, perfis de ilha diferenciados e meta de qualidade do batch, essa fase está substancialmente mais robusta do que uma inicialização aleatória ou GRASP simples.
 
-Se a próxima rodada de evolução arquitetural focar nisso, o ganho esperado é duplo:
+O próximo horizonte de evolução é diferente: não se trata mais de cobrir técnicas ausentes, mas de:
 
-- menor custo operacional na fase mais cara e frágil
-- melhor ponto de partida para ilhas, ALNS, repair e hyper-heuristics
+1. **Ativar o que está preparado** — repair especializado para constraints customizadas já tem infraestrutura; falta conectá-la efetivamente.
+2. **Medir com rigor** — benchmark reproduzível por cenário para quantificar ganho real de cada ajuste e orientar calibração.
+3. **Diversificar construtores além do alpha** — portfólio estruturalmente heterogêneo (regret puro, blocos obrigatórios first, professores críticos first) para aumentar diversidade real entre ilhas.
+4. **Reduzir latência** — construção paralela da população inicial como próximo salto de performance em cenários grandes.

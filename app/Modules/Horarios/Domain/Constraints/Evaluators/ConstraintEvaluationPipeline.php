@@ -24,7 +24,7 @@ final class ConstraintEvaluationPipeline
     private ?ConstraintEvaluationSummary $lastSummary = null;
 
     /**
-     * @param array<int, ConstraintEvaluatorInterface> $evaluators
+     * @param  array<int, ConstraintEvaluatorInterface>  $evaluators
      */
     public function __construct(array $evaluators)
     {

@@ -6,8 +6,10 @@ use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class PreferredTimeRule implements SoftRuleInterface {
-    public function evaluate(EvaluationContext $context): RuleResult {
+final class PreferredTimeRule implements SoftRuleInterface
+{
+    public function evaluate(EvaluationContext $context): RuleResult
+    {
         $penalty = 0.0;
 
         $preferencias = $context->diasPreferidos();
@@ -17,7 +19,7 @@ final class PreferredTimeRule implements SoftRuleInterface {
             $aulaId = $gene->aulaId();
             $preferidos = $preferencias[$aulaId] ?? [];
 
-            if (!empty($preferidos) && !in_array($gene->diaSemana(), $preferidos)) {
+            if (! empty($preferidos) && ! in_array($gene->diaSemana(), $preferidos)) {
                 $penalty++;
             }
         }
@@ -25,7 +27,8 @@ final class PreferredTimeRule implements SoftRuleInterface {
         return new RuleResult($penalty, self::class);
     }
 
-    public function isHard(): bool {
+    public function isHard(): bool
+    {
         return false;
     }
 }

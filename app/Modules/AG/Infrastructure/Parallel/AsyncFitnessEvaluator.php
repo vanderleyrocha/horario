@@ -16,8 +16,7 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
         private readonly GeneticProblem $problem,
         private readonly int $concurrency = 8,
         private readonly int $timeoutSeconds = 120
-    ) {
-    }
+    ) {}
 
     public function evaluate(array $population): void
     {
@@ -27,6 +26,7 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
 
         if (! $this->shouldRunAsync(count($population))) {
             $this->evaluateSequentially($population);
+
             return;
         }
 
@@ -38,6 +38,7 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
             ]);
 
             $this->evaluateSequentially($population);
+
             return;
         }
 
@@ -55,6 +56,7 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
 
                 if ($serializedIndividual === null) {
                     $failedIndexes[$index] = true;
+
                     continue;
                 }
 
@@ -86,6 +88,7 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
             ]);
 
             $this->evaluateSequentially($population);
+
             return;
         }
 
@@ -131,8 +134,8 @@ final class AsyncFitnessEvaluator implements FitnessEvaluatorInterface
     }
 
     /**
-     * @param Cromossomo[] $population
-     * @param int[]|null $indexes
+     * @param  Cromossomo[]  $population
+     * @param  int[]|null  $indexes
      */
     private function evaluateSequentially(array $population, ?array $indexes = null): void
     {

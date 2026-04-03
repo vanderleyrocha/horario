@@ -17,7 +17,7 @@ use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 final class ScheduleDataBuilder
 {
     /**
-     * @param array<int, CustomConstraintData> $customConstraints
+     * @param  array<int, CustomConstraintData>  $customConstraints
      */
     public function build(Horario $horario, array $customConstraints = []): ScheduleData
     {

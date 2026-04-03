@@ -30,15 +30,15 @@ it('exibe o dashboard em portugues e permite trocar de execucao', function (): v
     ]);
 
     Livewire::test(ExecutionDashboard::class, ['execution' => $currentExecution])
-        ->assertSee('Execucao do Solver')
+        ->assertSee('Execução do Solver')
         ->assertSee('Trocar execucao')
-        ->assertSee('Populacao inicial')
+        ->assertSee('População inicial')
         ->assertSee('Resumo operacional')
-        ->assertSee('Episodio atual')
-        ->assertSee('Ultimo episodio encerrado')
-        ->assertSee('Transicao relevante')
-        ->assertSee('Tendencia recente')
-        ->assertSee('Historico recente de transicoes')
+        ->assertSee('Episódio atual')
+        ->assertSee('Último episódio encerrado')
+        ->assertSee('Transição relevante')
+        ->assertSee('Tendência recente')
+        ->assertSee('Histórico recente de transições')
         ->assertSee('Freio adaptativo do ALNS')
         ->assertSee('Limite atual de tentativas')
         ->assertSee('Ajuste adaptativo')
@@ -57,6 +57,9 @@ it('exibe o dashboard em portugues e permite trocar de execucao', function (): v
         ->assertSeeHtml('data-landscape-transition-history')
         ->assertSeeHtml('data-landscape-alns-brake-badge')
         ->assertSeeHtml('data-landscape-alns-brake-detail')
+        ->assertSeeHtml('data-ignored-metric-panel')
+        ->assertSeeHtml('data-ignored-metric-detail')
+        ->assertSeeHtml('data-ignored-metric-count')
         ->set('selectedExecutionId', $olderExecution->id)
         ->assertRedirect(route('algoritmo.execution', ['execution' => $olderExecution->id]));
 });
@@ -146,8 +149,8 @@ it('exibe o quadro de gargalos e o resumo terminal quando a execucao falha', fun
 
     Livewire::test(ExecutionDashboard::class, ['execution' => $execution])
         ->assertSee('Encerramento da execucao')
-        ->assertSee('Gargalos da populacao inicial')
-        ->assertSee('Diagnostico da construcao inicial');
+        ->assertSee('Gargalos da população')
+        ->assertSee('Diagnóstico da construção inicial');
 });
 
 it('emite um payload terminal a partir do banco quando nao existe cache recente', function (): void {
@@ -197,6 +200,35 @@ it('emite um payload de monitoramento quando a execucao ainda esta running sem c
         'start_time' => now()->subHour(),
         'updated_at' => now()->subMinutes(30),
     ]);
+
+    Livewire::test(ExecutionMetricsStream::class, [
+        'executionId' => $execution->id,
+        'horarioId' => $horario->id,
+    ])
+        ->call('pollMetrics')
+        ->assertDispatched('metrics-update', function (string $event, array $payload): bool {
+            return ($payload['metric']['phase'] ?? null) === 'monitoring'
+                && ($payload['metric']['execution_status'] ?? null) === 'running'
+                && (($payload['metric']['stage'] ?? null) === 'no_cached_progress');
+        });
+});
+
+it('nao quebra o stream quando o cache da execucao contem payload invalido', function (): void {
+    $horario = Horario::query()->create([
+        'nome' => 'Horario com cache invalido',
+        'ano' => 2026,
+        'semestre' => 1,
+        'status' => 'rascunho',
+    ]);
+
+    $execution = ScheduleExecution::query()->create([
+        'horario_id' => $horario->id,
+        'status' => 'running',
+        'start_time' => now()->subMinutes(10),
+        'updated_at' => now()->subMinutes(2),
+    ]);
+
+    Cache::put("ga_execution_progress_{$execution->id}", 'payload-invalido', now()->addMinutes(5));
 
     Livewire::test(ExecutionMetricsStream::class, [
         'executionId' => $execution->id,

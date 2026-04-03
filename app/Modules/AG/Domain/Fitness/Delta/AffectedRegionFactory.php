@@ -4,7 +4,8 @@ namespace App\Modules\AG\Domain\Fitness\Delta;
 
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 
-final class AffectedRegionFactory {
+final class AffectedRegionFactory
+{
     public static function fromGeneChange(
         int $index,
         Gene $old,
@@ -16,22 +17,22 @@ final class AffectedRegionFactory {
 
             professores: [
                 $old->professorId(),
-                $new->professorId()
+                $new->professorId(),
             ],
 
             turmas: [
                 $old->turmaId(),
-                $new->turmaId()
+                $new->turmaId(),
             ],
 
             dias: [
                 $old->diaSemana(),
-                $new->diaSemana()
+                $new->diaSemana(),
             ],
 
             periodos: [
                 $old->periodoDia(),
-                $new->periodoDia()
+                $new->periodoDia(),
             ]
         );
     }

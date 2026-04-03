@@ -9,15 +9,14 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 final class CrowdingReplacement implements ReplacementStrategyInterface
 {
-    public function __construct(private GeneticDistance $distance)
-    {
-    }
+    public function __construct(private GeneticDistance $distance) {}
 
     public function replace(array &$population, Cromossomo $incoming): void
     {
         if (empty($population)) {
 
             $population[] = $incoming;
+
             return;
         }
 

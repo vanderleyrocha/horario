@@ -16,13 +16,13 @@ interface RepairHeuristicExtension
     public function augmentRepairTargets(Cromossomo $chromosome, ScheduleData $data): array;
 
     /**
-     * @param list<int> $slotIds
+     * @param  list<int>  $slotIds
      * @return list<int>
      */
     public function filterCandidateStartSlots(Gene $gene, ScheduleData $data, array $slotIds): array;
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      */
     public function candidateRankingPenalty(
         Cromossomo $chromosome,
@@ -33,7 +33,7 @@ interface RepairHeuristicExtension
     ): float;
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      */
     public function countTargetViolations(
         Cromossomo $chromosome,

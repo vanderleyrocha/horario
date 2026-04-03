@@ -749,11 +749,11 @@ class Show extends Component
         $conflictTargets = [];
 
         if ((int) $conflict->turma_id === $turmaId) {
-            $conflictTargets[] = 'a turma ' . ($conflict->turma?->codigo ?? $conflict->turma?->nome ?? 'informada');
+            $conflictTargets[] = 'a turma '.($conflict->turma?->codigo ?? $conflict->turma?->nome ?? 'informada');
         }
 
         if ((int) $conflict->professor_id === $professorId) {
-            $conflictTargets[] = 'o professor ' . ($conflict->professor?->nome_abreviado ?? $conflict->professor?->nome ?? 'informado');
+            $conflictTargets[] = 'o professor '.($conflict->professor?->nome_abreviado ?? $conflict->professor?->nome ?? 'informado');
         }
 
         return sprintf(
@@ -769,10 +769,10 @@ class Show extends Component
         $horarios = $this->resolveHorarioRange($tempo, $duration);
 
         if ($horarios === null) {
-            return 'tempo ' . $tempo;
+            return 'tempo '.$tempo;
         }
 
-        return $horarios['inicio'] . ' - ' . $horarios['fim'];
+        return $horarios['inicio'].' - '.$horarios['fim'];
     }
 
     private function refreshDerivedState(): void

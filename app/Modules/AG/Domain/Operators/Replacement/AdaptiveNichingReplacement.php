@@ -26,6 +26,7 @@ final class AdaptiveNichingReplacement implements ReplacementStrategyInterface
     {
         if (empty($population)) {
             $population[] = $incoming;
+
             return;
         }
 
@@ -51,6 +52,7 @@ final class AdaptiveNichingReplacement implements ReplacementStrategyInterface
             */
 
             $this->crowding->replace($population, $incoming);
+
             return;
         }
 
@@ -62,6 +64,7 @@ final class AdaptiveNichingReplacement implements ReplacementStrategyInterface
             */
 
             $this->similarity->replace($population, $incoming);
+
             return;
         }
 

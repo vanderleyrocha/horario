@@ -9,7 +9,7 @@ use InvalidArgumentException;
 final class InvalidScheduleConstraintException extends InvalidArgumentException
 {
     /**
-     * @param list<string> $errors
+     * @param  list<string>  $errors
      */
     public function __construct(
         string $message,
@@ -24,7 +24,7 @@ final class InvalidScheduleConstraintException extends InvalidArgumentException
     }
 
     /**
-     * @param list<string> $errors
+     * @param  list<string>  $errors
      */
     public static function fromErrors(array $errors): self
     {

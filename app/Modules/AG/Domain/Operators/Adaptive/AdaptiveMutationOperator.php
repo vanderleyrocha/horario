@@ -8,7 +8,7 @@ use App\Modules\AG\Domain\Operators\Mutation\Interfaces\AdaptiveOperatorInterfac
 use App\Modules\AG\Domain\Operators\Mutation\MutationOperatorInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class AdaptiveMutationOperator implements MutationOperatorInterface, AdaptiveOperatorInterface
+final class AdaptiveMutationOperator implements AdaptiveOperatorInterface, MutationOperatorInterface
 {
     private array $operators;
 
@@ -56,7 +56,7 @@ final class AdaptiveMutationOperator implements MutationOperatorInterface, Adapt
 
     public function recordImprovement(float $improvement): void
     {
-        if (!$this->lastOperator) {
+        if (! $this->lastOperator) {
             return;
         }
 

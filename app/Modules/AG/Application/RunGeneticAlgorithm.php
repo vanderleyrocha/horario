@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\AG\Application;
 
 use App\Models\Horario;
+use App\Models\ScheduleExecution;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Evolution\IslandModel\BestIndividualsMigration;
 use App\Modules\AG\Domain\Evolution\IslandModel\Island;
 use App\Modules\AG\Domain\Evolution\IslandModel\IslandModelEngine;
+use App\Modules\AG\Domain\Evolution\IslandModel\IslandProfile;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessWeights;
 use App\Modules\AG\Domain\HyperHeuristic\LearningHyperHeuristicController;
@@ -54,14 +56,14 @@ use App\Modules\AG\Infrastructure\Parallel\AsyncFitnessEvaluator;
 use App\Modules\AG\Infrastructure\Progress\NullProgressReporter;
 use App\Modules\AG\Support\DTO\GeneticAlgorithmConfigDTO;
 use App\Modules\Horarios\Application\Constraints\ConstraintSolverPayloadMapper;
-use App\Modules\Horarios\Domain\Constraints\Evaluators\ConstraintEvaluationPipeline;
-use App\Modules\Horarios\Domain\Constraints\Evaluators\MutualExclusionConstraintEvaluator;
-use App\Modules\Horarios\Domain\Constraints\Repair\CustomConstraintRepairExtension;
-use App\Modules\Horarios\Domain\Constraints\Evaluators\SyncSameTimeslotConstraintEvaluator;
-use App\Modules\Horarios\Domain\Constraints\Evaluators\TimePlacementConstraintEvaluator;
 use App\Modules\Horarios\Application\LoadActiveScheduleConstraintsAction;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
 use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\ConstraintEvaluationPipeline;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\MutualExclusionConstraintEvaluator;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\SyncSameTimeslotConstraintEvaluator;
+use App\Modules\Horarios\Domain\Constraints\Evaluators\TimePlacementConstraintEvaluator;
+use App\Modules\Horarios\Domain\Constraints\Repair\CustomConstraintRepairExtension;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\ClassConflictRule;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\CustomConstraintHardRule;
 use App\Modules\Horarios\Domain\Evaluation\HardRules\MandatoryBlockViolationRule;
@@ -98,7 +100,7 @@ final class RunGeneticAlgorithm
         if ($executionMetrics->hasExecutionId()) {
             // Se execução já existe, recuperar island_count dela
             $executionId = $executionMetrics->getExecutionId();
-            $execution = \App\Models\ScheduleExecution::find($executionId);
+            $execution = ScheduleExecution::find($executionId);
             $islandCount = ($execution?->island_count) ?? (int) config('ag.islands', 2);
         } else {
             // Caso contrário, usar config como source of truth
@@ -191,7 +193,7 @@ final class RunGeneticAlgorithm
 
         $islandEngine = new IslandModelEngine(
             migrationPolicy: new BestIndividualsMigration(2),
-            migrationInterval: 25,
+            migrationInterval: 5,
         );
 
         $baseLnsFrequency = $this->resolveBaseLnsFrequency($config->numeroGeracoes);
@@ -199,6 +201,13 @@ final class RunGeneticAlgorithm
         $metricsGlobal = [];
 
         for ($i = 0; $i < $islandCount; $i++) {
+            // Sprint 4: perfil da ilha determina alpha GRASP e parâmetros de mutação
+            $islandProfile = match ($i) {
+                0 => IslandProfile::Conservative,
+                1 => IslandProfile::Exploratory,
+                default => IslandProfile::Balanced,
+            };
+
             $metrics = new MetricsRecorder();
             $metrics->setExecutionId($executionId);
             $metrics->setPopulationStatistics(
@@ -239,9 +248,9 @@ final class RunGeneticAlgorithm
             ]);
 
             $adaptiveMutation = new AdaptiveMutationController(
-                baseRate: 0.02,
-                amplification: 0.25,
-                maxRate: 0.35,
+                baseRate:      $islandProfile->mutationBaseRate(),
+                amplification: $islandProfile->mutationAmplification(),
+                maxRate:       $islandProfile->mutationMaxRate(),
             );
 
             // ✅ AÇÃO 07: Condicional parallel evaluation por population_size threshold
@@ -299,6 +308,9 @@ final class RunGeneticAlgorithm
                 landscapeEngine: $landscapeEngine,
             );
 
+            // Sprint 4: propaga perfil de ilha para o ScheduleProblem via engine
+            $engine->setIslandProfile($islandProfile);
+
             $islandEngine->addIsland(
                 new Island(
                     $i + 1,
@@ -310,6 +322,20 @@ final class RunGeneticAlgorithm
 
             $metricsGlobal[] = $metrics;
         }
+
+        // Sprint 4: log de perfis configurados por ilha
+        Log::info('solver.islands.profiles_configured', [
+            'execution_id' => $executionId,
+            'island_count' => $islandCount,
+            'profiles' => array_map(
+                fn (int $idx) => match ($idx) {
+                    0 => IslandProfile::Conservative->value,
+                    1 => IslandProfile::Exploratory->value,
+                    default => IslandProfile::Balanced->value,
+                },
+                range(0, $islandCount - 1),
+            ),
+        ]);
 
         $islandEngine->setTelemetry($metricsGlobal[0], $progress, $config->taxaMutacao);
         $islandEngine->setExecutionId($executionId);

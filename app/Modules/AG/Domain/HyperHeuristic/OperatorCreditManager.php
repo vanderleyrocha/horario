@@ -14,7 +14,7 @@ final class OperatorCreditManager
 
     public function reward(string $operator, float $reward): void
     {
-        if (!isset($this->history[$operator])) {
+        if (! isset($this->history[$operator])) {
             $this->history[$operator] = [];
         }
 

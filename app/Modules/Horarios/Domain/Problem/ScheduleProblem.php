@@ -8,6 +8,7 @@ use App\Models\Alocacao;
 use App\Models\ScheduleExecution;
 use App\Modules\AG\Domain\Contracts\GeneticProblem;
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
+use App\Modules\AG\Domain\Evolution\IslandModel\IslandProfile;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessResult;
@@ -33,6 +34,14 @@ final class ScheduleProblem implements GeneticProblem
     private const RCL_ALPHA_MIN = 0.15;
 
     private const RCL_ALPHA_MAX = 0.25;  // ← Reduzido de 0.45 (mais greedy, menos aleatório)
+
+    private const RCL_ALPHA_CONSERVATIVE_MAX = 0.185;
+
+    private const RCL_ALPHA_BALANCED_MIN = 0.175;
+
+    private const RCL_ALPHA_BALANCED_MAX = 0.215;
+
+    private const RCL_ALPHA_EXPLORATORY_MIN = 0.21;
 
     private const TELEMETRY_EVERY_ALLOCATIONS = 25;
 
@@ -77,6 +86,22 @@ final class ScheduleProblem implements GeneticProblem
     private const SEED_REUSE_PERTURBATION_MAX_GROWTH = 8;
 
     private const HISTORICAL_SEED_EXECUTION_LOOKBACK = 5;
+
+    private const INITIAL_QUALITY_GATE_RELAXED_FROM_ATTEMPT = 12;
+
+    private const INITIAL_QUALITY_GATE_EMERGENCY_RELAXED_FROM_ATTEMPT = 4;
+
+    private const INITIAL_QUALITY_GATE_EMERGENCY_REJECTION_WINDOW = 3;
+
+    private const INITIAL_QUALITY_GATE_EMERGENCY_HARD_PENALTY_MULTIPLIER = 3.0;
+
+    private const INITIAL_QUALITY_GATE_SKIP_REPAIR_HARD_PENALTY_MULTIPLIER = 3.0;
+
+    private const INITIAL_QUALITY_GATE_RELAXED_BASE_HARD_PENALTY = 400.0;
+
+    private const INITIAL_QUALITY_GATE_RELAXED_CONFLICT_RATIO_MAX = 0.15;
+
+    private const INITIAL_QUALITY_GATE_RELAXED_VIABLE_SCORE_THRESHOLD = 0.0;
 
     private string $lastBuildFailure = 'Falha ao montar individuo inicial.';
 
@@ -123,6 +148,25 @@ final class ScheduleProblem implements GeneticProblem
 
     /**
      * @var array{
+     *     grasp_attempts_used: int,
+     *     quality_gate_evaluations: int,
+     *     quality_gate_passed: int,
+     *     quality_gate_rejected: int,
+     *     source: string
+     * }|null
+     */
+    private ?array $lastInitialPopulationBuildStats = null;
+
+    private int $currentInitialPopulationGraspAttempts = 0;
+
+    private int $currentInitialPopulationQualityGateEvaluations = 0;
+
+    private int $currentInitialPopulationQualityGatePasses = 0;
+
+    private int $currentInitialPopulationQualityGateRejections = 0;
+
+    /**
+     * @var array{
      *     lesson_slot: array<string, int>,
      *     professor_slot: array<string, int>,
      *     class_slot: array<string, int>
@@ -166,6 +210,46 @@ final class ScheduleProblem implements GeneticProblem
      */
     private array $previousFitnessCache = [];
 
+    /**
+     * Mapa de contenção de slots: slotId → quantas aulas no restante da fila podem usar este slot.
+     * Recalculado a cada reordenação dinâmica da fila.
+     *
+     * @var array<int, int>
+     */
+    private array $currentSlotContention = [];
+
+    // ─── Sprint 4: perfil de ilha ───────────────────────────────────────────
+
+    private IslandProfile $islandProfile = IslandProfile::Balanced;
+
+    // ─── Melhoria 2: portfólio de construtores (alpha profile history) ───────
+
+    /**
+     * Histórico de sucesso por perfil de alpha.
+     * Usado para bias epsilon-greedy na seleção de perfil.
+     *
+     * @var array<string, array{success: int, attempts: int}>
+     */
+    private array $alphaProfileHistory = [
+        'conservative' => ['success' => 0, 'attempts' => 0],
+        'balanced' => ['success' => 0, 'attempts' => 0],
+        'exploratory' => ['success' => 0, 'attempts' => 0],
+    ];
+
+    // ─── Melhoria 1: salvage de tentativas fracassadas ──────────────────────
+
+    /** Genes livres de conflito da melhor tentativa rejeitada até o momento. */
+    private array $bestSalvageGenes = [];
+
+    /** Penalidade hard da tentativa que gerou $bestSalvageGenes. */
+    private float $bestSalvagePenalty = INF;
+
+    // ─── Melhoria 4: nogoods persistentes entre execuções ──────────────────
+
+    private bool $nogoodsPersistenceLoaded = false;
+
+    private bool $hybridConstructionTriggerLogged = false;
+
     public function __construct(private readonly ScheduleData $data, private readonly EvaluationContextBuilder $contextBuilder, private readonly FitnessEvaluator $fitnessEvaluator, private readonly GreedyRepairOperator $repairOperator, private readonly ?ProgressReporterInterface $progress = null, private readonly ?int $executionId = null)
     {
     }
@@ -173,7 +257,18 @@ final class ScheduleProblem implements GeneticProblem
     public function createIndividual(): Cromossomo
     {
         $this->assertNotCancelled();
+
+        $this->hybridConstructionTriggerLogged = false;
+
+        // Melhoria 4: carrega nogoods persistidos de execuções anteriores (lazy, once)
+        $this->loadNogoodsFromPersistentCache();
+
         $this->lastInitialPopulationSource = null;
+        $this->lastInitialPopulationBuildStats = null;
+        $this->currentInitialPopulationGraspAttempts = 0;
+        $this->currentInitialPopulationQualityGateEvaluations = 0;
+        $this->currentInitialPopulationQualityGatePasses = 0;
+        $this->currentInitialPopulationQualityGateRejections = 0;
         $queue = $this->buildPlacementQueue();
         $bestRejectedAttempt = null;
         $this->currentBuildAttemptLimit = $this->resolveAdaptiveBuildAttemptLimit();
@@ -184,6 +279,8 @@ final class ScheduleProblem implements GeneticProblem
             $seedCandidate = $this->tryCreateIndividualFromAcceptedSeed($queue);
 
             if ($seedCandidate !== null) {
+                $this->captureLastInitialPopulationBuildStats($this->lastInitialPopulationSource ?? 'accepted_seed');
+
                 return $seedCandidate;
             }
         }
@@ -191,19 +288,39 @@ final class ScheduleProblem implements GeneticProblem
         $historicalSeedCandidate = $this->tryCreateIndividualFromHistoricalSeed($queue);
 
         if ($historicalSeedCandidate !== null) {
+            $this->captureLastInitialPopulationBuildStats($this->lastInitialPopulationSource ?? 'historical_seed');
+
             return $historicalSeedCandidate;
+        }
+
+        // Melhoria 1: tenta warm-start a partir de genes salvageable de tentativas anteriores
+        if ($this->bestSalvageGenes !== []) {
+            $salvageCandidate = $this->tryCreateIndividualFromSalvage($queue);
+
+            if ($salvageCandidate !== null) {
+                $this->captureLastInitialPopulationBuildStats('salvage');
+
+                return $salvageCandidate;
+            }
         }
 
         for ($attempt = 1; $attempt <= $this->currentBuildAttemptLimit; $attempt++) {
             $this->assertNotCancelled();
+            $this->currentInitialPopulationGraspAttempts++;
             $attemptStartedAt = microtime(true);
             $teacherBusy = [];
             $classBusy = [];
             $assignedGenes = [];
-            $alpha = $this->randomAlpha();
+            $alphaDecision = $this->resolveAdaptiveAlpha(attempt: $attempt, queueSize: count($queue));
+            $alpha = (float) $alphaDecision['alpha'];
             $telemetry = [
                 'attempt' => $attempt,
                 'alpha' => round($alpha, 4),
+                'alpha_profile' => $alphaDecision['alpha_profile'],
+                'alpha_reason' => $alphaDecision['alpha_reason'],
+                'alpha_pressure_score' => $alphaDecision['alpha_pressure_score'],
+                'alpha_history_stress_score' => $alphaDecision['alpha_history_stress_score'],
+                'alpha_queue_pressure_score' => $alphaDecision['alpha_queue_pressure_score'],
                 'queue_size' => count($queue),
                 'allocations' => 0,
                 'forced_allocations' => 0,
@@ -220,6 +337,9 @@ final class ScheduleProblem implements GeneticProblem
                 'stage' => 'grasp_start',
                 'attempt' => $attempt,
                 'alpha' => round($alpha, 4),
+                'alpha_policy' => $telemetry['alpha_profile'],
+                'alpha_reason' => $telemetry['alpha_reason'],
+                'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
                 'queue_size' => count($queue),
                 'attempt_limit' => $this->currentBuildAttemptLimit,
                 'allocations' => 0,
@@ -236,9 +356,9 @@ final class ScheduleProblem implements GeneticProblem
                     $this->lastBuildFailure = $failFast['message'];
                     $this->initialPopulationCounters['fail_fast']++;
                     $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'fail_fast', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
-                            'message' => $this->lastBuildFailure,
-                            'fail_fast_limit' => $failFast['fail_fast_limit'],
-                        ]);
+                        'message' => $this->lastBuildFailure,
+                        'fail_fast_limit' => $failFast['fail_fast_limit'],
+                    ]);
 
                     Log::warning('schedule.initial_population.quality_gate.fail_fast', [
                         'execution_id' => $this->executionId,
@@ -267,22 +387,62 @@ final class ScheduleProblem implements GeneticProblem
                     continue;
                 }
 
-                $candidate = $this->repairWithTelemetry(new Cromossomo($assignedGenes), reportProgress: true, source: 'initial_population_quality_gate', progressContext: [
+                $candidate = new Cromossomo($assignedGenes);
+                $qualityGate = $this->evaluateInitialPopulationQualityGate(
+                    candidate: $candidate,
+                    attempt: $attempt,
+                    queueSize: count($queue),
+                    telemetry: $telemetry,
+                    recordEvaluation: false,
+                );
+                $repairSkipped = false;
+
+                if (! $qualityGate['passes'] && ! $this->shouldSkipInitialQualityGateRepair($qualityGate, $attempt)) {
+                    $candidate = $this->repairWithTelemetry($candidate, reportProgress: true, source: 'initial_population_quality_gate', progressContext: [
                         'attempt' => $attempt,
                         'queue_size' => count($queue),
                         'forced_allocations' => $telemetry['forced_allocations'],
                         'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                         'fill_ratio' => 1,
                     ]);
-                $qualityGate = $this->evaluateInitialPopulationQualityGate(candidate: $candidate, attempt: $attempt, queueSize: count($queue), telemetry: $telemetry);
+                    $qualityGate = $this->evaluateInitialPopulationQualityGate(candidate: $candidate, attempt: $attempt, queueSize: count($queue), telemetry: $telemetry);
+                } elseif (! $qualityGate['passes']) {
+                    $repairSkipped = true;
+                    $this->lastRepairTelemetry = [];
+
+                    Log::warning('schedule.initial_population.repair.skipped', [
+                        'execution_id' => $this->executionId,
+                        'attempt' => $attempt,
+                        'queue_size' => count($queue),
+                        'hard_penalty' => $qualityGate['hard_penalty'],
+                        'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                        'skip_multiplier' => self::INITIAL_QUALITY_GATE_SKIP_REPAIR_HARD_PENALTY_MULTIPLIER,
+                    ]);
+
+                    $this->evaluateInitialPopulationQualityGate(
+                        candidate: $candidate,
+                        attempt: $attempt,
+                        queueSize: count($queue),
+                        telemetry: $telemetry,
+                    );
+                } else {
+                    $this->evaluateInitialPopulationQualityGate(
+                        candidate: $candidate,
+                        attempt: $attempt,
+                        queueSize: count($queue),
+                        telemetry: $telemetry,
+                    );
+                }
 
                 if ($qualityGate['passes']) {
                     $this->initialPopulationCounters['quality_gate_passed']++;
                     $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'quality_gate_passed', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
-                            'hard_penalty' => $qualityGate['hard_penalty'],
-                            'soft_penalty' => $qualityGate['soft_penalty'],
-                            'score' => $qualityGate['score'],
-                        ]);
+                        'hard_penalty' => $qualityGate['hard_penalty'],
+                        'soft_penalty' => $qualityGate['soft_penalty'],
+                        'score' => $qualityGate['score'],
+                        'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                        'repair_skipped' => $repairSkipped,
+                    ]);
                     Log::info('schedule.initial_population.quality_gate.passed', [
                         'execution_id' => $this->executionId,
                         'attempt' => $attempt,
@@ -296,12 +456,17 @@ final class ScheduleProblem implements GeneticProblem
                         'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
                         'viable' => $qualityGate['viable'],
                         'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                        'repair_skipped' => $repairSkipped,
                         'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
                     ]);
                     $this->reportInitialPopulationProgress([
                         'stage' => 'grasp_completed',
                         'attempt' => $attempt,
                         'alpha' => round($alpha, 4),
+                        'alpha_policy' => $telemetry['alpha_profile'],
+                        'alpha_reason' => $telemetry['alpha_reason'],
+                        'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
+                        'alpha_impact' => $this->alphaImpactSummary($telemetry),
                         'queue_size' => count($queue),
                         'attempt_limit' => $this->currentBuildAttemptLimit,
                         'allocations' => $telemetry['allocations'],
@@ -329,10 +494,15 @@ final class ScheduleProblem implements GeneticProblem
                         'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                         'viable' => $qualityGate['viable'],
                         'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                        'repair_skipped' => $repairSkipped,
                     ]);
 
                     $this->lastAcceptedInitialSeed = $candidate->copy();
                     $this->lastInitialPopulationSource = 'grasp';
+                    $this->captureLastInitialPopulationBuildStats('grasp');
+
+                    // Melhoria 2: registra sucesso no portfólio de alpha profiles
+                    $this->recordAlphaProfileOutcome($telemetry['alpha_profile'], true);
 
                     return $candidate;
                 }
@@ -341,11 +511,22 @@ final class ScheduleProblem implements GeneticProblem
                 $this->lastBuildFailure = $this->formatInitialQualityGateFailureMessage($attempt, $qualityGate, $telemetry);
                 $this->rememberNogoodsFromAssignedGenes($candidate->genes());
                 $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'quality_gate_rejected', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
-                        'hard_penalty' => $qualityGate['hard_penalty'],
-                        'soft_penalty' => $qualityGate['soft_penalty'],
-                        'score' => $qualityGate['score'],
-                        'message' => $this->lastBuildFailure,
-                    ]);
+                    'hard_penalty' => $qualityGate['hard_penalty'],
+                    'soft_penalty' => $qualityGate['soft_penalty'],
+                    'score' => $qualityGate['score'],
+                    'max_hard_penalty' => $qualityGate['max_hard_penalty'],
+                    'repair_skipped' => $repairSkipped,
+                    'message' => $this->lastBuildFailure,
+                ]);
+
+                // Melhoria 2: registra falha no portfólio de alpha profiles
+                $this->recordAlphaProfileOutcome($telemetry['alpha_profile'], false);
+
+                // Melhoria 1: tenta extrair gene salvageable desta tentativa fracassada
+                $this->updateSalvageFromCandidate($candidate, (float) $qualityGate['hard_penalty'], count($queue));
+
+                // Melhoria 4: persiste nogoods aprendidos nesta tentativa
+                $this->persistNogoodsToPersistentCache();
 
                 if (
                     $bestRejectedAttempt === null ||
@@ -369,6 +550,7 @@ final class ScheduleProblem implements GeneticProblem
                     'max_hard_conflict_allocations' => $qualityGate['max_hard_conflict_allocations'],
                     'viable' => $qualityGate['viable'],
                     'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                    'repair_skipped' => $repairSkipped,
                     'rejection_reasons' => $qualityGate['rejection_reasons'],
                     'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
                 ]);
@@ -387,14 +569,15 @@ final class ScheduleProblem implements GeneticProblem
                     'hard_conflict_allocations' => $telemetry['hard_conflict_allocations'],
                     'viable' => $qualityGate['viable'],
                     'viable_score_threshold' => $qualityGate['viable_score_threshold'],
+                    'repair_skipped' => $repairSkipped,
                     'rejection_reasons' => $qualityGate['rejection_reasons'],
                     'message' => $this->lastBuildFailure,
                 ]);
             } else {
                 $this->initialPopulationCounters['construct_failed']++;
                 $this->recordInitialPopulationAttempt(attempt: $attempt, outcome: 'construct_failed', telemetry: $telemetry, attemptStartedAt: $attemptStartedAt, extra: [
-                        'message' => $this->lastBuildFailure,
-                    ]);
+                    'message' => $this->lastBuildFailure,
+                ]);
 
                 Log::warning('schedule.initial_population.grasp.construct_failed', [
                     'execution_id' => $this->executionId,
@@ -413,6 +596,10 @@ final class ScheduleProblem implements GeneticProblem
                 'attempt' => $attempt,
                 'reason' => $this->lastBuildFailure,
                 'alpha' => round($alpha, 4),
+                'alpha_profile' => $telemetry['alpha_profile'],
+                'alpha_reason' => $telemetry['alpha_reason'],
+                'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
+                'alpha_impact' => $this->alphaImpactSummary($telemetry),
                 'elapsed_ms' => $this->attemptElapsedMs($telemetry),
                 'allocations' => $telemetry['allocations'],
                 'queue_size' => $telemetry['queue_size'],
@@ -428,6 +615,10 @@ final class ScheduleProblem implements GeneticProblem
                 'stage' => 'grasp_retry',
                 'attempt' => $attempt,
                 'alpha' => round($alpha, 4),
+                'alpha_policy' => $telemetry['alpha_profile'],
+                'alpha_reason' => $telemetry['alpha_reason'],
+                'alpha_pressure_score' => $telemetry['alpha_pressure_score'],
+                'alpha_impact' => $this->alphaImpactSummary($telemetry),
                 'queue_size' => count($queue),
                 'attempt_limit' => $this->currentBuildAttemptLimit,
                 'allocations' => $telemetry['allocations'],
@@ -465,17 +656,17 @@ final class ScheduleProblem implements GeneticProblem
             }
 
             $candidate = $this->repairWithTelemetry($candidate, reportProgress: true, source: 'initial_population_quality_gate', progressContext: [
-                    'attempt' => $attempt,
-                    'queue_size' => count($queue),
-                    'forced_allocations' => 0,
-                    'hard_conflict_allocations' => count($this->countSeedHardConflicts($candidate)),
-                    'fill_ratio' => 1,
-                    'seed_reuse' => true,
-                ]);
+                'attempt' => $attempt,
+                'queue_size' => count($queue),
+                'forced_allocations' => 0,
+                'hard_conflict_allocations' => count($this->countSeedHardConflicts($candidate)),
+                'fill_ratio' => 1,
+                'seed_reuse' => true,
+            ]);
 
             $qualityGate = $this->evaluateInitialPopulationQualityGate(candidate: $candidate, attempt: self::MAX_BUILD_ATTEMPTS, queueSize: count($queue), telemetry: [
-                    'hard_conflict_allocations' => count($this->countSeedHardConflicts($candidate)),
-                ]);
+                'hard_conflict_allocations' => count($this->countSeedHardConflicts($candidate)),
+            ]);
 
             if ($qualityGate['passes']) {
                 $this->lastAcceptedInitialSeed = $candidate->copy();
@@ -755,7 +946,7 @@ final class ScheduleProblem implements GeneticProblem
         $signature = $individual->signature();
 
         // Se não temos fitness anterior, fazer avaliação completa
-        if (!isset($this->previousFitnessCache[$signature])) {
+        if (! isset($this->previousFitnessCache[$signature])) {
             $result = $this->evaluate($individual);
             // Guardar para próxima mutação
             $this->previousFitnessCache[$signature] = $result;
@@ -797,6 +988,56 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
+     * @return array{
+     *     grasp_attempts_used: int,
+     *     quality_gate_evaluations: int,
+     *     quality_gate_passed: int,
+     *     quality_gate_rejected: int,
+     *     source: string
+     * }
+     */
+    public function lastInitialPopulationBuildStats(): array
+    {
+        return $this->lastInitialPopulationBuildStats ?? [
+            'grasp_attempts_used' => 0,
+            'quality_gate_evaluations' => 0,
+            'quality_gate_passed' => 0,
+            'quality_gate_rejected' => 0,
+            'source' => $this->lastInitialPopulationSource ?? 'unknown',
+        ];
+    }
+
+    // ─── Sprint 4: perfil de ilha ─────────────────────────────────────────────
+
+    /**
+     * Sprint 4: Define o perfil da ilha que controlará os limites de alpha GRASP.
+     *
+     * Conservative → alpha baixo / Exploratory → alpha alto / Balanced → padrão
+     */
+    public function setIslandProfile(IslandProfile $profile): void
+    {
+        $this->islandProfile = $profile;
+    }
+
+    // ─── Melhoria 2: portfólio de construtores adaptativo ─────────────────────
+
+    /**
+     * Melhoria 2: Registra resultado de um perfil de alpha para bias futuro.
+     */
+    public function recordAlphaProfileOutcome(string $profile, bool $success): void
+    {
+        if (! isset($this->alphaProfileHistory[$profile])) {
+            return;
+        }
+
+        $this->alphaProfileHistory[$profile]['attempts']++;
+
+        if ($success) {
+            $this->alphaProfileHistory[$profile]['success']++;
+        }
+    }
+
+    /**
      * 🔧 PRIORIDADE 10: Avaliar com delta se AffectedRegion está disponível.
      * Para uso em contextos onde sabemos exatamente qual região foi modificada.
      *
@@ -817,7 +1058,7 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         // Se não temos fitness anterior, fazer avaliação completa
-        if (!isset($this->previousFitnessCache[$signature])) {
+        if (! isset($this->previousFitnessCache[$signature])) {
             $result = $this->evaluate($individual);
             $this->previousFitnessCache[$signature] = $result;
 
@@ -1280,8 +1521,41 @@ final class ScheduleProblem implements GeneticProblem
         return $allocations % self::DYNAMIC_QUEUE_REORDER_EVERY_ALLOCATIONS === 0;
     }
 
+    /**
+     * Computa quantas aulas no restante da fila podem usar cada slot atualmente livre.
+     * Retorna array<slotId, contagem> — usado para detectar slots contestados.
+     *
+     * @return array<int, int>
+     */
+    private function computeSlotContention(array $queue, array $teacherBusy, array $classBusy): array
+    {
+        $contention = [];
+
+        foreach ($queue as $task) {
+            if (! is_array($task) || ! isset($task['lesson'])) {
+                continue;
+            }
+
+            /** @var LessonData $lesson */
+            $lesson = $task['lesson'];
+
+            foreach ($this->getStaticCandidateSlotIds($lesson) as $slotId) {
+                $slot = $this->data->timeSlots[$slotId] ?? null;
+
+                if ($slot !== null && $this->canUseSlot($lesson, $slot, $teacherBusy, $classBusy)) {
+                    $contention[$slotId] = ($contention[$slotId] ?? 0) + 1;
+                }
+            }
+        }
+
+        return $contention;
+    }
+
     private function reorderPlacementQueueDynamically(array $queue, array $teacherBusy, array $classBusy, array $assignedGenes): array
     {
+        // Recalcula contenção de slots a cada reordenação — informa quais slots são disputados.
+        $this->currentSlotContention = $this->computeSlotContention($queue, $teacherBusy, $classBusy);
+
         $ranked = [];
 
         foreach ($queue as $task) {
@@ -1300,8 +1574,10 @@ final class ScheduleProblem implements GeneticProblem
         usort($ranked, static function (array $left, array $right): int {
             return [
                 $left['priority']['feasible_slots'],
+                -$left['priority']['live_tightness'],
                 -$left['priority']['static_difficulty_score'],
                 -$left['priority']['structural_tightness'],
+                -$left['priority']['avg_slot_contention'],
                 -$left['priority']['nogood_pressure'],
                 -$left['priority']['same_entity_pressure'],
                 -$left['priority']['same_discipline_opportunity'],
@@ -1310,8 +1586,10 @@ final class ScheduleProblem implements GeneticProblem
                 $left['priority']['tie_breaker'],
             ] <=> [
                 $right['priority']['feasible_slots'],
+                -$right['priority']['live_tightness'],
                 -$right['priority']['static_difficulty_score'],
                 -$right['priority']['structural_tightness'],
+                -$right['priority']['avg_slot_contention'],
                 -$right['priority']['nogood_pressure'],
                 -$right['priority']['same_entity_pressure'],
                 -$right['priority']['same_discipline_opportunity'],
@@ -1410,6 +1688,8 @@ final class ScheduleProblem implements GeneticProblem
         $feasibleSlots = 0;
         $nogoodPressure = 0.0;
         $sameDisciplineOpportunity = 0;
+        $totalContentionSum = 0;
+        $exclusiveFeasibleSlots = 0;
         $staticDifficulty = $this->baseDifficultyMetricsForLesson($lesson);
 
         foreach ($this->getStaticCandidateSlotIds($lesson) as $slotId) {
@@ -1424,16 +1704,45 @@ final class ScheduleProblem implements GeneticProblem
             if ($this->canUseSlot($lesson, $slot, $teacherBusy, $classBusy)) {
                 $feasibleSlots++;
 
+                $slotContest = $this->currentSlotContention[$slotId] ?? 1;
+                $totalContentionSum += $slotContest;
+
+                if ($slotContest <= 1) {
+                    $exclusiveFeasibleSlots++;
+                }
+
                 if ($this->sameDisciplineAdjacencyPenalty($lesson, $slot, $assignedGenes) < 0) {
                     $sameDisciplineOpportunity++;
                 }
             }
         }
 
+        $avgSlotContention = $feasibleSlots > 0
+            ? round($totalContentionSum / $feasibleSlots, 2)
+            : 0.0;
+
+        // Tensão dinâmica: quanto da demanda restante do professor/turma ainda precisa ser alocada
+        // em relação aos slots ainda disponíveis. Mais próximo de 1.0 = mais crítico.
+        $professorAssigned = count($teacherBusy[$lesson->professorId] ?? []);
+        $classAssigned = count($classBusy[$lesson->classId] ?? []);
+        $profTotalAvailable = $this->availabilitySlotCount($lesson->professorId, true);
+        $classTotalAvailable = $this->availabilitySlotCount($lesson->classId, false);
+        $profRemainingDemand = max(0, $this->totalDemandForProfessor($lesson->professorId) - $professorAssigned);
+        $profRemainingSlots = max(1, $profTotalAvailable - $professorAssigned);
+        $classRemainingDemand = max(0, $this->totalDemandForClass($lesson->classId) - $classAssigned);
+        $classRemainingSlots = max(1, $classTotalAvailable - $classAssigned);
+        $liveTightness = round(max(
+            $profRemainingDemand / $profRemainingSlots,
+            $classRemainingDemand / $classRemainingSlots,
+        ), 4);
+
         return [
             'feasible_slots' => $feasibleSlots,
+            'live_tightness' => $liveTightness,
             'static_difficulty_score' => $staticDifficulty['base_difficulty_score'] ?? 0.0,
             'structural_tightness' => $staticDifficulty['structural_tightness'] ?? 0.0,
+            'avg_slot_contention' => $avgSlotContention,
+            'exclusive_feasible_slots' => $exclusiveFeasibleSlots,
             'nogood_pressure' => $nogoodPressure,
             'same_entity_pressure' => $this->sameEntityPressure($lesson, $teacherBusy, $classBusy),
             'same_discipline_opportunity' => $sameDisciplineOpportunity,
@@ -1576,6 +1885,14 @@ final class ScheduleProblem implements GeneticProblem
         $score += $this->sameDisciplineAdjacencyPenalty($lesson, $slot, $assignedGenes);
         $score += $this->nogoodPenalty($lesson, $slot);
         $score -= $this->futureFlexibilityScore($slot, $queue, $currentIndex, $lesson, $teacherBusy, $classBusy);
+
+        // Penalidade leve por contenção: prefere slots menos disputados, preservando os
+        // mais contestados para aulas que têm menos alternativas disponíveis.
+        if (! empty($this->currentSlotContention)) {
+            $contention = $this->currentSlotContention[$slot->id] ?? 1;
+            $score += ($contention - 1) * 0.12;
+        }
+
         $score += mt_rand(0, 100) / 1000;
 
         return $score;
@@ -1588,9 +1905,10 @@ final class ScheduleProblem implements GeneticProblem
 
         $this->occupySlot($currentLesson, $slot, $teacherBusySimulated, $classBusySimulated);
 
-        $score = 0.0;
+        $rewardScore = 0.0;
+        $blockingPenalty = 0.0;
 
-        foreach (array_slice($queue, $currentIndex + 1, 8) as $task) {
+        foreach (array_slice($queue, $currentIndex + 1, 3) as $task) {
             /** @var LessonData $lesson */
             $lesson = $task['lesson'];
 
@@ -1605,13 +1923,28 @@ final class ScheduleProblem implements GeneticProblem
 
                 if ($this->canUseSlot($lesson, $candidate, $teacherBusySimulated, $classBusySimulated)) {
                     $options++;
+
+                    if ($options >= 7) {
+                        break; // saída antecipada: já temos evidência suficiente
+                    }
                 }
             }
 
-            $score += min($options, 6);
+            $rewardScore += min($options, 6);
+
+            // Melhoria 3: penalidade de lookahead crítico
+            // Se esta alocação deixaria a aula seguinte sem nenhum slot viável → grande penalidade.
+            if ($options === 0) {
+                $blockingPenalty += 15.0; // bloqueia completamente: penalidade crítica
+            } elseif ($options === 1) {
+                $blockingPenalty += 2.5;  // quase bloqueia: penalidade moderada
+            }
         }
 
-        return $score;
+        // Retorna reward menos penalty. Quando penalty domina, o valor fica negativo,
+        // e como scoreCandidateSlot faz "score -= futureFlexibilityScore()", isso
+        // se converte numa penalidade positiva no score total do slot.
+        return $rewardScore - $blockingPenalty;
     }
 
     private function sameDayLoadPenalty(LessonData $lesson, TimeSlot $slot, array $teacherBusy, array $classBusy): float
@@ -1902,11 +2235,167 @@ final class ScheduleProblem implements GeneticProblem
         return $summary;
     }
 
-    private function randomAlpha(): float
+    /**
+     * @return array{
+     *     alpha: float,
+     *     alpha_min: float,
+     *     alpha_max: float,
+     *     alpha_profile: string,
+     *     alpha_reason: string,
+     *     alpha_pressure_score: float,
+     *     alpha_history_stress_score: float,
+     *     alpha_queue_pressure_score: float
+     * }
+     */
+    private function resolveAdaptiveAlpha(int $attempt, int $queueSize): array
+    {
+        $queuePressureScore = $this->initialQueuePressureScore($queueSize);
+        $historyStressScore = $this->recentBuildStressScore();
+        $attemptPressureScore = min(1.0, max(0.0, ($attempt - 1) / max(1, $this->currentBuildAttemptLimit - 1)));
+        $pressureScore = round(min(1.0, ($queuePressureScore * 0.45) + ($historyStressScore * 0.40) + ($attemptPressureScore * 0.15)), 4);
+
+        $profile = 'balanced';
+        $alphaMin = self::RCL_ALPHA_BALANCED_MIN;
+        $alphaMax = self::RCL_ALPHA_BALANCED_MAX;
+        $reason = 'Pressao intermediaria; equilibrio entre exploracao e convergencia.';
+
+        if ($pressureScore >= 0.68) {
+            $profile = 'conservative';
+            $alphaMin = self::RCL_ALPHA_MIN;
+            $alphaMax = self::RCL_ALPHA_CONSERVATIVE_MAX;
+            $reason = 'Pressao alta de fila/historico; priorizando construcao mais gulosa para reduzir colisoes precoces.';
+        } elseif ($pressureScore < 0.38) {
+            $profile = 'exploratory';
+            $alphaMin = self::RCL_ALPHA_EXPLORATORY_MIN;
+            $alphaMax = self::RCL_ALPHA_MAX;
+            $reason = 'Pressao controlada; ampliando exploracao para diversificar sementes.';
+        }
+
+        if ($attempt >= (int) ceil($this->currentBuildAttemptLimit * 0.75) && $historyStressScore < 0.35 && $queuePressureScore < 0.5) {
+            $profile = 'exploratory';
+            $alphaMin = self::RCL_ALPHA_EXPLORATORY_MIN;
+            $alphaMax = self::RCL_ALPHA_MAX;
+            $reason = 'Fim da janela de tentativas com baixo estresse recente; aumentando diversidade para escapar de padrao local.';
+        }
+
+        // Melhoria 2: bias pelo portfólio (epsilon-greedy, 15% de exploração)
+        $portfolioProfile = $this->portfolioBiasedAlphaProfile();
+
+        if ($portfolioProfile !== null && (mt_rand() / mt_getrandmax()) >= 0.15) {
+            if ($portfolioProfile !== $profile) {
+                $profile = $portfolioProfile;
+                [$alphaMin, $alphaMax] = match ($profile) {
+                    'conservative' => [self::RCL_ALPHA_MIN, self::RCL_ALPHA_CONSERVATIVE_MAX],
+                    'exploratory' => [self::RCL_ALPHA_EXPLORATORY_MIN, self::RCL_ALPHA_MAX],
+                    default => [self::RCL_ALPHA_BALANCED_MIN, self::RCL_ALPHA_BALANCED_MAX],
+                };
+                $reason .= ' [portfolio_bias:' . $profile . ']';
+            }
+        }
+
+        // Sprint 4: aplica limites do perfil de ilha (restringe ou expande a faixa de alpha)
+        if ($this->islandProfile !== IslandProfile::Balanced) {
+            $profileMin = $this->islandProfile->graspAlphaMin();
+            $profileMax = $this->islandProfile->graspAlphaMax();
+
+            // Cruza a faixa calculada com a faixa permitida pelo perfil da ilha
+            $alphaMin = max($alphaMin, $profileMin);
+            $alphaMax = min($alphaMax, $profileMax);
+
+            if ($alphaMin > $alphaMax) {
+                // Sem sobreposição: usa a faixa do perfil de ilha como autoridade
+                $alphaMin = $profileMin;
+                $alphaMax = $profileMax;
+                $profile = $this->islandProfile->value;
+            }
+
+            $reason .= ' [ilha:' . $this->islandProfile->value . ']';
+        }
+
+        $alpha = $this->randomAlphaBetween($alphaMin, $alphaMax);
+
+        return [
+            'alpha' => $alpha,
+            'alpha_min' => $alphaMin,
+            'alpha_max' => $alphaMax,
+            'alpha_profile' => $profile,
+            'alpha_reason' => $reason,
+            'alpha_pressure_score' => $pressureScore,
+            'alpha_history_stress_score' => $historyStressScore,
+            'alpha_queue_pressure_score' => $queuePressureScore,
+        ];
+    }
+
+    private function randomAlphaBetween(float $min, float $max): float
     {
         $rand = mt_rand() / mt_getrandmax();
 
-        return self::RCL_ALPHA_MIN + ($rand * (self::RCL_ALPHA_MAX - self::RCL_ALPHA_MIN));
+        return round($min + ($rand * ($max - $min)), 4);
+    }
+
+    private function initialQueuePressureScore(int $queueSize): float
+    {
+        $hardest = $this->cachedDiagnostics['diagnostics'][0] ?? null;
+        $scarcityScore = 0.0;
+
+        if (is_array($hardest)) {
+            $candidateSlots = (int) ($hardest['candidate_slots'] ?? 0);
+            $weeklyOccurrences = (int) ($hardest['weekly_occurrences'] ?? 1);
+            $scarcityScore = min(1.0, $weeklyOccurrences / max(1, $candidateSlots));
+        }
+
+        $queueLoadScore = min(1.0, $queueSize / max(1, $this->data->totalTimeSlots));
+
+        return round(($scarcityScore * 0.65) + ($queueLoadScore * 0.35), 4);
+    }
+
+    private function recentBuildStressScore(): float
+    {
+        $recentAttempts = array_slice($this->initialPopulationAttemptHistory, -6);
+
+        if ($recentAttempts === []) {
+            return 0.0;
+        }
+
+        $recentCount = count($recentAttempts);
+        $failFastRatio = count(array_filter($recentAttempts, static fn (array $attempt): bool => ($attempt['outcome'] ?? null) === 'fail_fast')) / max(1, $recentCount);
+        $qualityGateRejectedRatio = count(array_filter($recentAttempts, static fn (array $attempt): bool => ($attempt['outcome'] ?? null) === 'quality_gate_rejected')) / max(1, $recentCount);
+
+        $forcedRatios = array_map(static fn (array $attempt): float => ((int) ($attempt['forced_allocations'] ?? 0)) / max(1, (int) ($attempt['queue_size'] ?? 0)), $recentAttempts);
+        $hardConflictRatios = array_map(static fn (array $attempt): float => ((int) ($attempt['hard_conflict_allocations'] ?? 0)) / max(1, (int) ($attempt['queue_size'] ?? 0)), $recentAttempts);
+
+        $avgForcedRatio = $forcedRatios === [] ? 0.0 : (array_sum($forcedRatios) / count($forcedRatios));
+        $avgHardConflictRatio = $hardConflictRatios === [] ? 0.0 : (array_sum($hardConflictRatios) / count($hardConflictRatios));
+
+        return round(min(1.0, ($failFastRatio * 0.45) + ($qualityGateRejectedRatio * 0.20) + ($avgForcedRatio * 0.20) + ($avgHardConflictRatio * 0.15)), 4);
+    }
+
+    /**
+     * @param array<string, mixed> $telemetry
+     * @return array<string, float|int>
+     */
+    private function alphaImpactSummary(array $telemetry): array
+    {
+        $queueSize = max(1, (int) ($telemetry['queue_size'] ?? 0));
+        $forcedAllocations = (int) ($telemetry['forced_allocations'] ?? 0);
+        $hardConflicts = (int) ($telemetry['hard_conflict_allocations'] ?? 0);
+        $forcedRatio = round($forcedAllocations / $queueSize, 4);
+        $hardConflictRatio = round($hardConflicts / $queueSize, 4);
+        $fillRatio = round(((int) ($telemetry['allocations'] ?? 0)) / $queueSize, 4);
+        $effectiveness = round(max(0.0, 1.0 - (($forcedRatio * 0.55) + ($hardConflictRatio * 0.45))), 4);
+
+        return [
+            'forced_ratio' => $forcedRatio,
+            'hard_conflict_ratio' => $hardConflictRatio,
+            'fill_ratio' => $fillRatio,
+            'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
+            'effectiveness' => $effectiveness,
+        ];
+    }
+
+    private function randomAlpha(): float
+    {
+        return $this->randomAlphaBetween(self::RCL_ALPHA_MIN, self::RCL_ALPHA_MAX);
     }
 
     private function averageRclSize(array $sizes): float
@@ -2478,16 +2967,16 @@ final class ScheduleProblem implements GeneticProblem
             'swaps' => $telemetry['swaps'] ?? 0,
             'local_rebuilds' => $telemetry['local_rebuilds'] ?? 0,
             'passes' => array_map(static fn (array $pass): array => [
-                    'pass' => $pass['pass'],
-                    'hard_penalty_before' => $pass['hard_penalty_before'],
-                    'hard_penalty_after' => $pass['hard_penalty_after'],
-                    'hard_penalty_delta' => $pass['hard_penalty_delta'],
-                    'invalid_genes_before' => $pass['invalid_genes_before'],
-                    'invalid_genes_after' => $pass['invalid_genes_after'],
-                    'relocations' => $pass['relocations'],
-                    'swaps' => $pass['swaps'],
-                    'local_rebuilds' => $pass['local_rebuilds'],
-                ], $telemetry['passes'] ?? []),
+                'pass' => $pass['pass'],
+                'hard_penalty_before' => $pass['hard_penalty_before'],
+                'hard_penalty_after' => $pass['hard_penalty_after'],
+                'hard_penalty_delta' => $pass['hard_penalty_delta'],
+                'invalid_genes_before' => $pass['invalid_genes_before'],
+                'invalid_genes_after' => $pass['invalid_genes_after'],
+                'relocations' => $pass['relocations'],
+                'swaps' => $pass['swaps'],
+                'local_rebuilds' => $pass['local_rebuilds'],
+            ], $telemetry['passes'] ?? []),
         ]);
     }
 
@@ -2510,12 +2999,18 @@ final class ScheduleProblem implements GeneticProblem
         return false;
     }
 
-    private function evaluateInitialPopulationQualityGate(Cromossomo $candidate, int $attempt, int $queueSize, array $telemetry): array
+    private function evaluateInitialPopulationQualityGate(Cromossomo $candidate, int $attempt, int $queueSize, array $telemetry, bool $recordEvaluation = true): array
     {
         $result = $this->evaluate($candidate);
         $thresholds = $this->initialQualityGateThresholds($attempt, $queueSize);
 
-        $fitnessScoreViable = $result->score() >= self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD;
+        $isRelaxedPhase = $this->isInitialQualityGateRelaxedPhase($attempt);
+
+        $viableScoreThreshold = $isRelaxedPhase
+            ? self::INITIAL_QUALITY_GATE_RELAXED_VIABLE_SCORE_THRESHOLD
+            : self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD;
+
+        $fitnessScoreViable = $result->score() >= $viableScoreThreshold;
         $rejectionReasons = [];
 
         if ($result->hardPenalty() > $thresholds['max_hard_penalty']) {
@@ -2530,18 +3025,31 @@ final class ScheduleProblem implements GeneticProblem
             $rejectionReasons[] = 'score_below_viable_threshold';
         }
 
-        return [
+        $qualityGate = [
             'passes' => $result->hardPenalty() <= $thresholds['max_hard_penalty']
-                && $telemetry['hard_conflict_allocations'] <= $thresholds['max_hard_conflict_allocations'],
+                && ($telemetry['hard_conflict_allocations'] ?? 0) <= $thresholds['max_hard_conflict_allocations'],
             'hard_penalty' => $result->hardPenalty(),
             'soft_penalty' => $result->softPenalty(),
             'score' => $result->score(),
             'max_hard_penalty' => $thresholds['max_hard_penalty'],
             'max_hard_conflict_allocations' => $thresholds['max_hard_conflict_allocations'],
             'viable' => $fitnessScoreViable,
-            'viable_score_threshold' => self::INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD,
+            'viable_score_threshold' => $viableScoreThreshold,
             'rejection_reasons' => $rejectionReasons,
+            'relaxed_phase' => $isRelaxedPhase,
         ];
+
+        if ($recordEvaluation) {
+            $this->currentInitialPopulationQualityGateEvaluations++;
+
+            if ($qualityGate['passes']) {
+                $this->currentInitialPopulationQualityGatePasses++;
+            } else {
+                $this->currentInitialPopulationQualityGateRejections++;
+            }
+        }
+
+        return $qualityGate;
     }
 
     /**
@@ -2619,13 +3127,88 @@ final class ScheduleProblem implements GeneticProblem
 
     private function initialQualityGateThresholds(int $attempt, int $queueSize): array
     {
-        $conflictRatio = min(self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_MAX, self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_START + (($attempt - 1) * self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_GROWTH));
+        $isRelaxedPhase = $this->isInitialQualityGateRelaxedPhase($attempt);
+
+        $conflictRatioMax = $isRelaxedPhase
+            ? self::INITIAL_QUALITY_GATE_RELAXED_CONFLICT_RATIO_MAX
+            : self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_MAX;
+
+        $conflictRatio = min(
+            $conflictRatioMax,
+            self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_START
+                + (($attempt - 1) * self::INITIAL_QUALITY_GATE_CONFLICT_RATIO_GROWTH),
+        );
+
         $maxHardConflictAllocations = max(1, (int) ceil($queueSize * $conflictRatio));
+
+        $maxHardPenalty = $isRelaxedPhase
+            ? self::INITIAL_QUALITY_GATE_RELAXED_BASE_HARD_PENALTY
+            : max(self::INITIAL_QUALITY_GATE_BASE_HARD_PENALTY, $maxHardConflictAllocations * 6.0);
 
         return [
             'max_hard_conflict_allocations' => $maxHardConflictAllocations,
-            'max_hard_penalty' => max(self::INITIAL_QUALITY_GATE_BASE_HARD_PENALTY, $maxHardConflictAllocations * 6.0),
+            'max_hard_penalty' => $maxHardPenalty,
         ];
+    }
+
+    private function isInitialQualityGateRelaxedPhase(int $attempt): bool
+    {
+        if ($attempt >= self::INITIAL_QUALITY_GATE_RELAXED_FROM_ATTEMPT) {
+            return true;
+        }
+
+        return $this->shouldActivateEmergencyInitialQualityGateRelaxation($attempt);
+    }
+
+    private function shouldActivateEmergencyInitialQualityGateRelaxation(int $attempt): bool
+    {
+        if ($attempt < self::INITIAL_QUALITY_GATE_EMERGENCY_RELAXED_FROM_ATTEMPT) {
+            return false;
+        }
+
+        $recentAttempts = array_slice($this->initialPopulationAttemptHistory, -self::INITIAL_QUALITY_GATE_EMERGENCY_REJECTION_WINDOW);
+
+        if (count($recentAttempts) < self::INITIAL_QUALITY_GATE_EMERGENCY_REJECTION_WINDOW) {
+            return false;
+        }
+
+        foreach ($recentAttempts as $recentAttempt) {
+            if (($recentAttempt['outcome'] ?? null) !== 'quality_gate_rejected') {
+                return false;
+            }
+
+            $hardPenalty = $recentAttempt['hard_penalty'] ?? null;
+            $maxHardPenalty = $recentAttempt['max_hard_penalty'] ?? null;
+
+            if (! is_numeric($hardPenalty) || ! is_numeric($maxHardPenalty) || (float) $maxHardPenalty <= 0.0) {
+                return false;
+            }
+
+            if (((float) $hardPenalty / max(0.001, (float) $maxHardPenalty)) < self::INITIAL_QUALITY_GATE_EMERGENCY_HARD_PENALTY_MULTIPLIER) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $qualityGate
+     */
+    private function shouldSkipInitialQualityGateRepair(array $qualityGate, int $attempt): bool
+    {
+        if ($this->isInitialQualityGateRelaxedPhase($attempt)) {
+            return false;
+        }
+
+        $hardPenalty = (float) ($qualityGate['hard_penalty'] ?? 0.0);
+        $maxHardPenalty = (float) ($qualityGate['max_hard_penalty'] ?? 0.0);
+
+        if ($maxHardPenalty <= 0.0) {
+            return false;
+        }
+
+        return $hardPenalty >= ($maxHardPenalty * self::INITIAL_QUALITY_GATE_SKIP_REPAIR_HARD_PENALTY_MULTIPLIER);
     }
 
     /**
@@ -2692,12 +3275,30 @@ final class ScheduleProblem implements GeneticProblem
             'dynamic_reorders' => (int) ($telemetry['dynamic_reorders'] ?? 0),
             'regret_selections' => (int) ($telemetry['regret_selections'] ?? 0),
             'attempt_limit' => (int) ($telemetry['attempt_limit'] ?? $this->currentBuildAttemptLimit),
+            'alpha' => (float) ($telemetry['alpha'] ?? 0.0),
+            'alpha_profile' => (string) ($telemetry['alpha_profile'] ?? 'unknown'),
+            'alpha_reason' => (string) ($telemetry['alpha_reason'] ?? ''),
+            'alpha_pressure_score' => (float) ($telemetry['alpha_pressure_score'] ?? 0.0),
+            'alpha_history_stress_score' => (float) ($telemetry['alpha_history_stress_score'] ?? 0.0),
+            'alpha_queue_pressure_score' => (float) ($telemetry['alpha_queue_pressure_score'] ?? 0.0),
+            'alpha_impact' => $this->alphaImpactSummary($telemetry),
             'avg_rcl_size' => $this->averageRclSize($telemetry['rcl_sizes'] ?? []),
         ], $extra);
 
         if (count($this->initialPopulationAttemptHistory) > self::MAX_BUILD_ATTEMPTS) {
             $this->initialPopulationAttemptHistory = array_slice($this->initialPopulationAttemptHistory, -1 * self::MAX_BUILD_ATTEMPTS);
         }
+    }
+
+    private function captureLastInitialPopulationBuildStats(string $source): void
+    {
+        $this->lastInitialPopulationBuildStats = [
+            'grasp_attempts_used' => $this->currentInitialPopulationGraspAttempts,
+            'quality_gate_evaluations' => $this->currentInitialPopulationQualityGateEvaluations,
+            'quality_gate_passed' => $this->currentInitialPopulationQualityGatePasses,
+            'quality_gate_rejected' => $this->currentInitialPopulationQualityGateRejections,
+            'source' => $source,
+        ];
     }
 
     /**
@@ -2719,6 +3320,7 @@ final class ScheduleProblem implements GeneticProblem
         $regretValues = array_map(static fn (array $attempt): int => (int) ($attempt['regret_selections'] ?? 0), $attempts);
         $latestAttempt = $attempts === [] ? null : $attempts[array_key_last($attempts)];
         $queueSize = (int) ($latestAttempt['queue_size'] ?? 0);
+        $hybridSignal = $this->resolveHybridCpAssignmentSignal($hardConflictValues, $queueSize);
 
         $likelyBottlenecks = [];
 
@@ -2761,7 +3363,15 @@ final class ScheduleProblem implements GeneticProblem
             $optimizationSuggestions[] = 'Reordenar dinamicamente a fila a cada bloco de alocacoes usando pressao de conflito atual, nao apenas a dificuldade estatica calculada no inicio.';
         }
 
-        $optimizationSuggestions[] = 'Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.';
+        if ($hybridSignal['suggest']) {
+            $optimizationSuggestions[] = 'Avaliar uma construcao hibrida com CP/assignment para as aulas mais restritas antes de entrar no preenchimento estocastico do restante.';
+        }
+
+        if ($hybridSignal['trigger_armed']) {
+            $optimizationSuggestions[] = 'Feature flag AG_HYBRID_CP_ASSIGNMENT_ENABLED esta ativa e o gatilho inicial do modo hibrido foi armado para este perfil de gargalo.';
+        }
+
+        $this->logHybridTriggerIfNeeded($hybridSignal);
 
         return [
             'headline' => $likelyBottlenecks[0] ?? 'Sem gargalo dominante identificado ainda.',
@@ -2784,16 +3394,79 @@ final class ScheduleProblem implements GeneticProblem
             'peak_regret_selections' => $regretValues === [] ? 0 : max($regretValues),
             'nogoods_learned' => $this->totalNogoodsLearned(),
             'hardest_lessons' => array_map(static fn (array $lesson): array => [
-                    'lesson_id' => $lesson['lesson_id'],
-                    'candidate_slots' => $lesson['candidate_slots'],
-                    'weekly_occurrences' => $lesson['weekly_occurrences'],
-                    'required_slots' => $lesson['required_slots'],
-                    'professor_available_days' => $lesson['professor_available_days'],
-                    'class_available_days' => $lesson['class_available_days'],
-                ], $hardestLessons),
+                'lesson_id' => $lesson['lesson_id'],
+                'candidate_slots' => $lesson['candidate_slots'],
+                'weekly_occurrences' => $lesson['weekly_occurrences'],
+                'required_slots' => $lesson['required_slots'],
+                'professor_available_days' => $lesson['professor_available_days'],
+                'class_available_days' => $lesson['class_available_days'],
+            ], $hardestLessons),
+            'hybrid_cp_assignment' => $hybridSignal,
             'likely_bottlenecks' => array_values(array_unique($likelyBottlenecks)),
             'optimization_suggestions' => array_values(array_unique($optimizationSuggestions)),
         ];
+    }
+
+    /**
+     * @param array<int, int> $hardConflictValues
+     * @return array<string, mixed>
+     */
+    private function resolveHybridCpAssignmentSignal(array $hardConflictValues, int $queueSize): array
+    {
+        $enabled = (bool) config('ag.initial_population.hybrid_cp_assignment.enabled', false);
+        $minQualityGateRejections = max(1, (int) config('ag.initial_population.hybrid_cp_assignment.min_quality_gate_rejections', 3));
+        $minPeakHardConflicts = max(1, (int) config('ag.initial_population.hybrid_cp_assignment.min_peak_hard_conflicts', 4));
+        $requireAttemptLimitReduced = (bool) config('ag.initial_population.hybrid_cp_assignment.require_attempt_limit_reduced', true);
+
+        $qualityGateRejections = (int) ($this->initialPopulationCounters['quality_gate_rejected'] ?? 0);
+        $peakHardConflicts = $hardConflictValues === [] ? 0 : max($hardConflictValues);
+        $attemptLimitReduced = $this->currentBuildAttemptLimit < $this->currentBuildAttemptLimitBase;
+        $hasRelevantQueue = $queueSize >= 60;
+
+        $criteria = [
+            'quality_gate_rejections' => $qualityGateRejections >= $minQualityGateRejections,
+            'peak_hard_conflicts' => $peakHardConflicts >= $minPeakHardConflicts,
+            'attempt_limit_reduced' => ! $requireAttemptLimitReduced || $attemptLimitReduced,
+            'queue_size_relevant' => $hasRelevantQueue,
+        ];
+
+        $suggest = ! in_array(false, $criteria, true);
+
+        return [
+            'feature_enabled' => $enabled,
+            'trigger_armed' => $enabled && $suggest,
+            'suggest' => $suggest,
+            'criteria' => $criteria,
+            'min_quality_gate_rejections' => $minQualityGateRejections,
+            'min_peak_hard_conflicts' => $minPeakHardConflicts,
+            'require_attempt_limit_reduced' => $requireAttemptLimitReduced,
+            'observed_quality_gate_rejections' => $qualityGateRejections,
+            'observed_peak_hard_conflicts' => $peakHardConflicts,
+            'observed_attempt_limit_reduced' => $attemptLimitReduced,
+            'observed_queue_size' => $queueSize,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $hybridSignal
+     */
+    private function logHybridTriggerIfNeeded(array $hybridSignal): void
+    {
+        if (! ($hybridSignal['trigger_armed'] ?? false) || $this->hybridConstructionTriggerLogged) {
+            return;
+        }
+
+        $this->hybridConstructionTriggerLogged = true;
+
+        Log::info('schedule.initial_population.hybrid_mode.trigger_armed', [
+            'execution_id' => $this->executionId,
+            'horario_id' => $this->resolveHorarioId(),
+            'criteria' => $hybridSignal['criteria'] ?? [],
+            'observed_quality_gate_rejections' => $hybridSignal['observed_quality_gate_rejections'] ?? null,
+            'observed_peak_hard_conflicts' => $hybridSignal['observed_peak_hard_conflicts'] ?? null,
+            'observed_attempt_limit_reduced' => $hybridSignal['observed_attempt_limit_reduced'] ?? null,
+            'observed_queue_size' => $hybridSignal['observed_queue_size'] ?? null,
+        ]);
     }
 
     private function assertNotCancelled(): void
@@ -2862,5 +3535,350 @@ final class ScheduleProblem implements GeneticProblem
     private function maxLessonNumber(): int
     {
         return max(array_map(static fn (TimeSlot $slot) => $slot->lessonNumber, $this->data->timeSlots));
+    }
+
+    // ─── Sprint 4: resolveAdaptiveAlpha com suporte a IslandProfile ──────────
+
+    /**
+     * Sprint 4: Retorna o perfil de alpha sugerido pelo portfólio (Melhoria 2).
+     * Usa epsilon-greedy: 15% de exploração aleatória, 85% de exploitação do melhor perfil.
+     * Retorna null se não houver histórico suficiente.
+     */
+    private function portfolioBiasedAlphaProfile(): ?string
+    {
+        $minAttempts = 3;
+        $bestProfile = null;
+        $bestRate = -1.0;
+
+        foreach ($this->alphaProfileHistory as $profile => $stats) {
+            if ($stats['attempts'] < $minAttempts) {
+                return null; // histórico insuficiente para qualquer perfil
+            }
+
+            $rate = $stats['attempts'] > 0
+                ? $stats['success'] / $stats['attempts']
+                : 0.0;
+
+            if ($rate > $bestRate) {
+                $bestRate = $rate;
+                $bestProfile = $profile;
+            }
+        }
+
+        return $bestProfile;
+    }
+
+    // ─── Melhoria 1: salvage de tentativas fracassadas ────────────────────────
+
+    /**
+     * Melhoria 1: Extrai genes livres de conflito da tentativa rejeitada.
+     *
+     * Um gene é "limpo" se nenhum outro gene compartilha o mesmo par (entidade, slot).
+     * Dessa forma, as turmas/professores sem conflito podem ser usados como warm-start.
+     *
+     * @param Gene[] $genes
+     * @return Gene[]
+     */
+    private function extractConflictFreeGenes(array $genes): array
+    {
+        $teacherClaims = [];
+        $classClaims = [];
+
+        foreach ($genes as $gene) {
+            if (! $gene instanceof Gene) {
+                continue;
+            }
+
+            for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
+                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $teacherClaims[$gene->professorId()][$key] = ($teacherClaims[$gene->professorId()][$key] ?? 0) + 1;
+                $classClaims[$gene->turmaId()][$key] = ($classClaims[$gene->turmaId()][$key] ?? 0) + 1;
+            }
+        }
+
+        $clean = [];
+
+        foreach ($genes as $gene) {
+            if (! $gene instanceof Gene) {
+                continue;
+            }
+
+            $conflict = false;
+
+            for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
+                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+
+                if (($teacherClaims[$gene->professorId()][$key] ?? 0) > 1
+                    || ($classClaims[$gene->turmaId()][$key] ?? 0) > 1
+                ) {
+                    $conflict = true;
+                    break;
+                }
+            }
+
+            if (! $conflict) {
+                $clean[] = $gene;
+            }
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Melhoria 1: Atualiza o salvage se a tentativa rejeitada for melhor do que o atual.
+     *
+     * Critérios:
+     * - Hard penalty < 4× o limiar base (tentativa marginalmente ruim)
+     * - Genes limpos cobrem >= 40% da fila
+     */
+    private function updateSalvageFromCandidate(Cromossomo $candidate, float $hardPenalty, int $queueSize): void
+    {
+        $salvageThreshold = self::INITIAL_QUALITY_GATE_BASE_HARD_PENALTY * 4.0;
+
+        if ($hardPenalty > $salvageThreshold) {
+            return; // tentativa muito ruim para ser aproveitada
+        }
+
+        $cleanGenes = $this->extractConflictFreeGenes($candidate->genes());
+        $minCoverage = (int) ceil($queueSize * 0.40);
+
+        if (count($cleanGenes) < $minCoverage) {
+            return; // cobertura insuficiente para warm-start útil
+        }
+
+        if ($hardPenalty < $this->bestSalvagePenalty) {
+            $this->bestSalvagePenalty = $hardPenalty;
+            $this->bestSalvageGenes = $cleanGenes;
+        }
+    }
+
+    /**
+     * Melhoria 1: Tenta criar indivíduo usando genes salvageados como warm-start.
+     *
+     * Pré-aloca os genes limpos e continua GRASP apenas para as aulas restantes.
+     * Se o resultado passar no quality gate, retorna o cromossomo; caso contrário null.
+     */
+    private function tryCreateIndividualFromSalvage(array $queue): ?Cromossomo
+    {
+        if ($this->bestSalvageGenes === []) {
+            return null;
+        }
+
+        $this->reportInitialPopulationProgress([
+            'stage' => 'salvage_start',
+            'salvage_gene_count' => count($this->bestSalvageGenes),
+            'queue_size' => count($queue),
+        ]);
+
+        // Identifica lições já cobertas pelo salvage (aulaId → ocorrências cobertas)
+        $coveredLessonOccurrences = [];
+
+        foreach ($this->bestSalvageGenes as $gene) {
+            $coveredLessonOccurrences[$gene->aulaId()] = ($coveredLessonOccurrences[$gene->aulaId()] ?? 0) + 1;
+        }
+
+        // Constrói fila restante (tarefas ainda não cobertas)
+        $remainingQueue = [];
+        $tempCoverageCounts = [];
+
+        foreach ($queue as $task) {
+            if (! is_array($task) || ! isset($task['lesson'])) {
+                continue;
+            }
+
+            /** @var LessonData $lesson */
+            $lesson = $task['lesson'];
+            $covered = $tempCoverageCounts[$lesson->id] ?? 0;
+            $available = $coveredLessonOccurrences[$lesson->id] ?? 0;
+
+            if ($covered < $available) {
+                $tempCoverageCounts[$lesson->id] = $covered + 1;
+                // skip: já coberto pelo salvage
+            } else {
+                $remainingQueue[] = $task;
+            }
+        }
+
+        // Reconstrói ocupação a partir dos genes salvageados
+        $savedTeacherBusy = [];
+        $savedClassBusy = [];
+
+        foreach ($this->bestSalvageGenes as $gene) {
+            for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
+                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $savedTeacherBusy[$gene->professorId()][$key] = true;
+                $savedClassBusy[$gene->turmaId()][$key] = true;
+            }
+        }
+
+        // Continua GRASP apenas para as lições restantes
+        $assignedGenes = $this->bestSalvageGenes;
+        $teacherBusy = $savedTeacherBusy;
+        $classBusy = $savedClassBusy;
+        $alphaDecision = $this->resolveAdaptiveAlpha(attempt: 1, queueSize: count($queue));
+        $alpha = (float) $alphaDecision['alpha'];
+        $telemetry = [
+            'attempt' => 0,
+            'alpha' => round($alpha, 4),
+            'alpha_profile' => $alphaDecision['alpha_profile'],
+            'alpha_reason' => $alphaDecision['alpha_reason'],
+            'alpha_pressure_score' => $alphaDecision['alpha_pressure_score'],
+            'alpha_history_stress_score' => $alphaDecision['alpha_history_stress_score'],
+            'alpha_queue_pressure_score' => $alphaDecision['alpha_queue_pressure_score'],
+            'queue_size' => count($remainingQueue),
+            'allocations' => count($this->bestSalvageGenes),
+            'forced_allocations' => 0,
+            'hard_conflict_allocations' => 0,
+            'dynamic_reorders' => 0,
+            'regret_selections' => 0,
+            'attempt_limit' => $this->currentBuildAttemptLimit,
+            'attempt_started_at' => microtime(true),
+            'rcl_sizes' => [],
+        ];
+
+        if (! $this->constructWithGrasp($remainingQueue, $alpha, $assignedGenes, $teacherBusy, $classBusy, $telemetry)) {
+            return null;
+        }
+
+        $candidate = new Cromossomo($assignedGenes);
+        $qualityGate = $this->evaluateInitialPopulationQualityGate(
+            candidate: $candidate,
+            attempt:   self::MAX_BUILD_ATTEMPTS,
+            queueSize: count($queue),
+            telemetry: $telemetry,
+        );
+
+        if ($qualityGate['passes']) {
+            $this->lastAcceptedInitialSeed = $candidate->copy();
+            $this->lastInitialPopulationSource = 'salvage';
+
+            $this->reportInitialPopulationProgress([
+                'stage' => 'salvage_passed',
+                'hard_penalty' => $qualityGate['hard_penalty'],
+                'soft_penalty' => $qualityGate['soft_penalty'],
+                'fitness_score' => $qualityGate['score'],
+                'queue_size' => count($queue),
+            ]);
+
+            Log::info('schedule.initial_population.salvage.passed', [
+                'execution_id' => $this->executionId,
+                'salvage_gene_count' => count($this->bestSalvageGenes),
+                'queue_size' => count($queue),
+                'hard_penalty' => $qualityGate['hard_penalty'],
+                'score' => $qualityGate['score'],
+            ]);
+
+            return $candidate;
+        }
+
+        $this->reportInitialPopulationProgress([
+            'stage' => 'salvage_rejected',
+            'hard_penalty' => $qualityGate['hard_penalty'],
+            'queue_size' => count($queue),
+        ]);
+
+        return null;
+    }
+
+    // ─── Melhoria 4: nogoods persistentes entre execuções ────────────────────
+
+    /**
+     * Melhoria 4: Carrega nogoods persistidos de execuções anteriores para o horário atual.
+     *
+     * Lazy: executado no máximo uma vez por Request/Job.
+     */
+    private function loadNogoodsFromPersistentCache(): void
+    {
+        if ($this->nogoodsPersistenceLoaded) {
+            return;
+        }
+
+        $this->nogoodsPersistenceLoaded = true;
+
+        $horarioId = $this->resolveHorarioId();
+
+        if ($horarioId === null) {
+            return;
+        }
+
+        $cached = cache()->get("ag.nogoods.{$horarioId}");
+
+        if (! is_array($cached)) {
+            return;
+        }
+
+        foreach (['lesson_slot', 'professor_slot', 'class_slot'] as $type) {
+            if (! is_array($cached[$type] ?? null)) {
+                continue;
+            }
+
+            foreach ($cached[$type] as $key => $count) {
+                $this->initialPopulationNogoods[$type][(string) $key] =
+                    ($this->initialPopulationNogoods[$type][(string) $key] ?? 0) + (int) $count;
+            }
+        }
+
+        $totalLoaded = array_sum(array_map('count', $this->initialPopulationNogoods));
+
+        Log::info('schedule.initial_population.nogoods.loaded', [
+            'execution_id' => $this->executionId,
+            'horario_id' => $horarioId,
+            'lesson_slot_count' => count($this->initialPopulationNogoods['lesson_slot']),
+            'professor_slot_count' => count($this->initialPopulationNogoods['professor_slot']),
+            'class_slot_count' => count($this->initialPopulationNogoods['class_slot']),
+            'total_loaded' => $totalLoaded,
+        ]);
+    }
+
+    /**
+     * Melhoria 4: Persiste nogoods aprendidos para uso em execuções futuras do mesmo horário.
+     *
+     * Limita a 500 entradas por tipo (top por frequência) para evitar crescimento ilimitado.
+     * TTL: 7 dias.
+     */
+    private function persistNogoodsToPersistentCache(): void
+    {
+        $totalNogoods = $this->totalNogoodsLearned();
+
+        if ($totalNogoods === 0) {
+            return;
+        }
+
+        $horarioId = $this->resolveHorarioId();
+
+        if ($horarioId === null) {
+            return;
+        }
+
+        $capped = $this->capNogoodsForPersistence($this->initialPopulationNogoods);
+        $ttl = now()->addDays(7);
+
+        cache()->put("ag.nogoods.{$horarioId}", $capped, $ttl);
+
+        Log::debug('schedule.initial_population.nogoods.persisted', [
+            'execution_id' => $this->executionId,
+            'horario_id' => $horarioId,
+            'total_nogoods' => $totalNogoods,
+        ]);
+    }
+
+    /**
+     * Limita nogoods para persistência: mantém top-500 por tipo (decrescente por count).
+     *
+     * @param array<string, array<string, int>> $nogoods
+     * @return array<string, array<string, int>>
+     */
+    private function capNogoodsForPersistence(array $nogoods): array
+    {
+        $maxPerType = 500;
+        $capped = [];
+
+        foreach (['lesson_slot', 'professor_slot', 'class_slot'] as $type) {
+            $entries = $nogoods[$type] ?? [];
+            arsort($entries);
+            $capped[$type] = array_slice($entries, 0, $maxPerType, true);
+        }
+
+        return $capped;
     }
 }

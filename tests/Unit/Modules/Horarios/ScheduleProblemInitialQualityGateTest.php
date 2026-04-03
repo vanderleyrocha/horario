@@ -17,12 +17,20 @@ use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 use Tests\TestCase;
 
+interface ScheduleProblemProgressSpyInterface extends ProgressReporterInterface
+{
+    public function stages(): array;
+
+    public function payloadsForStage(string $stage): array;
+}
+
 uses(TestCase::class);
 
 it('retries the initial population build when the quality gate rejects the candidate', function (): void {
     $progress = makeScheduleProblemProgressSpy();
+    // hardPenalty > 400.0 garante rejeição mesmo na fase relaxada do quality gate
     $problem = makeScheduleProblem(
-        hardPenalty: 20.0,
+        hardPenalty: 500.0,
         softPenalty: 5.0,
         progress: $progress,
     );
@@ -103,6 +111,124 @@ it('reorders the remaining queue dynamically during construction when conflict p
         ->and($completed[0]['regret_selections'] ?? null)->toBeInt();
 });
 
+it('uses a conservative alpha profile when queue pressure and recent stress are high', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+    );
+
+    scheduleProblemSetPrivate($problem, 'currentBuildAttemptLimit', 18);
+    scheduleProblemSetPrivate($problem, 'cachedDiagnostics', [
+        'diagnostics' => [
+            [
+                'candidate_slots' => 1,
+                'weekly_occurrences' => 2,
+            ],
+        ],
+    ]);
+    scheduleProblemSetPrivate($problem, 'initialPopulationAttemptHistory', [
+        ['outcome' => 'fail_fast', 'forced_allocations' => 8, 'hard_conflict_allocations' => 7, 'queue_size' => 10],
+        ['outcome' => 'fail_fast', 'forced_allocations' => 7, 'hard_conflict_allocations' => 6, 'queue_size' => 10],
+        ['outcome' => 'quality_gate_rejected', 'forced_allocations' => 6, 'hard_conflict_allocations' => 5, 'queue_size' => 10],
+    ]);
+
+    $decision = scheduleProblemInvokePrivate($problem, 'resolveAdaptiveAlpha', [2, 10]);
+
+    expect($decision['alpha_profile'])->toBe('conservative')
+        ->and($decision['alpha_pressure_score'])->toBeGreaterThanOrEqual(0.68)
+        ->and($decision['alpha'])->toBeGreaterThanOrEqual($decision['alpha_min'])
+        ->and($decision['alpha'])->toBeLessThanOrEqual($decision['alpha_max'])
+        ->and($decision['alpha_reason'])->toContain('Pressao alta');
+});
+
+it('uses an exploratory alpha profile when pressure and recent stress are low', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+    );
+
+    scheduleProblemSetPrivate($problem, 'currentBuildAttemptLimit', 18);
+    scheduleProblemSetPrivate($problem, 'cachedDiagnostics', [
+        'diagnostics' => [
+            [
+                'candidate_slots' => 8,
+                'weekly_occurrences' => 1,
+            ],
+        ],
+    ]);
+    scheduleProblemSetPrivate($problem, 'initialPopulationAttemptHistory', []);
+
+    $decision = scheduleProblemInvokePrivate($problem, 'resolveAdaptiveAlpha', [1, 1]);
+
+    expect($decision['alpha_profile'])->toBe('exploratory')
+        ->and($decision['alpha_pressure_score'])->toBeLessThan(0.38)
+        ->and($decision['alpha'])->toBeGreaterThanOrEqual($decision['alpha_min'])
+        ->and($decision['alpha'])->toBeLessThanOrEqual($decision['alpha_max'])
+        ->and($decision['alpha_reason'])->toContain('Pressao controlada');
+});
+
+it('activates emergency relaxed quality gate when recent rejections are far above strict limits', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+    );
+
+    scheduleProblemSetPrivate($problem, 'initialPopulationAttemptHistory', [
+        ['outcome' => 'quality_gate_rejected', 'hard_penalty' => 320.0, 'max_hard_penalty' => 12.0],
+        ['outcome' => 'quality_gate_rejected', 'hard_penalty' => 315.0, 'max_hard_penalty' => 18.0],
+        ['outcome' => 'quality_gate_rejected', 'hard_penalty' => 309.0, 'max_hard_penalty' => 24.0],
+    ]);
+
+    $thresholds = scheduleProblemInvokePrivate($problem, 'initialQualityGateThresholds', [4, 100]);
+
+    expect($thresholds['max_hard_penalty'])->toBe(400.0)
+        ->and($thresholds['max_hard_conflict_allocations'])->toBe(2);
+});
+
+it('skips expensive initial repair when candidate is clearly out of strict hard-penalty range', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+    );
+
+    $shouldSkipStrict = scheduleProblemInvokePrivate($problem, 'shouldSkipInitialQualityGateRepair', [[
+        'hard_penalty' => 300.0,
+        'max_hard_penalty' => 30.0,
+    ], 3]);
+
+    $shouldSkipRelaxed = scheduleProblemInvokePrivate($problem, 'shouldSkipInitialQualityGateRepair', [[
+        'hard_penalty' => 300.0,
+        'max_hard_penalty' => 400.0,
+    ], 12]);
+
+    expect($shouldSkipStrict)->toBeTrue()
+        ->and($shouldSkipRelaxed)->toBeFalse();
+});
+
+it('publishes alpha policy, reason and impact in grasp telemetry', function (): void {
+    $progress = makeScheduleProblemProgressSpy();
+    $problem = makeScheduleProblem(
+        hardPenalty: 500.0,
+        softPenalty: 5.0,
+        progress: $progress,
+    );
+
+    expect(fn () => $problem->createIndividual())
+        ->toThrow(RuntimeException::class, 'Quality gate rejeitou');
+
+    $graspStart = $progress->payloadsForStage('grasp_start');
+    $graspRetry = $progress->payloadsForStage('grasp_retry');
+
+    expect($graspStart)->not->toBeEmpty()
+        ->and($graspStart[0])->toHaveKey('alpha_policy')
+        ->and($graspStart[0])->toHaveKey('alpha_reason')
+        ->and($graspStart[0])->toHaveKey('alpha_pressure_score')
+        ->and($graspRetry)->not->toBeEmpty()
+        ->and($graspRetry[0])->toHaveKey('alpha_impact')
+        ->and($graspRetry[0]['alpha_impact'])->toBeArray()
+        ->and($graspRetry[0]['alpha_impact'])->toHaveKeys(['forced_ratio', 'hard_conflict_ratio', 'fill_ratio', 'avg_rcl_size', 'effectiveness']);
+});
+
 it('fails fast before the expensive quality gate repair when hard conflicts are far above the operational limit', function (): void {
     $progress = makeScheduleProblemProgressSpy();
     $problem = makeDenseConflictScheduleProblem(
@@ -122,9 +248,10 @@ it('fails fast before the expensive quality gate repair when hard conflicts are 
 
 it('publishes heartbeat stages while repairing the initial quality gate candidate', function (): void {
     $progress = makeScheduleProblemProgressSpy();
+    // hardPenalty > 400.0 garante rejeição mesmo na fase relaxada do quality gate
     $problem = makeDenseConflictScheduleProblem(
         lessonCount: 2,
-        hardPenalty: 20.0,
+        hardPenalty: 500.0,
         softPenalty: 5.0,
         progress: $progress,
     );
@@ -155,6 +282,304 @@ it('reuses a previously accepted seed to accelerate the next initial individual'
         ->and($second->count())->toBe(2)
         ->and($progress->stages())->toContain('seed_reuse_start')
         ->and($progress->stages())->toContain('seed_reuse_passed');
+});
+
+it('prioritizes the lesson with higher live tightness when feasible slots are tied', function (): void {
+    $data = makeScheduleDataForDynamicQueueSignals(
+        lessons: [
+            1 => new LessonData(
+                id: 1,
+                professorId: 10,
+                classId: 20,
+                disciplinaId: 31,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+            2 => new LessonData(
+                id: 2,
+                professorId: 11,
+                classId: 21,
+                disciplinaId: 32,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+        ],
+        timeSlots: [
+            1 => new TimeSlot(1, 1, 1),
+            2 => new TimeSlot(2, 1, 2),
+        ],
+        lessonsByProfessor: [
+            10 => [1],
+            11 => [2],
+        ],
+        lessonsByClass: [
+            20 => [1],
+            21 => [2],
+        ],
+        expectedLoadByClass: [
+            20 => 1,
+            21 => 1,
+        ],
+        availableSlotsByProfessor: [
+            10 => [1, 2],
+            11 => [1, 2],
+        ],
+        availableSlotsByClass: [
+            20 => [1, 2],
+            21 => [1, 2],
+        ],
+    );
+
+    $problem = makeScheduleProblemFromData($data);
+    $queue = scheduleProblemInvokePrivate($problem, 'buildPlacementQueue');
+    $teacherBusy = [
+        10 => ['5-99' => true],
+    ];
+    $classBusy = [
+        20 => ['5-99' => true],
+    ];
+
+    $reordered = scheduleProblemInvokePrivate(
+        $problem,
+        'reorderPlacementQueueDynamically',
+        [$queue, $teacherBusy, $classBusy, []],
+    );
+
+    $priorityByLesson = [];
+
+    foreach ($data->lessons as $lesson) {
+        $priorityByLesson[$lesson->id] = scheduleProblemInvokePrivate(
+            $problem,
+            'dynamicQueuePriority',
+            [$lesson, $teacherBusy, $classBusy, []],
+        );
+    }
+
+    expect($priorityByLesson[2]['live_tightness'])->toBeGreaterThan($priorityByLesson[1]['live_tightness'])
+        ->and($reordered[0]['lesson']->id)->toBe(2);
+});
+
+it('prioritizes lessons under higher slot contention when feasible slots and live tightness are tied', function (): void {
+    $data = makeScheduleDataForDynamicQueueSignals(
+        lessons: [
+            1 => new LessonData(
+                id: 1,
+                professorId: 10,
+                classId: 20,
+                disciplinaId: 31,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+            2 => new LessonData(
+                id: 2,
+                professorId: 11,
+                classId: 21,
+                disciplinaId: 32,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+            3 => new LessonData(
+                id: 3,
+                professorId: 12,
+                classId: 22,
+                disciplinaId: 33,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+        ],
+        timeSlots: [
+            1 => new TimeSlot(1, 1, 1),
+            2 => new TimeSlot(2, 1, 2),
+            3 => new TimeSlot(3, 1, 3),
+            4 => new TimeSlot(4, 1, 4),
+        ],
+        lessonsByProfessor: [
+            10 => [1],
+            11 => [2],
+            12 => [3],
+        ],
+        lessonsByClass: [
+            20 => [1],
+            21 => [2],
+            22 => [3],
+        ],
+        expectedLoadByClass: [
+            20 => 1,
+            21 => 1,
+            22 => 1,
+        ],
+        availableSlotsByProfessor: [
+            10 => [1, 2],
+            11 => [1, 2],
+            12 => [3, 4],
+        ],
+        availableSlotsByClass: [
+            20 => [1, 2],
+            21 => [1, 2],
+            22 => [3, 4],
+        ],
+    );
+
+    $problem = makeScheduleProblemFromData($data);
+    scheduleProblemInvokePrivate($problem, 'buildPlacementQueue');
+
+    $queue = [
+        ['lesson' => $data->lessons[1], 'occurrence' => 1, 'candidate_count' => 2],
+        ['lesson' => $data->lessons[2], 'occurrence' => 1, 'candidate_count' => 2],
+        ['lesson' => $data->lessons[3], 'occurrence' => 1, 'candidate_count' => 2],
+    ];
+
+    $teacherBusy = [];
+    $classBusy = [];
+
+    $reordered = scheduleProblemInvokePrivate(
+        $problem,
+        'reorderPlacementQueueDynamically',
+        [$queue, $teacherBusy, $classBusy, []],
+    );
+
+    $priorityLesson1 = scheduleProblemInvokePrivate(
+        $problem,
+        'dynamicQueuePriority',
+        [$data->lessons[1], $teacherBusy, $classBusy, []],
+    );
+    $priorityLesson3 = scheduleProblemInvokePrivate(
+        $problem,
+        'dynamicQueuePriority',
+        [$data->lessons[3], $teacherBusy, $classBusy, []],
+    );
+
+    $orderedLessonIds = array_map(
+        static fn (array $task): int => $task['lesson']->id,
+        $reordered,
+    );
+
+    expect($priorityLesson1['avg_slot_contention'])->toBeGreaterThan($priorityLesson3['avg_slot_contention'])
+        ->and(array_search(3, $orderedLessonIds, true))->toBeGreaterThan(0);
+});
+
+it('uses static difficulty as stable fallback when feasible slots, live tightness and contention are tied', function (): void {
+    $data = makeScheduleDataForDynamicQueueSignals(
+        lessons: [
+            1 => new LessonData(
+                id: 1,
+                professorId: 10,
+                classId: 20,
+                disciplinaId: 31,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+                preferredDays: [1],
+            ),
+            2 => new LessonData(
+                id: 2,
+                professorId: 11,
+                classId: 21,
+                disciplinaId: 32,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+            3 => new LessonData(
+                id: 3,
+                professorId: 12,
+                classId: 22,
+                disciplinaId: 33,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+            4 => new LessonData(
+                id: 4,
+                professorId: 13,
+                classId: 23,
+                disciplinaId: 34,
+                requiredSlots: 1,
+                weeklyOccurrences: 1,
+                requiresConsecutive: false,
+            ),
+        ],
+        timeSlots: [
+            1 => new TimeSlot(1, 1, 1),
+            2 => new TimeSlot(2, 1, 2),
+            3 => new TimeSlot(3, 1, 3),
+            4 => new TimeSlot(4, 1, 4),
+            5 => new TimeSlot(5, 1, 5),
+            6 => new TimeSlot(6, 1, 6),
+        ],
+        lessonsByProfessor: [
+            10 => [1],
+            11 => [2],
+            12 => [3],
+            13 => [4],
+        ],
+        lessonsByClass: [
+            20 => [1],
+            21 => [2],
+            22 => [3],
+            23 => [4],
+        ],
+        expectedLoadByClass: [
+            20 => 1,
+            21 => 1,
+            22 => 1,
+            23 => 1,
+        ],
+        availableSlotsByProfessor: [
+            10 => [1, 2],
+            11 => [1, 2],
+            12 => [1, 2],
+            13 => [3, 4, 5, 6],
+        ],
+        availableSlotsByClass: [
+            20 => [1, 2],
+            21 => [1, 2],
+            22 => [1, 2],
+            23 => [3, 4, 5, 6],
+        ],
+    );
+
+    $problem = makeScheduleProblemFromData($data);
+    scheduleProblemInvokePrivate($problem, 'buildPlacementQueue');
+
+    $queue = [
+        ['lesson' => $data->lessons[1], 'occurrence' => 1, 'candidate_count' => 2],
+        ['lesson' => $data->lessons[2], 'occurrence' => 1, 'candidate_count' => 2],
+        ['lesson' => $data->lessons[3], 'occurrence' => 1, 'candidate_count' => 2],
+        ['lesson' => $data->lessons[4], 'occurrence' => 1, 'candidate_count' => 4],
+    ];
+
+    $teacherBusy = [];
+    $classBusy = [];
+
+    $reordered = scheduleProblemInvokePrivate(
+        $problem,
+        'reorderPlacementQueueDynamically',
+        [$queue, $teacherBusy, $classBusy, []],
+    );
+
+    $priorityLesson1 = scheduleProblemInvokePrivate(
+        $problem,
+        'dynamicQueuePriority',
+        [$data->lessons[1], $teacherBusy, $classBusy, []],
+    );
+    $priorityLesson2 = scheduleProblemInvokePrivate(
+        $problem,
+        'dynamicQueuePriority',
+        [$data->lessons[2], $teacherBusy, $classBusy, []],
+    );
+
+    expect($priorityLesson1['feasible_slots'])->toBe($priorityLesson2['feasible_slots'])
+        ->and($priorityLesson1['live_tightness'])->toBe($priorityLesson2['live_tightness'])
+        ->and($priorityLesson1['avg_slot_contention'])->toBe($priorityLesson2['avg_slot_contention'])
+        ->and($priorityLesson1['static_difficulty_score'])->toBeGreaterThan($priorityLesson2['static_difficulty_score'])
+        ->and($reordered[0]['lesson']->id)->toBe(1)
+        ->and($reordered[1]['lesson']->id)->toBe(2);
 });
 
 function makeScheduleProblem(
@@ -204,6 +629,25 @@ function makeDenseConflictScheduleProblem(
     );
 }
 
+function makeScheduleProblemFromData(ScheduleData $data, float $hardPenalty = 0.0, float $softPenalty = 0.0): ScheduleProblem
+{
+    $fitnessEvaluator = new FitnessEvaluator(
+        weights: new FitnessWeights(),
+        rules: [
+            makeScheduleProblemFixedHardPenaltyRule($hardPenalty),
+            makeScheduleProblemFixedSoftPenaltyRule($softPenalty),
+        ],
+    );
+
+    return new ScheduleProblem(
+        data: $data,
+        contextBuilder: new EvaluationContextBuilder(),
+        fitnessEvaluator: $fitnessEvaluator,
+        repairOperator: new GreedyRepairOperator(),
+        progress: null,
+    );
+}
+
 function makeScheduleData(int $lessonCount, int $slotCount = 1): ScheduleData
 {
     $lessons = [];
@@ -248,9 +692,53 @@ function makeScheduleData(int $lessonCount, int $slotCount = 1): ScheduleData
     );
 }
 
-function makeScheduleProblemProgressSpy(): ProgressReporterInterface
+function makeScheduleDataForDynamicQueueSignals(
+    array $lessons,
+    array $timeSlots,
+    array $lessonsByProfessor,
+    array $lessonsByClass,
+    array $expectedLoadByClass,
+    array $availableSlotsByProfessor,
+    array $availableSlotsByClass,
+): ScheduleData {
+    return new ScheduleData(
+        lessons: $lessons,
+        professors: array_fill_keys(array_keys($lessonsByProfessor), []),
+        classes: array_fill_keys(array_keys($lessonsByClass), []),
+        timeSlots: $timeSlots,
+        restrictions: [],
+        lessonsByProfessor: $lessonsByProfessor,
+        lessonsByClass: $lessonsByClass,
+        restrictionsByProfessor: [],
+        restrictionsByClass: [],
+        expectedLoadByLesson: $expectedLoadByClass,
+        availableSlotsByProfessor: $availableSlotsByProfessor,
+        availableSlotsByClass: $availableSlotsByClass,
+        totalTimeSlots: count($timeSlots),
+        totalLessons: count($lessons),
+        totalProfessors: count($lessonsByProfessor),
+        totalClasses: count($lessonsByClass),
+    );
+}
+
+function scheduleProblemInvokePrivate(ScheduleProblem $problem, string $method, array $args = []): mixed
 {
-    return new class () implements ProgressReporterInterface {
+    $reflection = new ReflectionMethod(ScheduleProblem::class, $method);
+    $reflection->setAccessible(true);
+
+    return $reflection->invokeArgs($problem, $args);
+}
+
+function scheduleProblemSetPrivate(ScheduleProblem $problem, string $property, mixed $value): void
+{
+    $reflection = new ReflectionProperty(ScheduleProblem::class, $property);
+    $reflection->setAccessible(true);
+    $reflection->setValue($problem, $value);
+}
+
+function makeScheduleProblemProgressSpy(): ScheduleProblemProgressSpyInterface
+{
+    return new class () implements ScheduleProblemProgressSpyInterface {
         private array $reports = [];
 
         public function report(array $data): void

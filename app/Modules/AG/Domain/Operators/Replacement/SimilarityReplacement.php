@@ -9,9 +9,7 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 final class SimilarityReplacement implements ReplacementStrategyInterface
 {
-    public function __construct(private GeneticDistance $distance, private int $windowSize = 10)
-    {
-    }
+    public function __construct(private GeneticDistance $distance, private int $windowSize = 10) {}
 
     public function replace(array &$population, Cromossomo $incoming): void
     {
@@ -20,6 +18,7 @@ final class SimilarityReplacement implements ReplacementStrategyInterface
         if ($size === 0) {
 
             $population[] = $incoming;
+
             return;
         }
 

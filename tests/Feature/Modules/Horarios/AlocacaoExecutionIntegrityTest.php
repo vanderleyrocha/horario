@@ -85,4 +85,3 @@ test('comando de reparo corrige execution_id associado ao horario errado', funct
     expect($alocacao->execution)->not->toBeNull();
     expect($alocacao->execution->horario_id)->toBe($horarioAloc->id);
 });
-

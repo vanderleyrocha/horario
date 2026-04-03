@@ -15,8 +15,7 @@ final class UpdateScheduleConstraintAction
     public function __construct(
         private readonly ScheduleConstraintRepository $repository,
         private readonly ScheduleConstraintFactory $factory,
-    ) {
-    }
+    ) {}
 
     public function execute(UpdateScheduleConstraintInput $input): ScheduleConstraint
     {

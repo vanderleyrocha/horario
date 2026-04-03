@@ -9,13 +9,21 @@ use App\Modules\Horarios\Domain\Risk\RiskClassification;
 final class FeasibilityReport
 {
     private bool $isFeasible;
+
     private float $globalSaturation;
+
     private array $turmaOverloads;
+
     private array $professorOverloads;
+
     private array $doubleBlockIssues;
+
     private array $structuralBottlenecks;
+
     private array $suggestions;
+
     private int $riskIndex;
+
     private float $structuralEntropy;
 
     public function __construct(
@@ -87,7 +95,7 @@ final class FeasibilityReport
 
     public function riskLevel(): string
     {
-        return (new RiskClassification())->classify($this->riskIndex);
+        return (new RiskClassification)->classify($this->riskIndex);
     }
 
     public function toArray(): array

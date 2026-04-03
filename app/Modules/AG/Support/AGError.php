@@ -6,13 +6,20 @@ namespace App\Modules\AG\Support;
 
 use InvalidArgumentException;
 
-final class AGError {
+final class AGError
+{
     private string $codigo;
+
     private string $categoria;
+
     private string $mensagem;
+
     private string $severidade;
+
     private array $dados;
+
     private ?string $sugestao;
+
     private string $timestamp;
 
     private const SEVERIDADES_VALIDAS = [
@@ -46,31 +53,38 @@ final class AGError {
      |  GETTERS
      ============================================================ */
 
-    public function codigo(): string {
+    public function codigo(): string
+    {
         return $this->codigo;
     }
 
-    public function categoria(): string {
+    public function categoria(): string
+    {
         return $this->categoria;
     }
 
-    public function mensagem(): string {
+    public function mensagem(): string
+    {
         return $this->mensagem;
     }
 
-    public function severidade(): string {
+    public function severidade(): string
+    {
         return $this->severidade;
     }
 
-    public function dados(): array {
+    public function dados(): array
+    {
         return $this->dados;
     }
 
-    public function sugestao(): ?string {
+    public function sugestao(): ?string
+    {
         return $this->sugestao;
     }
 
-    public function timestamp(): string {
+    public function timestamp(): string
+    {
         return $this->timestamp;
     }
 
@@ -78,11 +92,13 @@ final class AGError {
      |  CLASSIFICAÇÕES AUXILIARES
      ============================================================ */
 
-    public function isCritico(): bool {
+    public function isCritico(): bool
+    {
         return $this->severidade === 'CRITICA';
     }
 
-    public function isEstrutural(): bool {
+    public function isEstrutural(): bool
+    {
         return str_contains($this->categoria, 'ESTRUTURAL');
     }
 
@@ -90,7 +106,8 @@ final class AGError {
      |  SERIALIZAÇÃO
      ============================================================ */
 
-    public function toArray(): array {
+    public function toArray(): array
+    {
         return [
             'codigo' => $this->codigo,
             'categoria' => $this->categoria,
@@ -106,8 +123,9 @@ final class AGError {
      |  VALIDAÇÃO INTERNA
      ============================================================ */
 
-    private function assertSeveridadeValida(string $severidade): void {
-        if (!in_array($severidade, self::SEVERIDADES_VALIDAS, true)) {
+    private function assertSeveridadeValida(string $severidade): void
+    {
+        if (! in_array($severidade, self::SEVERIDADES_VALIDAS, true)) {
             throw new InvalidArgumentException(
                 "Severidade inválida: {$severidade}"
             );

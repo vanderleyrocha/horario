@@ -18,45 +18,79 @@ class Configurar extends Component
     public Horario $horario;
 
     public int $etapaAtual = 1;
+
     public int $totalEtapas = 5;
 
     public string $nome_escola = '';
+
     public int $aulas_por_dia = 5;
+
     public int $dias_semana = 5;
+
     public string $horario_inicio = '07:00';
+
     public string $horario_fim = '12:00';
+
     public int $duracao_aula_minutos = 50;
+
     public int $duracao_intervalo_minutos = 15;
+
     public array $horarios_intervalos = [2, 4];
+
     public array $duracoes_intervalos = [];
+
     public bool $permitir_janelas = false;
+
     public bool $agrupar_disciplinas = true;
+
     public int $max_aulas_seguidas = 3;
 
     public int $populacao = 100;
+
     public int $geracoes = 500;
+
     public float $taxa_mutacao = 0.3;
+
     public float $taxa_crossover = 0.7;
+
     public float $taxa_elitismo = 0.05;
+
     public float $taxa_mutacao_min = 0.01;
+
     public float $taxa_mutacao_max = 0.6;
+
     public int $limite_estagnacao = 10;
+
     public int $elitism_count = 10;
+
     public float $target_fitness = 95.0;
+
     public int $max_generations_without_improvement = 50;
 
     public $editandoId = null;
+
     public $professor_id = '';
+
     public $disciplina_id = '';
+
     public $turma_id = '';
+
     public $aulas_semana = 2;
+
     public $tipo = 'simples';
+
     public $aulas_consecutivas = false;
+
     public $max_aulas_dia = 2;
+
     public $min_intervalo_dias = 0;
+
     public $preferencia_periodo = 'qualquer';
+
     public $dias_preferidos = [];
+
     public $tempos_preferidos = [];
+
     public $observacoes = '';
 
     public function mount(Horario $horario): void
@@ -251,9 +285,7 @@ class Configurar extends Component
         $this->duracoes_intervalos = array_values($this->duracoes_intervalos);
     }
 
-    public function fecharModal(): void
-    {
-    }
+    public function fecharModal(): void {}
 
     private function recalculateElitismCount(): void
     {

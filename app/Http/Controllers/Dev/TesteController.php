@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Dev;
 
 use App\Http\Controllers\Controller;
 use App\Models\Horario;
-use Illuminate\Http\Request;
 
-class TesteController extends Controller {
-
+class TesteController extends Controller
+{
     protected $horario;
 
-    public function alocacoes() {
+    public function alocacoes()
+    {
         // return "Teste alocações";
         $this->horario = Horario::findOrFail(1);
 
@@ -25,10 +25,12 @@ class TesteController extends Controller {
 
         $alocacoes = $load->alocacoes;
         $aulasPorTurma = $alocacoes->groupBy('aula.turma_id');
+
         return $load->aulas_por_turma;
     }
 
-    public function getAulasPorTurmaProperty() {
+    public function getAulasPorTurmaProperty()
+    {
         $alocacoes = $this->horario->alocacoes;
 
         // Agrupar as alocações pela turma da aula alocada
@@ -44,7 +46,7 @@ class TesteController extends Controller {
             $firstAlocacao = $alocacoesDaTurma->first();
 
             // ✅ ADICIONADO: Verificação para garantir que 'aula' e 'turma' existem
-            if (!$firstAlocacao->aula || !$firstAlocacao->aula->turma) {
+            if (! $firstAlocacao->aula || ! $firstAlocacao->aula->turma) {
                 return null; // Se a aula ou a turma da aula for nula, ignora esta entrada
             }
 

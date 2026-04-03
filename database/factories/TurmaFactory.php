@@ -2,17 +2,18 @@
 
 namespace Database\Factories;
 
+use App\Models\Turma;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Turma>
+ * @extends Factory<Turma>
  */
 class TurmaFactory extends Factory
 {
     public function definition(): array
     {
         return [
-            'nome' => 'Turma ' . $this->faker->unique()->bothify('##?'),
+            'nome' => 'Turma '.$this->faker->unique()->bothify('##?'),
             'codigo' => strtoupper($this->faker->unique()->bothify('TUR-###')),
             'serie' => $this->faker->numberBetween(1, 9),
             'turno' => $this->faker->randomElement(['matutino', 'vespertino', 'noturno', 'integral']),

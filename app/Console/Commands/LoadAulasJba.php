@@ -116,6 +116,7 @@ class LoadAulasJba extends Command
 
             if ($aulasOrigem->isEmpty()) {
                 $this->warn('Nenhum vínculo disciplina/professor/turma foi encontrado na base JBA.');
+
                 return self::SUCCESS;
             }
 
@@ -131,6 +132,7 @@ class LoadAulasJba extends Command
             if ($diagnostico['has_errors']) {
                 $this->reportarInconsistencias($diagnostico['errors'], $diagnostico['warnings']);
                 $this->error('Carga abortada por inconsistências estruturais. Nada foi persistido.');
+
                 return self::FAILURE;
             }
 
@@ -183,7 +185,7 @@ class LoadAulasJba extends Command
                             'id' => $disciplina->id,
                             'nome' => $disciplina->nome,
                             'codigo' => $disciplina->nome_abreviado,
-                            'descricao' => 'Disciplina de ' . $disciplina->nome,
+                            'descricao' => 'Disciplina de '.$disciplina->nome,
                             'carga_horaria_semanal' => 1,
                             'cor' => $this->generateRandomColor(),
                             'ativa' => 1,
@@ -250,8 +252,8 @@ class LoadAulasJba extends Command
         } catch (Throwable $e) {
             $this->newLine();
             $this->error('Falha controlada durante a carga.');
-            $this->error('Tipo: ' . $e::class);
-            $this->error('Mensagem: ' . $e->getMessage());
+            $this->error('Tipo: '.$e::class);
+            $this->error('Mensagem: '.$e->getMessage());
 
             if ($this->getOutput()->isVerbose()) {
                 $this->line($e->getTraceAsString());
@@ -312,6 +314,7 @@ class LoadAulasJba extends Command
             if ($turmaId !== null) {
                 if (! isset($turmasSet[$turmaId])) {
                     $faltamTurmas[$turmaId] = $turmaId;
+
                     continue;
                 }
 
@@ -325,22 +328,22 @@ class LoadAulasJba extends Command
         }
 
         if (! empty($faltamProfessores)) {
-            $errors[] = 'Professores referenciados em professor_turma/disciplinas e ausentes no conjunto carregado: ' .
+            $errors[] = 'Professores referenciados em professor_turma/disciplinas e ausentes no conjunto carregado: '.
                 implode(', ', array_values($faltamProfessores));
         }
 
         if (! empty($faltamDisciplinas)) {
-            $errors[] = 'Disciplinas referenciadas e ausentes no conjunto carregado: ' .
+            $errors[] = 'Disciplinas referenciadas e ausentes no conjunto carregado: '.
                 implode(', ', array_values($faltamDisciplinas));
         }
 
         if (! empty($faltamTurmas)) {
-            $errors[] = 'Turmas referenciadas e ausentes no conjunto carregado: ' .
+            $errors[] = 'Turmas referenciadas e ausentes no conjunto carregado: '.
                 implode(', ', array_values($faltamTurmas));
         }
 
         if (! empty($faltamCargaHoraria)) {
-            $errors[] = 'Combinações sem carga horária semanal em disciplina_serie: ' .
+            $errors[] = 'Combinações sem carga horária semanal em disciplina_serie: '.
                 implode(' | ', $faltamCargaHoraria);
         }
 
@@ -396,6 +399,6 @@ class LoadAulasJba extends Command
 
     private function generateRandomColor(): string
     {
-        return '#' . str_pad(dechex(random_int(0, 0xFFFFFF)), 6, '0', STR_PAD_LEFT);
+        return '#'.str_pad(dechex(random_int(0, 0xFFFFFF)), 6, '0', STR_PAD_LEFT);
     }
 }

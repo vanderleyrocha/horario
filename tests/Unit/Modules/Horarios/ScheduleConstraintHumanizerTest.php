@@ -9,11 +9,12 @@ use App\Modules\Horarios\Domain\Constraints\Enums\ConstraintLevel;
 use App\Modules\Horarios\Domain\Constraints\Enums\SyncMatchMode;
 use App\Modules\Horarios\Domain\Constraints\Enums\SyncOccurrenceMode;
 use App\Modules\Horarios\Domain\Constraints\Enums\TimePlacementMode;
+use App\Modules\Horarios\Domain\Constraints\ScheduleConstraintHumanizer;
 use App\Modules\Horarios\Domain\Constraints\ValueObjects\ConstraintTargetGroup;
 use App\Modules\Horarios\Domain\Constraints\ValueObjects\TimePlacementWindow;
 
 it('generates readable labels and descriptions for the initial constraint types', function (): void {
-    $humanizer = new \App\Modules\Horarios\Domain\Constraints\ScheduleConstraintHumanizer();
+    $humanizer = new ScheduleConstraintHumanizer;
 
     $sync = new SyncSameTimeslotConstraint(
         id: 1,

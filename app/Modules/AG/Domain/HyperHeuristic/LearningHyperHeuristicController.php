@@ -16,7 +16,7 @@ class LearningHyperHeuristicController
     public function __construct(private OperatorPerformanceTracker $tracker, private OperatorSelectionStrategy $selectionStrategy, private OperatorRewardCalculator $rewardCalculator)
     {
 
-        $this->moveLearning = new MoveLearningEngine();
+        $this->moveLearning = new MoveLearningEngine;
 
     }
 
@@ -30,8 +30,8 @@ class LearningHyperHeuristicController
     {
         foreach ($operators as $operator) {
 
-            if (!$operator instanceof EvolutionaryOperatorInterface) {
-                throw new \InvalidArgumentException("Operador precisa implementar EvolutionaryOperatorInterface");
+            if (! $operator instanceof EvolutionaryOperatorInterface) {
+                throw new \InvalidArgumentException('Operador precisa implementar EvolutionaryOperatorInterface');
             }
 
             $name = method_exists($operator, 'getName')
@@ -61,7 +61,7 @@ class LearningHyperHeuristicController
 
             $allowedNames[$name] = true;
 
-            if (!isset($this->operatorMap[$name])) {
+            if (! isset($this->operatorMap[$name])) {
                 $this->operatorMap[$name] = $op;
                 $this->tracker->registerOperator($name);
             }
@@ -200,7 +200,7 @@ class LearningHyperHeuristicController
 
     public function recordRewardByName(string $name, float $reward): void
     {
-        if (!isset($this->operatorMap[$name])) {
+        if (! isset($this->operatorMap[$name])) {
             $this->tracker->registerOperator($name);
         }
 
@@ -210,5 +210,4 @@ class LearningHyperHeuristicController
             $this->moveLearning->record($this->landscapeState, $name, $reward);
         }
     }
-
 }

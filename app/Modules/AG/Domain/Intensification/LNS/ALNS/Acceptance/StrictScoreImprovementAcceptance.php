@@ -18,12 +18,12 @@ final class StrictScoreImprovementAcceptance implements AlnsAcceptanceCriterion
         $candidateViable = $candidateResult->score() >= 50.0;
 
         // 🔧 PRIORIDADE 2: ESCAPE MOVE 1 - Inviável → Viável é SEMPRE bom!
-        if ($candidateViable && !$currentViable) {
+        if ($candidateViable && ! $currentViable) {
             return true;  // ← SEMPRE aceita
         }
 
         // Se candidato piorou para inviável, rejeita
-        if (!$candidateViable && $currentViable) {
+        if (! $candidateViable && $currentViable) {
             return false;  // ← NUNCA piora de viável para inviável
         }
 
@@ -41,7 +41,7 @@ final class StrictScoreImprovementAcceptance implements AlnsAcceptanceCriterion
         }
 
         // 🔧 PRIORIDADE 2: ESCAPE MOVE 2 - Se ambos inviáveis, aceitar se hard_penalty melhora
-        if (!$candidateViable && !$currentViable) {
+        if (! $candidateViable && ! $currentViable) {
             $hardDelta = $candidateResult->hardPenalty() - $currentResult->hardPenalty();
 
             // Aceitar se reduz hard violations (mesmo que pouco)
@@ -52,6 +52,7 @@ final class StrictScoreImprovementAcceptance implements AlnsAcceptanceCriterion
             // Se hard penalty igual, tentar melhorar soft penalty
             if (abs($hardDelta) < 0.01) {
                 $softDelta = $candidateResult->softPenalty() - $currentResult->softPenalty();
+
                 return $softDelta < -0.01;  // Aceitar se soft piora pouco
             }
         }

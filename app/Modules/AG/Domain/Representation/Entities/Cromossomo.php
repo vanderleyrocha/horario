@@ -18,6 +18,7 @@ final class Cromossomo
     private float $fitness = 0.0;
 
     private array $professorIndex = [];
+
     private array $turmaIndex = [];
 
     /**
@@ -31,15 +32,21 @@ final class Cromossomo
     private array $turmaPeriodoIndex = [];
 
     private array $cargaProfessor = [];
+
     private array $cargaTurma = [];
+
     private array $turmaDiaCarga = [];
+
     private array $professorDiaCarga = [];
 
     private array $aulaSlotsIndex = [];
+
     private array $ocupacaoGlobal = [];
 
     private array $turmaJanelas = [];
+
     private array $professorJanelas = [];
+
     private array $aulaBlocos = [];
 
     private string $signature = '';
@@ -48,7 +55,7 @@ final class Cromossomo
     {
         $this->genes = array_values($genes);
 
-        $this->conflictGraph = new ConflictGraph();
+        $this->conflictGraph = new ConflictGraph;
 
         $this->rebuildIndexes();
         $this->rebuildConflictGraph();
@@ -84,7 +91,7 @@ final class Cromossomo
 
     private function rebuildConflictGraph(): void
     {
-        $builder = new ConflictGraphUpdater();
+        $builder = new ConflictGraphUpdater;
 
         foreach ($this->genes as $index => $gene) {
             $builder->indexGene($this->conflictGraph, $index, $gene, $this->genes);
@@ -215,8 +222,9 @@ final class Cromossomo
     {
         $periods = [];
 
-        if (!isset($this->turmaPeriodoIndex[$turma][$dia])) {
+        if (! isset($this->turmaPeriodoIndex[$turma][$dia])) {
             $this->turmaJanelas[$turma] = 0;
+
             return;
         }
 
@@ -233,8 +241,9 @@ final class Cromossomo
     {
         $periods = [];
 
-        if (!isset($this->professorPeriodoIndex[$professor][$dia])) {
+        if (! isset($this->professorPeriodoIndex[$professor][$dia])) {
             $this->professorJanelas[$professor] = 0;
+
             return;
         }
 
@@ -256,7 +265,7 @@ final class Cromossomo
         $buffer = [];
 
         foreach ($this->genes as $gene) {
-            $buffer[] = $gene->aulaId() . '-' . $gene->diaSemana() . '-' . $gene->periodoDia();
+            $buffer[] = $gene->aulaId().'-'.$gene->diaSemana().'-'.$gene->periodoDia();
         }
 
         sort($buffer);
@@ -277,7 +286,7 @@ final class Cromossomo
     {
         $oldGene = $this->genes[$index];
 
-        $updater = new ConflictGraphUpdater();
+        $updater = new ConflictGraphUpdater;
 
         $updater->removeGene($this->conflictGraph, $index);
 
@@ -413,6 +422,7 @@ final class Cromossomo
     {
         $clone = new self($this->genes);
         $clone->setFitness($this->fitness);
+
         return $clone;
     }
 }

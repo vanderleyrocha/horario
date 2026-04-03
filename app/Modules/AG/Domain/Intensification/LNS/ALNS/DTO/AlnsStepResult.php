@@ -9,7 +9,5 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 final class AlnsStepResult
 {
-    public function __construct(public readonly Cromossomo $current, public readonly FitnessResult $currentEvaluation, public readonly Cromossomo $candidate, public readonly FitnessResult $candidateEvaluation, public readonly Cromossomo $selected, public readonly FitnessResult $selectedEvaluation, public readonly bool $accepted, public readonly float $rawImprovement, public readonly float $acceptedImprovement, public readonly float $reward, public readonly ?string $destroyOperator, public readonly ?string $repairOperator, )
-    {
-    }
+    public function __construct(public readonly Cromossomo $current, public readonly FitnessResult $currentEvaluation, public readonly Cromossomo $candidate, public readonly FitnessResult $candidateEvaluation, public readonly Cromossomo $selected, public readonly FitnessResult $selectedEvaluation, public readonly bool $accepted, public readonly float $rawImprovement, public readonly float $acceptedImprovement, public readonly float $reward, public readonly ?string $destroyOperator, public readonly ?string $repairOperator) {}
 }

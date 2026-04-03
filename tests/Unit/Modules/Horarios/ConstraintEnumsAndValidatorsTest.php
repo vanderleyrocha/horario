@@ -32,7 +32,7 @@ it('exposes the initial custom constraint enums with the expected values', funct
 });
 
 it('normalizes a valid sync payload through the semantic validator', function (): void {
-    $payload = (new SyncSameTimeslotConstraintValidator())->validate([
+    $payload = (new SyncSameTimeslotConstraintValidator)->validate([
         'left_group' => ['lesson_ids' => [10, 11]],
         'right_group' => ['lesson_ids' => [20, 21]],
         'occurrence_mode' => 'AT_LEAST_ONE',
@@ -48,27 +48,27 @@ it('normalizes a valid sync payload through the semantic validator', function ()
 });
 
 it('rejects intersecting groups in sync and mutual exclusion validators', function (): void {
-    expect(fn (): array => (new SyncSameTimeslotConstraintValidator())->validate([
+    expect(fn (): array => (new SyncSameTimeslotConstraintValidator)->validate([
         'left_group' => ['lesson_ids' => [10, 11]],
         'right_group' => ['lesson_ids' => [11, 20]],
         'occurrence_mode' => 'ALL',
         'match_mode' => 'ALL_TO_ALL',
     ]))->toThrow(InvalidScheduleConstraintException::class, 'interseccao')
-        ->and(fn (): array => (new MutualExclusionConstraintValidator())->validate([
+        ->and(fn (): array => (new MutualExclusionConstraintValidator)->validate([
             'left_group' => ['lesson_ids' => [30, 31]],
             'right_group' => ['lesson_ids' => [31, 32]],
         ]))->toThrow(InvalidScheduleConstraintException::class, 'interseccao');
 });
 
 it('rejects a time placement payload without a valid temporal window', function (): void {
-    expect(fn (): array => (new TimePlacementConstraintValidator())->validate([
+    expect(fn (): array => (new TimePlacementConstraintValidator)->validate([
         'target_group' => ['lesson_ids' => [50]],
         'mode' => 'PREFERRED',
     ]))->toThrow(InvalidScheduleConstraintException::class, 'ao menos um dia ou periodo');
 });
 
 it('normalizes a valid time placement payload through the semantic validator', function (): void {
-    $payload = (new TimePlacementConstraintValidator())->validate([
+    $payload = (new TimePlacementConstraintValidator)->validate([
         'target_group' => ['lesson_ids' => [50, 51]],
         'mode' => 'FORBIDDEN',
         'allowed_days' => [1, 3],

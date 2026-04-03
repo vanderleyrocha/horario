@@ -117,7 +117,7 @@ class Manage extends Component
             ->all();
 
         $indiceRisco = (int) ($this->horario->indice_risco ?? data_get($resumoDiagnostico, 'indice_risco', 0));
-        $classificacaoRisco = (new RiskClassification())->classify($indiceRisco);
+        $classificacaoRisco = (new RiskClassification)->classify($indiceRisco);
         $conflitosHard = (int) ($this->horario->conflitos_hard ?? 0);
         $conflitosSoft = (int) ($this->horario->conflitos_soft ?? 0);
 

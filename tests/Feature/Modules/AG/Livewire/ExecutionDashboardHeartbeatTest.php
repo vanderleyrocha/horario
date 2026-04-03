@@ -1,8 +1,8 @@
 <?php
 
-use App\Modules\AG\UI\Livewire\ExecutionDashboard;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
+use App\Modules\AG\UI\Livewire\ExecutionDashboard;
 use Livewire\Livewire;
 
 it('exibe os cards operacionais de heartbeat no dashboard principal', function (): void {
@@ -21,9 +21,9 @@ it('exibe os cards operacionais de heartbeat no dashboard principal', function (
     ]);
 
     Livewire::test(ExecutionDashboard::class, ['execution' => $execution])
-        ->assertSee('Ultimo heartbeat')
+        ->assertSee('Último heartbeat')
         ->assertSee('Atraso atual')
-        ->assertSee('Abrir logs desta execucao')
+        ->assertSee('Abrir logs desta execução')
         ->assertSee('Sem heartbeat ainda')
         ->assertSee('Aguardando primeiro sinal');
 });

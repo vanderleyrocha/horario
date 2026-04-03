@@ -6,7 +6,8 @@ namespace App\Modules\AG\Domain\Representation\Entities;
 
 use InvalidArgumentException;
 
-final readonly class Gene {
+final readonly class Gene
+{
     public function __construct(
         private int $aulaId,
         private int $professorId,
@@ -19,7 +20,8 @@ final readonly class Gene {
         $this->validate();
     }
 
-    private function validate(): void {
+    private function validate(): void
+    {
         if ($this->aulaId <= 0) {
             throw new InvalidArgumentException('aulaId inválido');
         }
@@ -49,31 +51,38 @@ final readonly class Gene {
      |  GETTERS PADRONIZADOS
      ============================================================ */
 
-    public function aulaId(): int {
+    public function aulaId(): int
+    {
         return $this->aulaId;
     }
 
-    public function professorId(): int {
+    public function professorId(): int
+    {
         return $this->professorId;
     }
 
-    public function turmaId(): int {
+    public function turmaId(): int
+    {
         return $this->turmaId;
     }
 
-    public function disciplinaId(): int {
+    public function disciplinaId(): int
+    {
         return $this->disciplinaId;
     }
 
-    public function diaSemana(): int {
+    public function diaSemana(): int
+    {
         return $this->diaSemana;
     }
 
-    public function periodoDia(): int {
+    public function periodoDia(): int
+    {
         return $this->periodoDia;
     }
 
-    public function duracaoTempos(): int {
+    public function duracaoTempos(): int
+    {
         return $this->duracaoTempos;
     }
 
@@ -81,7 +90,8 @@ final readonly class Gene {
      |  MÉTODOS UTILITÁRIOS
      ============================================================ */
 
-    public function withDiaPeriodo(int $diaSemana, int $periodoDia): self {
+    public function withDiaPeriodo(int $diaSemana, int $periodoDia): self
+    {
         return new self(
             $this->aulaId,
             $this->professorId,
@@ -93,7 +103,8 @@ final readonly class Gene {
         );
     }
 
-    public function withProfessor(int $professorId): self {
+    public function withProfessor(int $professorId): self
+    {
         return new self(
             $this->aulaId,
             $professorId,
@@ -105,7 +116,8 @@ final readonly class Gene {
         );
     }
 
-    public function withTurma(int $turmaId): self {
+    public function withTurma(int $turmaId): self
+    {
         return new self(
             $this->aulaId,
             $this->professorId,
@@ -117,7 +129,8 @@ final readonly class Gene {
         );
     }
 
-    public function timeslots(): array {
+    public function timeslots(): array
+    {
         $slots = [];
 
         for ($i = 0; $i < $this->duracaoTempos; $i++) {
@@ -130,7 +143,8 @@ final readonly class Gene {
     /**
      * Verifica conflito estrutural entre dois genes
      */
-    public function conflictsWith(self $other): bool {
+    public function conflictsWith(self $other): bool
+    {
         if ($this->diaSemana !== $other->diaSemana) {
             return false;
         }
@@ -159,7 +173,8 @@ final readonly class Gene {
         return false;
     }
 
-    public function endPeriodo(): int {
+    public function endPeriodo(): int
+    {
         return $this->periodoDia + $this->duracaoTempos - 1;
     }
 }

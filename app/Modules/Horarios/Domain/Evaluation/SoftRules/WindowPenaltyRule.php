@@ -2,15 +2,15 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\SoftRules;
 
-use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
+use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 use Illuminate\Support\Facades\Log;
 
-final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
+final class WindowPenaltyRule implements IncrementalRule, SoftRuleInterface
 {
     public function evaluate(EvaluationContext $context): RuleResult
     {
@@ -43,7 +43,7 @@ final class WindowPenaltyRule implements SoftRuleInterface, IncrementalRule
     {
         return [
             RuleDependency::TURMA,
-            RuleDependency::DIA
+            RuleDependency::DIA,
         ];
     }
 

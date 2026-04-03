@@ -17,7 +17,7 @@ it('persists and rehydrates constraints scoped to a horario context', function (
     $horario = Horario::factory()->create();
     $otherHorario = Horario::factory()->create();
 
-    $domainFactory = new ScheduleConstraintFactory();
+    $domainFactory = new ScheduleConstraintFactory;
     $repository = app(ScheduleConstraintRepository::class);
 
     $saved = $repository->create(
@@ -78,7 +78,7 @@ it('updates filters active constraints and deletes them inside the same horario 
     $updater = User::factory()->create();
     $horario = Horario::factory()->create();
 
-    $domainFactory = new ScheduleConstraintFactory();
+    $domainFactory = new ScheduleConstraintFactory;
     $repository = app(ScheduleConstraintRepository::class);
 
     $saved = $repository->create(

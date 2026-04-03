@@ -14,13 +14,13 @@ it('records generation metrics from population statistics as the single source o
 
     $expectedStatistics = (new PopulationStatistics(
         diversityCalculator: makeSequenceDiversityCalculator([0.64]),
-        entropyCalculator: new PopulationEntropyCalculator()
+        entropyCalculator: new PopulationEntropyCalculator
     ))->calculate($population, 0);
 
-    $recorder = new MetricsRecorder();
+    $recorder = new MetricsRecorder;
     $recorder->setPopulationStatistics(new PopulationStatistics(
         diversityCalculator: makeSequenceDiversityCalculator([0.64]),
-        entropyCalculator: new PopulationEntropyCalculator()
+        entropyCalculator: new PopulationEntropyCalculator
     ));
 
     $metrics = $recorder->recordExtended(
@@ -55,10 +55,10 @@ it('reuses sampled diversity between telemetry generations to keep metrics effic
     $population = makeMetricsPopulation();
     $diversityCalculator = makeSequenceDiversityCalculator([0.64, 0.28]);
 
-    $recorder = new MetricsRecorder();
+    $recorder = new MetricsRecorder;
     $recorder->setPopulationStatistics(new PopulationStatistics(
         diversityCalculator: $diversityCalculator,
-        entropyCalculator: new PopulationEntropyCalculator(),
+        entropyCalculator: new PopulationEntropyCalculator,
         diversitySamplingInterval: 5,
         diversityCollapseThreshold: 0.05
     ));
@@ -77,10 +77,10 @@ it('overwrites the same generation when metrics are recalculated after intensifi
     $population = makeMetricsPopulation();
     $diversityCalculator = makeSequenceDiversityCalculator([0.64, 0.28]);
 
-    $recorder = new MetricsRecorder();
+    $recorder = new MetricsRecorder;
     $recorder->setPopulationStatistics(new PopulationStatistics(
         diversityCalculator: $diversityCalculator,
-        entropyCalculator: new PopulationEntropyCalculator(),
+        entropyCalculator: new PopulationEntropyCalculator,
         diversitySamplingInterval: 5,
         diversityCollapseThreshold: 0.05
     ));
@@ -127,7 +127,7 @@ function makeMetricsPopulation(): array
 
 function makeSequenceDiversityCalculator(array $values): DiversityCalculatorInterface
 {
-    return new class ($values) implements DiversityCalculatorInterface
+    return new class($values) implements DiversityCalculatorInterface
     {
         public int $calls = 0;
 

@@ -2,7 +2,8 @@
 
 namespace App\Modules\AG\Domain\ConflictGraph;
 
-class ConflictNode {
+class ConflictNode
+{
     public int $geneId;
 
     /**
@@ -10,19 +11,23 @@ class ConflictNode {
      */
     private array $neighbors = [];
 
-    public function __construct(int $geneId) {
+    public function __construct(int $geneId)
+    {
         $this->geneId = $geneId;
     }
 
-    public function addNeighbor(int $id): void {
+    public function addNeighbor(int $id): void
+    {
         $this->neighbors[$id] = $id;
     }
 
-    public function removeNeighbor(int $id): void {
+    public function removeNeighbor(int $id): void
+    {
         unset($this->neighbors[$id]);
     }
 
-    public function neighbors(): array {
+    public function neighbors(): array
+    {
         return $this->neighbors;
     }
 }

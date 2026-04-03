@@ -44,8 +44,8 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<array<string, mixed>> $blockingIssues
-     * @param list<array<string, mixed>> $warnings
+     * @param  list<array<string, mixed>>  $blockingIssues
+     * @param  list<array<string, mixed>>  $warnings
      */
     private function analyzeSyncConstraint(CustomConstraintData $constraint, ScheduleData $data, array &$blockingIssues, array &$warnings): void
     {
@@ -140,7 +140,7 @@ final class ConstraintFeasibilityAnalyzer
             $blockingIssues[] = $this->issue(
                 $constraint,
                 'SYNC_SHARED_CAPACITY_EXCEEDED',
-                "Constraint {$constraint->id} exige {$requiredOccurrences} ocorrencias sincronizadas, mas so existem " . count($sharedSlots) . ' slots compartilhados viaveis.',
+                "Constraint {$constraint->id} exige {$requiredOccurrences} ocorrencias sincronizadas, mas so existem ".count($sharedSlots).' slots compartilhados viaveis.',
                 [
                     'required_occurrences' => $requiredOccurrences,
                     'shared_slots' => $sharedSlots,
@@ -164,8 +164,8 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<array<string, mixed>> $blockingIssues
-     * @param list<array<string, mixed>> $warnings
+     * @param  list<array<string, mixed>>  $blockingIssues
+     * @param  list<array<string, mixed>>  $warnings
      */
     private function analyzeMutualExclusionConstraint(CustomConstraintData $constraint, ScheduleData $data, array &$blockingIssues, array &$warnings): void
     {
@@ -229,9 +229,9 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<array<string, mixed>> $blockingIssues
-     * @param list<array<string, mixed>> $warnings
-     * @param array<string, array<string, mixed>> $firstPeriodPressure
+     * @param  list<array<string, mixed>>  $blockingIssues
+     * @param  list<array<string, mixed>>  $warnings
+     * @param  array<string, array<string, mixed>>  $firstPeriodPressure
      */
     private function analyzeTimePlacementConstraint(CustomConstraintData $constraint, ScheduleData $data, array &$blockingIssues, array &$warnings, array &$firstPeriodPressure): void
     {
@@ -288,7 +288,7 @@ final class ConstraintFeasibilityAnalyzer
                 $blockingIssues[] = $this->issue(
                     $constraint,
                     'TIME_PLACEMENT_REQUIRED_IMPOSSIBLE',
-                    "Constraint {$constraint->id} exige {$lesson->weeklyOccurrences} ocorrencias da aula {$lesson->id} dentro da janela, mas apenas " . count($windowSlots) . ' slots viaveis foram encontrados.',
+                    "Constraint {$constraint->id} exige {$lesson->weeklyOccurrences} ocorrencias da aula {$lesson->id} dentro da janela, mas apenas ".count($windowSlots).' slots viaveis foram encontrados.',
                     [
                         'lesson_id' => $lesson->id,
                         'candidate_slots' => $candidateSlots,
@@ -342,9 +342,9 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param array<string, array<string, mixed>> $pressure
-     * @param list<array<string, mixed>> $blockingIssues
-     * @param list<array<string, mixed>> $warnings
+     * @param  array<string, array<string, mixed>>  $pressure
+     * @param  list<array<string, mixed>>  $blockingIssues
+     * @param  list<array<string, mixed>>  $warnings
      */
     private function appendFirstPeriodPressureIssues(array $pressure, array &$blockingIssues, array &$warnings): void
     {
@@ -397,7 +397,7 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param array<string, array<string, mixed>> $pressure
+     * @param  array<string, array<string, mixed>>  $pressure
      */
     private function registerFirstPeriodPressure(array &$pressure, CustomConstraintData $constraint, LessonData $lesson, ScheduleData $data, array $allowedDays, string $mode): void
     {
@@ -405,7 +405,7 @@ final class ConstraintFeasibilityAnalyzer
             ['prefix' => 'professor', 'entity_id' => $lesson->professorId],
             ['prefix' => 'class', 'entity_id' => $lesson->classId],
         ] as $entity) {
-            $key = $entity['prefix'] . ':' . $entity['entity_id'];
+            $key = $entity['prefix'].':'.$entity['entity_id'];
             $capacity = $this->firstPeriodCapacity($entity['prefix'], (int) $entity['entity_id'], $data, $allowedDays);
 
             if (! isset($pressure[$key])) {
@@ -466,8 +466,8 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<int> $lessonIds
-     * @param list<array<string, mixed>> $blockingIssues
+     * @param  list<int>  $lessonIds
+     * @param  list<array<string, mixed>>  $blockingIssues
      */
     private function appendMissingLessonIssues(CustomConstraintData $constraint, array $lessonIds, ScheduleData $data, array &$blockingIssues): void
     {
@@ -501,7 +501,7 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<int> $lessonIds
+     * @param  list<int>  $lessonIds
      * @return list<LessonData>
      */
     private function resolveLessons(array $lessonIds, ScheduleData $data): array
@@ -518,7 +518,7 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<LessonData> $lessons
+     * @param  list<LessonData>  $lessons
      * @return list<int>
      */
     private function commonCandidateSlots(array $lessons, ScheduleData $data): array
@@ -569,9 +569,9 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param list<int> $slotIds
-     * @param list<int> $allowedDays
-     * @param list<int> $allowedPeriods
+     * @param  list<int>  $slotIds
+     * @param  list<int>  $allowedDays
+     * @param  list<int>  $allowedPeriods
      * @return list<int>
      */
     private function filterSlotsByWindow(array $slotIds, array $allowedDays, array $allowedPeriods, ScheduleData $data): array
@@ -639,7 +639,7 @@ final class ConstraintFeasibilityAnalyzer
     }
 
     /**
-     * @param array<string, mixed> $details
+     * @param  array<string, mixed>  $details
      * @return array<string, mixed>
      */
     private function issue(CustomConstraintData $constraint, string $code, string $message, array $details = []): array

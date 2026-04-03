@@ -19,8 +19,8 @@ final class TimePlacementWindow
     private array $periods;
 
     /**
-     * @param list<int> $days
-     * @param list<int> $periods
+     * @param  list<int>  $days
+     * @param  list<int>  $periods
      */
     public function __construct(array $days = [], array $periods = [])
     {

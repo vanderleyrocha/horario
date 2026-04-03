@@ -21,7 +21,7 @@ final class EvaluationContextBuilder
         // 🔧 PRIORIDADE 10: Reutilizar preferências cacheadas para esse ScheduleData
         $dataHash = spl_object_id($data);
 
-        if (!isset($this->preferenceCache[$dataHash])) {
+        if (! isset($this->preferenceCache[$dataHash])) {
             // Primeira vez: construir e cachear
             $diasPreferidos = [];
             $temposPreferidos = [];

@@ -10,7 +10,7 @@ use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 final class ConstraintSolverPayloadMapper
 {
     /**
-     * @param array<int, ScheduleConstraint> $constraints
+     * @param  array<int, ScheduleConstraint>  $constraints
      * @return array<int, CustomConstraintData>
      */
     public function mapCollection(array $constraints): array

@@ -65,7 +65,7 @@ final class StructuredSwapMutation implements MutationOperatorInterface
                 $gene->turmaId() === $baseGene->turmaId() ||
                 $gene->professorId() === $baseGene->professorId()
             ) {
-                if (!$baseGene->conflictsWith($gene)) {
+                if (! $baseGene->conflictsWith($gene)) {
                     $indices[] = $i;
                 }
             }

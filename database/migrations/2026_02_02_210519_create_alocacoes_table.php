@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('alocacoes', function (Blueprint $table) {
@@ -73,7 +74,7 @@ return new class () extends Migration {
                 'terca',
                 'quarta',
                 'quinta',
-                'sexta'
+                'sexta',
             ]);
 
             $table->integer('tempo')
@@ -114,9 +115,9 @@ return new class () extends Migration {
             |--------------------------------------------------------------------------
             */
 
-            $table->index(['horario_id','dia_semana','tempo']);
-            $table->index(['turma_id','dia_semana','tempo']);
-            $table->index(['professor_id','dia_semana','tempo']);
+            $table->index(['horario_id', 'dia_semana', 'tempo']);
+            $table->index(['turma_id', 'dia_semana', 'tempo']);
+            $table->index(['professor_id', 'dia_semana', 'tempo']);
 
             $table->index('aula_id');
         });

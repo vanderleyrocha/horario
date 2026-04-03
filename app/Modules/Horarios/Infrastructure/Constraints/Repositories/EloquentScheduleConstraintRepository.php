@@ -15,10 +15,9 @@ use App\Modules\Horarios\Infrastructure\Constraints\Mappers\ScheduleConstraintMa
 final class EloquentScheduleConstraintRepository implements ScheduleConstraintRepository
 {
     public function __construct(
-        private readonly ScheduleConstraintMapper $mapper = new ScheduleConstraintMapper(),
-        private readonly ScheduleConstraintFactory $factory = new ScheduleConstraintFactory(),
-    ) {
-    }
+        private readonly ScheduleConstraintMapper $mapper = new ScheduleConstraintMapper,
+        private readonly ScheduleConstraintFactory $factory = new ScheduleConstraintFactory,
+    ) {}
 
     public function create(ScheduleConstraint $constraint, ?int $actorId = null): ScheduleConstraint
     {
@@ -26,7 +25,7 @@ final class EloquentScheduleConstraintRepository implements ScheduleConstraintRe
             throw InvalidScheduleConstraintException::single('Nao e permitido criar constraint com id previamente definido.');
         }
 
-        $model = new ScheduleConstraintModel();
+        $model = new ScheduleConstraintModel;
         $model->fill($this->mapper->toAttributes($constraint));
         $model->created_by = $actorId;
         $model->updated_by = $actorId;

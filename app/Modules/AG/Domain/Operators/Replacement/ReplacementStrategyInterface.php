@@ -11,7 +11,7 @@ interface ReplacementStrategyInterface
     /**
      * Substitui um indivíduo da população.
      *
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
     public function replace(array &$population, Cromossomo $incoming): void;
 }

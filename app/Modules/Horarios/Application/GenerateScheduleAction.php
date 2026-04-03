@@ -12,18 +12,15 @@ use Illuminate\Support\Facades\Log;
 
 final class GenerateScheduleAction
 {
-    public function __construct(private RunGeneticAlgorithm $runner, private PersistBestSolutionService $persist)
-    {
-    }
+    public function __construct(private RunGeneticAlgorithm $runner, private PersistBestSolutionService $persist) {}
 
     public function execute(
         Horario $horario,
         int $executionId,
         ?ProgressReporterInterface $progress = null,
         ?ExecutionMetricsRecorder $executionMetrics = null
-    ): array
-    {
-        Log::info("GenerateScheduleAction::execute() iniciado");
+    ): array {
+        Log::info('GenerateScheduleAction::execute() iniciado');
         $result = $this->runner->execute($horario, $progress, $executionMetrics);
 
         $this->persist->persist($horario, $result['best'], $executionId);

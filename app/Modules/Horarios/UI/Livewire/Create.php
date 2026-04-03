@@ -9,7 +9,8 @@ use Livewire\Attributes\Rule;
 use Livewire\Component;
 
 #[Layout('components.app-layout', ['title' => 'Novo Horário'])]
-class Create extends Component {
+class Create extends Component
+{
     #[Rule('required|min:3|max:255')]
     public string $nome = '';
 
@@ -19,11 +20,13 @@ class Create extends Component {
     #[Rule('required|integer|min:1|max:2')]
     public int $semestre = 1;
 
-    public function mount(): void {
+    public function mount(): void
+    {
         $this->ano = now()->year;
     }
 
-    public function save(): void {
+    public function save(): void
+    {
         $this->validate();
 
         try {
@@ -41,15 +44,17 @@ class Create extends Component {
             // Redirecionar para configuração em vez de visualização
             $this->redirect(route('horarios.configurar', $horario), navigate: true);
         } catch (\Exception $e) {
-            session()->flash('error', 'Erro ao criar horário: ' . $e->getMessage());
+            session()->flash('error', 'Erro ao criar horário: '.$e->getMessage());
         }
     }
 
-    public function cancel(): void {
+    public function cancel(): void
+    {
         $this->redirect(route('horarios.index'), navigate: true);
     }
 
-    public function render() {
+    public function render()
+    {
         return view('modules.horarios.livewire.create');
     }
 }

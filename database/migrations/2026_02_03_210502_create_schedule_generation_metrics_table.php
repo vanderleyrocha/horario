@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('schedule_generation_metrics', function (Blueprint $table) {
@@ -91,7 +92,7 @@ return new class () extends Migration {
             */
 
             $table->index('execution_id');
-            $table->index(['execution_id','generation']);
+            $table->index(['execution_id', 'generation']);
             $table->index('generation');
         });
     }

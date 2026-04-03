@@ -7,9 +7,7 @@ use App\Modules\AG\Domain\Representation\Entities\Gene;
 
 class PartialSolution
 {
-    public function __construct(private array $assigned, private array $unassigned)
-    {
-    }
+    public function __construct(private array $assigned, private array $unassigned) {}
 
     public function assigned(): array
     {
@@ -36,7 +34,7 @@ class PartialSolution
         $periodos = [];
 
         foreach ($this->unassigned as $index => $gene) {
-            if (!$gene instanceof Gene) {
+            if (! $gene instanceof Gene) {
                 continue;
             }
 

@@ -2,8 +2,8 @@
 
 namespace App\Modules\Horarios\Support;
 
-use App\Models\Professor;
 use App\Models\Disciplina;
+use App\Models\Professor;
 use App\Models\Turma;
 
 trait ComDadosComuns

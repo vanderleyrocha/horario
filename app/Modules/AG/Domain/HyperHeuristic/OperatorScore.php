@@ -74,7 +74,7 @@ class OperatorScore
 
     public function score(): float
     {
-        if (!$this->dirty) {
+        if (! $this->dirty) {
             return $this->cachedScore;
         }
 

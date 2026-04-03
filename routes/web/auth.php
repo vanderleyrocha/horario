@@ -3,6 +3,7 @@
 use App\Livewire\Auth\Login;
 use App\Livewire\Auth\UserManager;
 use App\Livewire\Dashboard;
+use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -18,11 +19,10 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::get('/home', function () {
-    /** @var \Illuminate\Contracts\Auth\Guard $auth */
+    /** @var Guard $auth */
     $auth = auth();
 
     return $auth->check()
         ? redirect()->route('dashboard')
         : redirect()->route('login');
 })->name('home');
-

@@ -6,12 +6,14 @@ namespace App\Modules\AG\Support;
 
 use App\Modules\Horarios\Domain\Analysis\DTO\FeasibilityReport;
 
-final class AGErrorFactory {
+final class AGErrorFactory
+{
     /* ============================================================
      |  AG-010 – INVIABILIDADE ESTRUTURAL
      ============================================================ */
 
-    public static function populationInfeasible(FeasibilityReport $report): AGError {
+    public static function populationInfeasible(FeasibilityReport $report): AGError
+    {
 
         return new AGError(
             codigo: 'AG-010',

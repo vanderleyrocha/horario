@@ -15,9 +15,11 @@ final class GeneticAlgorithmConfigDTO
     */
 
     public int $tamanhoPopulacao;
+
     public int $numeroGeracoes;
 
     public float $taxaMutacao;
+
     public float $taxaCrossover;
 
     // Elitismo percentual (0.0 – 1.0)
@@ -25,11 +27,14 @@ final class GeneticAlgorithmConfigDTO
 
     // Mutação adaptativa
     public float $taxaMutacaoMin;
+
     public float $taxaMutacaoMax;
+
     public int $limiteEstagnacao;
 
     // Critérios de parada
     public float $targetFitness;
+
     public int $maxGenerationsWithoutImprovement;
 
     /*
@@ -39,15 +44,19 @@ final class GeneticAlgorithmConfigDTO
     */
 
     public int $horarioId;
+
     public string $nomeEscola;
 
     public int $aulasPorDia;
+
     public int $diasSemana;
 
     public string $horarioInicio;
+
     public string $horarioFim;
 
     public int $duracaoAulaMinutos;
+
     public int $duracaoIntervaloMinutos;
 
     /** @var int[] */
@@ -57,7 +66,9 @@ final class GeneticAlgorithmConfigDTO
     public array $duracoesIntervalos;
 
     public bool $permitirJanelas;
+
     public bool $agruparDisciplinas;
+
     public int $maxAulasSeguidas;
 
     /** @var array<int, array{dia:int, tempo:int}> */
@@ -119,7 +130,7 @@ final class GeneticAlgorithmConfigDTO
         $configAG = $horario->configuracao ?? [];
         $config = $horario->configuracaoHorario;
 
-        if (!$config) {
+        if (! $config) {
             throw new InvalidArgumentException("Configuração do horário não encontrada para Horário ID {$horario->id}");
         }
 

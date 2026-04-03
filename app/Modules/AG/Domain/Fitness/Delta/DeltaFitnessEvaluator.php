@@ -8,11 +8,11 @@ use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\RuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 
-final class DeltaFitnessEvaluator {
+final class DeltaFitnessEvaluator
+{
     public function __construct(
         private readonly FitnessWeights $weights
-    ) {
-    }
+    ) {}
 
     public function evaluateDelta(
         FitnessResult $previous,
@@ -26,7 +26,7 @@ final class DeltaFitnessEvaluator {
 
         foreach ($rules as $rule) {
 
-            if (!$rule instanceof RuleInterface) {
+            if (! $rule instanceof RuleInterface) {
                 continue;
             }
 

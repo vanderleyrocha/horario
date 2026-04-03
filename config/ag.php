@@ -5,6 +5,19 @@ return [
     'parallel_evaluation' => true,
     'parallel_evaluation_threshold' => (int) env('AG_PARALLEL_EVALUATION_THRESHOLD', 200),
     'max_workers' => env('AG_MAX_WORKERS', 8),
+    'progress' => [
+        'log_incomplete_generation_snapshot' => env('AG_LOG_INCOMPLETE_GENERATION_SNAPSHOT', false),
+        'incomplete_generation_snapshot_log_ttl_seconds' => (int) env('AG_INCOMPLETE_GENERATION_SNAPSHOT_LOG_TTL_SECONDS', 300),
+        'incomplete_generation_snapshot_counter_ttl_seconds' => (int) env('AG_INCOMPLETE_GENERATION_SNAPSHOT_COUNTER_TTL_SECONDS', 43200),
+    ],
+    'initial_population' => [
+        'hybrid_cp_assignment' => [
+            'enabled' => env('AG_HYBRID_CP_ASSIGNMENT_ENABLED', true),
+            'min_quality_gate_rejections' => (int) env('AG_HYBRID_CP_MIN_QG_REJECTIONS', 3),
+            'min_peak_hard_conflicts' => (int) env('AG_HYBRID_CP_MIN_PEAK_HARD_CONFLICTS', 4),
+            'require_attempt_limit_reduced' => env('AG_HYBRID_CP_REQUIRE_ATTEMPT_LIMIT_REDUCED', true),
+        ],
+    ],
     'log_window_penalty' => env('AG_LOG_WINDOW_PENALTY', false),
     'termination_variance_threshold' => (float) env('AG_TERMINATION_VARIANCE_THRESHOLD', 0.0005),
     'termination_variance_window' => (int) env('AG_TERMINATION_VARIANCE_WINDOW', 8),

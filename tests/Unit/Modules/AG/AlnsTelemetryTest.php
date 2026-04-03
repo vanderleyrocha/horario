@@ -134,7 +134,7 @@ it('adjusts destroy and repair intensity using landscape pressure and recent aln
 
 function makeFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectionStrategy
 {
-    return new class ($selectionOrder) implements OperatorSelectionStrategy
+    return new class($selectionOrder) implements OperatorSelectionStrategy
     {
         public function __construct(private array $selectionOrder) {}
 
@@ -155,7 +155,7 @@ function makeFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectio
 
 function makeFakeDestroyOperator(string $name): DestroyOperatorInterface
 {
-    return new class ($name) implements DestroyOperatorInterface
+    return new class($name) implements DestroyOperatorInterface
     {
         public function __construct(private readonly string $name) {}
 
@@ -173,7 +173,7 @@ function makeFakeDestroyOperator(string $name): DestroyOperatorInterface
 
 function makeAdaptiveFakeDestroyOperator(string $name): AdaptiveDestroyOperatorInterface&DestroyOperatorInterface
 {
-    return new class ($name) implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
+    return new class($name) implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
     {
         public array $configuredIntensities = [];
 
@@ -207,7 +207,7 @@ function makeAdaptiveFakeDestroyOperator(string $name): AdaptiveDestroyOperatorI
 
 function makeFakeRepairOperator(string $name, float $resultFitness): RepairOperatorInterface
 {
-    return new class ($name, $resultFitness) implements RepairOperatorInterface
+    return new class($name, $resultFitness) implements RepairOperatorInterface
     {
         public function __construct(
             private readonly string $name,
@@ -233,7 +233,7 @@ function makeAdaptiveFakeRepairOperator(
     string $name,
     array $resultFitnessSequence
 ): AdaptiveRepairOperatorInterface&RepairOperatorInterface {
-    return new class ($name, $resultFitnessSequence) implements AdaptiveRepairOperatorInterface, RepairOperatorInterface
+    return new class($name, $resultFitnessSequence) implements AdaptiveRepairOperatorInterface, RepairOperatorInterface
     {
         public array $configuredIntensities = [];
 

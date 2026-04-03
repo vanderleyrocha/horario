@@ -2,11 +2,11 @@
 
 namespace App\Modules\Horarios\Domain\ValueObjects;
 
-class TimeSlot {
+class TimeSlot
+{
     public function __construct(
         public readonly int $id,
         public readonly int $day,
         public readonly int $lessonNumber,
-    ) {
-    }
+    ) {}
 }

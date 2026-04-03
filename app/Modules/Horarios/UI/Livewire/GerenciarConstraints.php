@@ -516,7 +516,7 @@ final class GerenciarConstraints extends Component
 
     private function humanizer(): ScheduleConstraintHumanizer
     {
-        return new ScheduleConstraintHumanizer();
+        return new ScheduleConstraintHumanizer;
     }
 
     private function blankToNull(?string $value): ?string

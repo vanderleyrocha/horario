@@ -35,7 +35,7 @@ final class GreedyRepairOperator
     private readonly array $extensions;
 
     /**
-     * @param array<int, RepairHeuristicExtension> $extensions
+     * @param  array<int, RepairHeuristicExtension>  $extensions
      */
     public function __construct(array $extensions = [])
     {
@@ -304,8 +304,8 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $baseMap
-     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $extraMap
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $baseMap
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $extraMap
      * @return array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>
      */
     private function mergeRepairTargetMaps(array $baseMap, array $extraMap): array
@@ -332,8 +332,8 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<int|string, mixed> $indexMap
-     * @param array<int, array{index:int,count:int,duration:int,peers:int[]}> $conflicts
+     * @param  array<int|string, mixed>  $indexMap
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[]}>  $conflicts
      */
     private function accumulateConflicts(array $indexMap, Cromossomo $chromosome, array &$conflicts): void
     {
@@ -551,7 +551,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param int[] $ignoredIndexes
+     * @param  int[]  $ignoredIndexes
      */
     private function findBestRelocation(
         Cromossomo $chromosome,
@@ -631,7 +631,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param int[] $neighborhoodIndexes
+     * @param  int[]  $neighborhoodIndexes
      * @return int[]
      */
     private function orderNeighborhoodForRebuild(Cromossomo $chromosome, ScheduleData $data, array $neighborhoodIndexes): array
@@ -669,7 +669,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      * @return array{0: float, 1: int, 2: float, 3: int}
      */
     private function buildRepairRanking(Cromossomo $chromosome, Gene $candidate, int $sourceGeneIndex, array $violationTypes): array
@@ -685,7 +685,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      */
     private function extensionPenaltyForCandidate(
         Cromossomo $chromosome,
@@ -713,7 +713,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      */
     private function countRemainingTargetViolations(Cromossomo $chromosome, int $geneIndex, array $violationTypes): int
     {
@@ -747,7 +747,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param string[] $violationTypes
+     * @param  string[]  $violationTypes
      */
     private function isRepairTargetResolved(Cromossomo $chromosome, int $geneIndex, array $violationTypes): bool
     {
@@ -760,7 +760,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param int[] $ignoredIndexes
+     * @param  int[]  $ignoredIndexes
      */
     private function isValid(Cromossomo $cromossomo, Gene $gene, ?int $sourceGeneIndex = null, array $ignoredIndexes = []): bool
     {
@@ -787,7 +787,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param int[] $ignoredIndexes
+     * @param  int[]  $ignoredIndexes
      */
     private function hasExternalOccupation(
         array $indexMap,
@@ -870,7 +870,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $repairTargets
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
      * @return array<string, mixed>
      */
     private function startPassTelemetry(int $pass, Cromossomo $chromosome, array $repairTargets, ?callable $fitnessProbe): array
@@ -892,7 +892,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<string, mixed> $passTelemetry
+     * @param  array<string, mixed>  $passTelemetry
      */
     private function finishPassTelemetry(array &$passTelemetry, Cromossomo $chromosome, ?callable $fitnessProbe): void
     {
@@ -931,7 +931,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}> $repairTargets
+     * @param  array<int, array{index:int,count:int,duration:int,peers:int[],violations:string[]}>  $repairTargets
      * @return array<string, int>
      */
     private function summarizeRepairTargets(array $repairTargets): array
@@ -975,7 +975,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<string, mixed> $passTelemetry
+     * @param  array<string, mixed>  $passTelemetry
      */
     private function emitHeartbeat(?callable $progressHeartbeat, string $event, array $passTelemetry): void
     {
@@ -999,7 +999,7 @@ final class GreedyRepairOperator
     }
 
     /**
-     * @param array<string, mixed> $passTelemetry
+     * @param  array<string, mixed>  $passTelemetry
      */
     private function emitProgressHeartbeat(
         ?callable $progressHeartbeat,

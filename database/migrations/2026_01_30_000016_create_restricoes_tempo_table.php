@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2026_02_01_003_create_restricoes_tempo_table.php
 
 use Illuminate\Database\Migrations\Migration;

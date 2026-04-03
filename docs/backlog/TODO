@@ -1,23 +1,68 @@
+# TODO Prioritário (Abr/2026)
 
+## Objetivo Atual
+Consolidar a evolução da população inicial do solver com foco em ROI alto, baixo risco de regressão e observabilidade.
+
+## Status Rápido
+- [x] Sprint 1: ranking mais rico de candidate slots
+    - [x] live_tightness no reorder dinâmico
+    - [x] avg_slot_contention no reorder dinâmico
+    - [x] penalidade leve de contenção no score de slot
+    - [x] testes unitários cobrindo prioridade por tightness/contention e fallback estável
+- [x] Correções de testes Livewire por acentuação/quebra de linha
+- [x] Ajustes de tipagem para reduzir falsos positivos do Intelephense
+
+## Próximos Passos (Ordem Recomendada)
+
+### 1) Sprint 2 — Alpha adaptativo por contexto (Alta viabilidade / Alto ROI)
+- [x] Ajustar `randomAlpha()` para usar contexto da tentativa (pressão da fila e histórico recente)
+- [x] Definir política de alpha por faixas (conservador/exploratório)
+- [x] Registrar telemetria: alpha escolhido, motivo e impacto por tentativa
+- [x] Cobrir com testes unitários de comportamento adaptativo
+
+### 2) Sprint 3 — Meta de qualidade da população (Alta viabilidade / Alto ROI)
+- [x] Definir critérios mínimos por conjunto de sementes (diversidade estrutural, dispersão de hard penalty)
+- [x] Adicionar validação no fluxo inicial da engine
+- [x] Publicar indicadores no dashboard/telemetria
+- [x] Cobrir com testes de integração da inicialização
+
+### 3) Sprint 4 — Seeds estratificadas por ilha (Média-Alta viabilidade / Alto ROI)
+- [x] Definir perfis de ilha (conservadora/exploratória/orientada a bloco)
+- [x] Distribuir construtores/seeds por perfil no `RunGeneticAlgorithm`
+- [x] Medir impacto em diversidade inicial entre ilhas (log `solver.islands.profiles_configured`)
+- [x] Cobrir com testes de orquestração por ilha
+
+## Melhorias Importantes (Após Sprints 2-4)
+- [x] Reaproveitamento parcial de tentativas fracassadas (salvage por subproblema)
+- [x] Portfólio de construtores iniciais com seleção adaptativa
+- [x] Lookahead curto (1-2 passos) no custo de alocação
+- [x] Aprendizado de nogoods entre execuções (memória persistente)
+
+## Operação e Qualidade
+- [ ] Criar benchmark A/B reproduzível da população inicial (antes/depois por cenário)
+- [ ] Relatório pós-execução com custo por fase (inicial/evolução/ALNS/repair/persistência)
+- [ ] Padronizar asserts de UI para evitar fragilidade por acentuação/layout
+
+## Critérios de Pronto do Ciclo Atual
+- [ ] Unit tests e feature tests verdes
+- [ ] Sem regressão de quality gate/fail-fast
+- [ ] Telemetria suficiente para explicar decisões do construtor inicial
+- [ ] Documentação atualizada em `docs/AG_ARCHITECTURE.md`
+
+---
+Backlog legado abaixo (itens históricos não priorizados no ciclo atual)
 
 🚀 Próximas Melhorias Sugeridas
 1. Melhorias no Algoritmo 🎯
-[ ] Considerar especialização de professores por disciplina
 [ ] Adicionar peso às restrições (configurável)
-[ ] Implementar estratégias de mutação adaptativa
-[ ] Permitir restrições customizadas por usuário
-[ ] Adicionar seleção de salas/ambientes
 2. Visualização de Dados 📊
-[ ] Gráfico de evolução do fitness
 [ ] Relatório de conflitos encontrados
 [ ] Visualização de carga horária por professor
 [ ] Mapa de calor de ocupação de horários
 3. Funcionalidades Extras ✨
-[ ] Edição manual de alocações (drag & drop)
 [ ] Exportação para PDF profissional
 [ ] Exportação para Excel
 [ ] Impressão de horários por turma/professor
-[ ] Envio de horários por email
 4. Notificações 🔔
 [ ] Notificação quando geração terminar
 [ ] Alertas de conflitos detectados
@@ -41,37 +86,9 @@
 [ ] Guia de contribuição
 
 
-
-✨ Processamento assíncrono com Jobs/Queue
-📊 Visualização gráfica da evolução
-🎯 Permitir restrições customizadas
-👨‍🏫 Considerar especialização de professores
-🏢 Gerenciar salas e capacidade
-✏️ Edição manual de alocações
-📄 Exportar para PDF/Excel
-
-🔔 Notificações quando terminar
-📡 Laravel Echo/WebSockets para tempo real
-📊 Dashboard de jobs em execução
-⏸️ Cancelamento de jobs em andamento
-
-
-💡 O Que Você Gostaria de Implementar Agora?
-Escolha uma opção ou sugira algo:
-
-A) Refatorar o Algoritmo Genético para usar as novas configurações
-
-B) Melhorar a visualização dos horários gerados
-
-C) Implementar edição manual com drag & drop
-
-D) Criar relatórios e estatísticas avançadas
-
-
 Early stopping por convergência
 Penalidade adaptativa por geração
 Profiling real com métricas por regra
-
 
 Adicionar índice de severidade numérico
 Calcular limite real de professor baseado em disponibilidade individual
@@ -1205,3 +1222,23 @@ Sugestoes de melhoria
 Próximo passo com melhor ROI: usar essa pressão seletiva efetiva no relatório histórico de impacto, para comparar se mutation shock + selection pressure reduction juntos melhoram mais do que cada resposta isolada.
 
 
+
+
+A proposta de mudança
+Vou propor três variações progressivas, do menos invasivo ao mais agressivo. Você escolhe com qual quer começar, implementa, mede, e decide se precisa ir mais fundo.
+
+Variação 1 — Só reduzir o slice (mudança mínima, 2 linhas)
+Variação 2 — Early exit + cap de opções (médio esforço)
+Variação 3 — Desligar completamente via flag (para diagnóstico puro)
+
+Criar testes unitários focados nos novos sinais de prioridade
+Valide que live_tightness e avg_slot_contention realmente alteram a ordem da fila em cenários controlados.
+
+Adicionar telemetria dos sinais no progresso do GRASP
+Inclua no payload de progresso os agregados desses sinais para facilitar diagnóstico em produção e comparar execuções.
+
+Rodar um benchmark curto A/B
+Compare 10-20 execuções antes/depois (mesmo dataset) e meça: taxa de quality_gate_passed, hard_conflict_allocations e tempo médio de construção.
+
+Iniciar Sprint 2 (alpha adaptativo)
+Depois de validar o Sprint 1, implemente alpha adaptativo por contexto de pressão da fila.

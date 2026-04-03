@@ -29,7 +29,7 @@
             </div>
         </div>
 
-        <div class="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-6">
+        <div class="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-7">
 
             <div class="rounded bg-white p-4 shadow">
                 <p class="text-sm text-gray-500">Status</p>
@@ -49,6 +49,18 @@
             <div class="rounded bg-white p-4 shadow">
                 <p class="text-sm text-gray-500">Melhor fitness</p>
                 <p class="text-lg font-bold">{{ number_format((float) ($executionInfo['bestFitness'] ?? 0), 4) }}</p>
+            </div>
+
+            <div class="rounded bg-white p-4 shadow">
+                <p class="text-sm text-gray-500">Snapshots incompletos</p>
+                <p
+                    class="text-lg font-bold"
+                    data-dashboard-incomplete-snapshot-count
+                >0</p>
+                <p
+                    class="mt-1 text-xs text-slate-500"
+                    data-dashboard-incomplete-snapshot-note
+                >Nenhum snapshot incompleto detectado.</p>
             </div>
 
             <div
@@ -95,6 +107,92 @@
                 </div>
             </div>
 
+        </div>
+
+        <div
+            class="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+            data-intra-generation-panel
+        >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Progresso intra-geração</p>
+                    <p
+                        class="text-sm font-semibold text-slate-900"
+                        data-intra-generation-headline
+                    >Aguardando heartbeat de evolução</p>
+                </div>
+                <span
+                    class="inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                    data-intra-generation-stage
+                >sem etapa</span>
+            </div>
+
+            <div
+                class="mt-3 hidden rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                data-ignored-metric-panel
+            >
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p class="font-semibold">Curvas preservadas: heartbeat incompleto ignorado</p>
+                        <p
+                            class="mt-1 text-xs text-amber-800"
+                            data-ignored-metric-detail
+                        >Aguardando diagnostico.</p>
+                    </div>
+                    <span
+                        class="inline-flex w-fit rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900"
+                        data-ignored-metric-count
+                    >0 ocorrencias</span>
+                </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-3 text-sm lg:grid-cols-5">
+                <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Ilha</p>
+                    <p
+                        class="mt-1 font-semibold text-slate-900"
+                        data-intra-generation-island
+                    >-</p>
+                </div>
+                <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Geração</p>
+                    <p
+                        class="mt-1 font-semibold text-slate-900"
+                        data-intra-generation-generation
+                    >-</p>
+                </div>
+                <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Descendentes</p>
+                    <p
+                        class="mt-1 font-semibold text-slate-900"
+                        data-intra-generation-offspring
+                    >-</p>
+                </div>
+                <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Progresso</p>
+                    <p
+                        class="mt-1 font-semibold text-slate-900"
+                        data-intra-generation-progress
+                    >-</p>
+                </div>
+                <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Tempo na etapa</p>
+                    <p
+                        class="mt-1 font-semibold text-slate-900"
+                        data-intra-generation-elapsed
+                    >-</p>
+                </div>
+            </div>
+
+            <div class="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                <div class="relative h-36">
+                    <canvas
+                        id="intraGenerationChart"
+                        class="h-full w-full"
+                        data-intra-generation-chart
+                    ></canvas>
+                </div>
+            </div>
         </div>
 
         @if (in_array($execution->status, ['running', 'cancel_requested'], true))
@@ -415,32 +513,32 @@
 
         <div class="col-span-2 rounded bg-white p-4 shadow">
             <h3 class="mb-2 font-semibold">Observação do landscape</h3>
-            <div class="grid grid-cols-4 gap-4 text-sm">
-                <div>
+            <div class="grid gap-4 text-sm md:grid-cols-3 lg:grid-cols-12">
+                <div class="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 lg:col-span-2">
                     <p class="text-gray-500">Fenômeno</p>
                     <p
                         class="font-semibold"
                         data-landscape-phenomenon
                     >Neutro</p>
                 </div>
-                <div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 lg:col-span-2">
                     <p class="text-gray-500">Confiança</p>
                     <p
                         class="font-semibold"
                         data-landscape-confidence
                     >0.00</p>
                 </div>
-                <div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 lg:col-span-2">
                     <p class="text-gray-500">Profundidade</p>
                     <p
                         class="font-semibold"
                         data-landscape-depth-score
                     >0.00</p>
                 </div>
-                <div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 md:col-span-3 lg:col-span-6">
                     <p class="text-gray-500">Resumo</p>
                     <p
-                        class="font-semibold"
+                        class="whitespace-pre-line font-semibold leading-5"
                         data-landscape-summary
                     >Nenhuma observação ainda</p>
                 </div>

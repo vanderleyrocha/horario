@@ -14,7 +14,6 @@ final class HashDiversityCalculator implements DiversityCalculatorInterface
      *
      * Usa Simpson Diversity Index
      */
-
     public function calculate(array $population): float
     {
         $n = count($population);
@@ -28,7 +27,6 @@ final class HashDiversityCalculator implements DiversityCalculatorInterface
         foreach ($population as $c) {
 
             /** @var Cromossomo $c */
-
             $sig = $c->signature();
 
             if (isset($counts[$sig])) {

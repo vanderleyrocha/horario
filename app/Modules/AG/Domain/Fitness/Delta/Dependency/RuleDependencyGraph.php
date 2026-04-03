@@ -19,15 +19,15 @@ class RuleDependencyGraph
     {
         $rules = [];
 
-        if (!empty($region->professores)) {
+        if (! empty($region->professores)) {
             $rules = array_merge($rules, $this->map[RuleDependency::PROFESSOR->value] ?? []);
         }
 
-        if (!empty($region->turmas)) {
+        if (! empty($region->turmas)) {
             $rules = array_merge($rules, $this->map[RuleDependency::TURMA->value] ?? []);
         }
 
-        if (!empty($region->dias) || !empty($region->periodos)) {
+        if (! empty($region->dias) || ! empty($region->periodos)) {
             $rules = array_merge($rules, $this->map[RuleDependency::SLOT->value] ?? []);
         }
 

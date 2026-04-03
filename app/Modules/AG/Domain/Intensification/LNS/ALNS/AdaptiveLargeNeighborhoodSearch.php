@@ -40,7 +40,7 @@ final class AdaptiveLargeNeighborhoodSearch
 
     public function improve(Cromossomo $solution, array $context = []): Cromossomo
     {
-        $selector = $this->selector ?? new RouletteWheelSelector();
+        $selector = $this->selector ?? new RouletteWheelSelector;
 
         /** @var DestroyOperatorInterface $destroy */
         $destroy = $selector->select(

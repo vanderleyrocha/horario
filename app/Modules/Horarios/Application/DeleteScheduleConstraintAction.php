@@ -10,8 +10,7 @@ final class DeleteScheduleConstraintAction
 {
     public function __construct(
         private readonly ScheduleConstraintRepository $repository,
-    ) {
-    }
+    ) {}
 
     public function execute(int $id, int $horarioId): bool
     {

@@ -114,10 +114,10 @@ final class MutualExclusionConstraintEvaluator implements ConstraintEvaluatorInt
 
     private function slotKey(int $day, int $period): string
     {
-        return $day . ':' . $period;
+        return $day.':'.$period;
     }
 
-    private function normalizeLessonIds(array|null $lessonIds): ?array
+    private function normalizeLessonIds(?array $lessonIds): ?array
     {
         if ($lessonIds === null) {
             return null;

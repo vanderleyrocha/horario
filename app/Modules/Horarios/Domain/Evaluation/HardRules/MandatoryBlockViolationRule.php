@@ -2,9 +2,9 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\HardRules;
 
-use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
+use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
@@ -47,7 +47,6 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
     public function evaluateIncremental(EvaluationContext $context, AffectedRegion $region): float
     {
 
-
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
         $lessons = $context->data()->lessons;
 
@@ -69,7 +68,7 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
                 continue;
             }
 
-            if (!isset($slotsPorAula[$aulaId])) {
+            if (! isset($slotsPorAula[$aulaId])) {
                 continue;
             }
 
@@ -92,7 +91,7 @@ final class MandatoryBlockViolationRule implements HardRuleInterface, Incrementa
     public function dependencies(): array
     {
         return [
-            RuleDependency::SLOT
+            RuleDependency::SLOT,
         ];
     }
 

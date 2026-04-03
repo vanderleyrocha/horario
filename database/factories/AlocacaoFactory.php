@@ -2,11 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\Alocacao;
 use App\Models\Aula;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Alocacao>
+ * @extends Factory<Alocacao>
  */
 class AlocacaoFactory extends Factory
 {
@@ -14,8 +15,8 @@ class AlocacaoFactory extends Factory
     {
         // Por padrão, cria uma nova aula e usa os dados dela para manter integridade
         return [
-            'aula_id' => Aula::factory(), 
-            
+            'aula_id' => Aula::factory(),
+
             // Define os relacionamentos baseados na aula criada acima para garantir consistência
             'horario_id' => function (array $attributes) {
                 return Aula::find($attributes['aula_id'])->horario_id;

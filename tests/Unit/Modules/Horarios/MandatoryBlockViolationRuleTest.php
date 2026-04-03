@@ -13,7 +13,7 @@ use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
 
 it('ignores same-day gaps for lessons that do not require consecutive blocks', function (): void {
-    $rule = new MandatoryBlockViolationRule();
+    $rule = new MandatoryBlockViolationRule;
 
     $chromosome = new Cromossomo([
         new Gene(1, 10, 20, 30, 1, 1, 1),

@@ -15,8 +15,7 @@ final class ScheduleFeasibilityAnalyzer
         private readonly ?SaturationCalculator $saturationCalculator = null,
         private readonly ?StructuralEntropyCalculator $structuralEntropyCalculator = null,
         private readonly ?RiskIndexCalculator $riskIndexCalculator = null
-    ) {
-    }
+    ) {}
 
     public function analisar(array $aulas, int $dias, int $temposPorDia): FeasibilityReport
     {
@@ -24,9 +23,9 @@ final class ScheduleFeasibilityAnalyzer
             return new FeasibilityReport(isFeasible: true, globalSaturation: 0.0);
         }
 
-        $saturationCalculator = $this->saturationCalculator ?? new SaturationCalculator();
-        $structuralEntropyCalculator = $this->structuralEntropyCalculator ?? new StructuralEntropyCalculator();
-        $riskIndexCalculator = $this->riskIndexCalculator ?? new RiskIndexCalculator();
+        $saturationCalculator = $this->saturationCalculator ?? new SaturationCalculator;
+        $structuralEntropyCalculator = $this->structuralEntropyCalculator ?? new StructuralEntropyCalculator;
+        $riskIndexCalculator = $this->riskIndexCalculator ?? new RiskIndexCalculator;
 
         $capacityPerEntity = $dias * $temposPorDia;
         $globalLoad = 0;

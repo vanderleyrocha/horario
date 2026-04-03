@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -113,7 +114,7 @@ class Horario extends Model
 
     public function scheduleConstraints(): HasMany
     {
-        return $this->hasMany(\App\Models\ScheduleConstraint::class);
+        return $this->hasMany(ScheduleConstraint::class);
     }
 
     public function lastExecution(): HasOne
@@ -121,17 +122,17 @@ class Horario extends Model
         return $this->hasOne(ScheduleExecution::class)->latestOfMany();
     }
 
-    public function scopeAtivo($query)
+    public function scopeAtivo(Builder $query): Builder
     {
         return $query->where('status', 'ativo');
     }
 
-    public function scopePorAno($query, int $ano)
+    public function scopePorAno(Builder $query, int $ano): Builder
     {
         return $query->where('ano', $ano);
     }
 
-    public function scopePorSemestre($query, int $semestre)
+    public function scopePorSemestre(Builder $query, int $semestre): Builder
     {
         return $query->where('semestre', $semestre);
     }

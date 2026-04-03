@@ -12,8 +12,9 @@ use App\Modules\Horarios\Domain\Constraints\Enums\ConstraintType;
 use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
+use Tests\TestCase;
 
-uses(Tests\TestCase::class, RefreshDatabase::class);
+uses(TestCase::class, RefreshDatabase::class);
 
 it('loads active custom constraints into solver snapshots and logs telemetry', function (): void {
     $actor = User::factory()->create();

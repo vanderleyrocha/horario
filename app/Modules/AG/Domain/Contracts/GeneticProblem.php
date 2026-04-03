@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Contracts;
 
-use App\Modules\AG\Domain\Fitness\FitnessResult;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Fitness\FitnessResult;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 interface GeneticProblem

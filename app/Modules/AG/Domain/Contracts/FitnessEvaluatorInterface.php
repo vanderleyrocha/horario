@@ -11,7 +11,7 @@ interface FitnessEvaluatorInterface
     /**
      * Avalia o fitness de uma população inteira.
      *
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
     public function evaluate(array $population): void;
 }

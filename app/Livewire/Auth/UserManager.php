@@ -3,14 +3,14 @@
 namespace App\Livewire\Auth;
 
 use App\Models\User;
-use Livewire\Component;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
+use Livewire\Component; // Importante para tipagem se necessário
 use Livewire\WithPagination;
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Database\Eloquent\Builder; // Importante para tipagem se necessário
-use Illuminate\Support\Facades\Auth;
 
 #[Layout('components.app-layout', ['title' => 'Gerenciar Usuários'])]
 class UserManager extends Component
@@ -18,6 +18,7 @@ class UserManager extends Component
     use WithPagination;
 
     public bool $isModalOpen = false;
+
     public ?User $editingUser = null;
 
     // --- NOVA PROPRIEDADE DE BUSCA ---
@@ -41,7 +42,7 @@ class UserManager extends Component
     public function rules()
     {
         $rules = [
-            'name'  => 'required|min:3',
+            'name' => 'required|min:3',
             'email' => [
                 'required',
                 'email',
@@ -63,19 +64,19 @@ class UserManager extends Component
         // --- QUERY COM FILTRO ---
         $users = User::query()
             ->when($this->search, function (Builder $query) {
-                $query->where('name', 'like', '%' . $this->search . '%')
-                      ->orWhere('email', 'like', '%' . $this->search . '%');
+                $query->where('name', 'like', '%'.$this->search.'%')
+                    ->orWhere('email', 'like', '%'.$this->search.'%');
             })
             ->orderBy('id', 'desc') // Opcional: mostrar os mais novos primeiro
             ->paginate(10);
 
         return view('livewire.auth.user-manager', [
-            'users' => $users
+            'users' => $users,
         ]);
     }
 
     // ... (Mantenha o resto dos métodos create, edit, save, delete, closeModal exatamente iguais) ...
-    
+
     public function create(): void
     {
         $this->reset(['editingUser', 'name', 'email', 'password']);
@@ -90,7 +91,7 @@ class UserManager extends Component
         $this->editingUser = $user;
         $this->name = $user->name;
         $this->email = $user->email;
-        $this->password = ''; 
+        $this->password = '';
 
         $this->resetValidation();
         $this->isModalOpen = true;
@@ -105,8 +106,8 @@ class UserManager extends Component
                 'name' => $this->name,
                 'email' => $this->email,
             ];
-            
-            if (!empty($this->password)) {
+
+            if (! empty($this->password)) {
                 $data['password'] = Hash::make($this->password);
             }
 
@@ -129,6 +130,7 @@ class UserManager extends Component
     {
         if ($id === Auth::user()->id) {
             session()->flash('error', 'Você não pode excluir sua própria conta.');
+
             return;
         }
 

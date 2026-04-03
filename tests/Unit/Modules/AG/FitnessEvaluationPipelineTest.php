@@ -97,7 +97,8 @@ function makePopulationForEvaluation(): array
 
 function makeFakeGeneticProblem(): GeneticProblem
 {
-    return new class () implements GeneticProblem {
+    return new class implements GeneticProblem
+    {
         public int $evaluations = 0;
 
         public function createIndividual(): Cromossomo
@@ -134,23 +135,18 @@ function makeFakeGeneticProblem(): GeneticProblem
             return true;
         }
 
-        public function clearFitnessCache(): void
-        {
-        }
+        public function clearFitnessCache(): void {}
 
-        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void
-        {
-        }
+        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void {}
 
-        public function clearFitnessDeltaCache(): void
-        {
-        }
+        public function clearFitnessDeltaCache(): void {}
     };
 }
 
 function makeSerializableFakeGeneticProblem(): GeneticProblem
 {
-    return new class () implements GeneticProblem {
+    return new class implements GeneticProblem
+    {
         public function createIndividual(): Cromossomo
         {
             return new Cromossomo([]);
@@ -189,16 +185,10 @@ function makeSerializableFakeGeneticProblem(): GeneticProblem
             return true;
         }
 
-        public function clearFitnessCache(): void
-        {
-        }
+        public function clearFitnessCache(): void {}
 
-        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void
-        {
-        }
+        public function recordFitness(Cromossomo $individual, FitnessResult $fitness): void {}
 
-        public function clearFitnessDeltaCache(): void
-        {
-        }
+        public function clearFitnessDeltaCache(): void {}
     };
 }

@@ -12,8 +12,7 @@ final class PopulationFitnessEvaluator implements FitnessEvaluatorInterface
     public function __construct(
         private readonly GeneticProblem $problem,
         private readonly int $concurrency = 8
-    ) {
-    }
+    ) {}
 
     public function evaluate(array $population): void
     {

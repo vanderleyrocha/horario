@@ -2,18 +2,21 @@
 
 namespace Database\Factories;
 
+use App\Models\Professor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Professor>
+ * @extends Factory<Professor>
  */
-class ProfessorFactory extends Factory {
+class ProfessorFactory extends Factory
+{
     /**
      * Define the model's default state.
      *
      * @return array<string, mixed>
      */
-    public function definition(): array {
+    public function definition(): array
+    {
         return [
             'nome' => $this->faker->name(),
             'email' => $this->faker->unique()->safeEmail(),

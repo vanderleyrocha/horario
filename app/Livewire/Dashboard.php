@@ -66,7 +66,7 @@ class Dashboard extends Component
         foreach (Horario::latest()->take(3)->get() as $horario) {
             $activities[] = [
                 'type' => 'horario',
-                'message' => "Horario '{$horario->nome}' " . ($horario->status === 'concluido' ? 'gerado com sucesso' : 'criado'),
+                'message' => "Horario '{$horario->nome}' ".($horario->status === 'concluido' ? 'gerado com sucesso' : 'criado'),
                 'time' => $horario->created_at?->diffForHumans(),
                 'sort' => $horario->created_at?->getTimestamp() ?? 0,
                 'color' => $horario->status === 'concluido' ? 'green' : 'blue',

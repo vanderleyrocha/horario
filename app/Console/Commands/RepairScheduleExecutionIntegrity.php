@@ -47,6 +47,7 @@ class RepairScheduleExecutionIntegrity extends Command
 
         if ($orphanGroups->isEmpty() && $mismatchGroups->isEmpty()) {
             $this->info('Nenhuma inconsistencia encontrada.');
+
             return self::SUCCESS;
         }
 
@@ -136,6 +137,7 @@ class RepairScheduleExecutionIntegrity extends Command
 
         if ($dryRun) {
             $this->info('Dry run concluido. Nenhum dado foi alterado.');
+
             return self::SUCCESS;
         }
 
@@ -144,4 +146,3 @@ class RepairScheduleExecutionIntegrity extends Command
         return self::SUCCESS;
     }
 }
-

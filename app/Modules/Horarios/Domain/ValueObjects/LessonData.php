@@ -17,6 +17,5 @@ final class LessonData
         public readonly array $preferredDays = [],
         public readonly array $preferredPeriods = [],
         public readonly ?int $maxPerDay = null,
-    ) {
-    }
+    ) {}
 }

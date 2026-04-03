@@ -36,7 +36,7 @@ class EvolutionProgress
             'entropy' => $this->entropy,
             'mutation_rate' => $this->mutationRate,
             'stagnation' => $this->stagnation,
-            'landscape_state' => $this->landscapeState ?? 'unknown'
+            'landscape_state' => $this->landscapeState ?? 'unknown',
         ];
     }
 }

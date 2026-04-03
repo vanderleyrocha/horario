@@ -44,7 +44,7 @@ final class Island
      * - Mantém os indivíduos de elite (tipicamente 10% da população)
      * - Gera novos indivíduos para completar o tamanho da população (90%)
      *
-     * @param Cromossomo[] $elite - Indivíduos a serem preservados
+     * @param  Cromossomo[]  $elite  - Indivíduos a serem preservados
      */
     public function reinitializeWithElite(array $elite): void
     {

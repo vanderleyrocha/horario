@@ -66,6 +66,9 @@ it('logs a single structured summary for the initial population instead of one e
             return $message === 'ga.population.initialized'
                 && ($context['population_size'] ?? null) === 3
                 && count($context['sample_gene_counts'] ?? []) === 3
+                && array_key_exists('avg_grasp_attempts_per_individual', $context)
+                && array_key_exists('quality_gate_success_rate', $context)
+                && array_key_exists('initial_population_avg_score', $context)
                 && array_key_exists('best_fitness', $context)
                 && array_key_exists('avg_fitness', $context);
         })
@@ -125,7 +128,7 @@ it('publishes the same structured progress payload for the frontend through the 
         ->values()
         ->all();
 
-    expect($progress->reports)->toHaveCount(3)
+    expect($progress->reports)->toHaveCount(4)
         ->and($generationReport)->toBeArray()
         ->and($generationReport)->toMatchArray([
             'phase' => 'evolution',
@@ -541,6 +544,7 @@ it('applies an adaptive cooldown brake when recent alns outcomes have low return
 it('evaluates each offspring only once during generation step', function (): void {
     $problem = new class () implements GeneticProblem {
         public int $sequence = 1;
+
         public int $evaluateCalls = 0;
 
         public function createIndividual(): Cromossomo
@@ -855,6 +859,96 @@ function makeCopyingCrossover(): CrossoverOperatorInterface
         }
     };
 }
+
+// ---------------------------------------------------------------------------
+// Sprint 3 — Tests for computeInitialPopulationBatchQuality (private method)
+// ---------------------------------------------------------------------------
+
+it('publishes a batch_quality report in initial_population phase after run', function (): void {
+    $progress = makeCollectingProgressReporter();
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        progress: $progress,
+    );
+
+    $engine->run(4);
+
+    $batchReport = collect($progress->reports)
+        ->first(fn (array $r): bool => ($r['stage'] ?? '') === 'batch_quality');
+
+    expect($batchReport)->toBeArray()
+        ->and($batchReport['phase'])->toBe('initial_population')
+        ->and($batchReport)->toHaveKey('verdict')
+        ->and($batchReport)->toHaveKey('uniqueness_ratio')
+        ->and($batchReport)->toHaveKey('fitness_min')
+        ->and($batchReport)->toHaveKey('fitness_max')
+        ->and($batchReport)->toHaveKey('fitness_avg')
+        ->and($batchReport)->toHaveKey('fitness_std_dev')
+        ->and($batchReport)->toHaveKey('fitness_coefficient_of_variation')
+        ->and($batchReport)->toHaveKey('issues');
+});
+
+it('computeInitialPopulationBatchQuality returns ok for distinct fitness values and full uniqueness', function (): void {
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'computeInitialPopulationBatchQuality');
+
+    $result = $method->invoke($engine, [70.0, 85.0, 100.0, 115.0], 4, 4);
+
+    expect($result['verdict'])->toBe('ok')
+        ->and($result['issues'])->toBeEmpty()
+        ->and($result['uniqueness_ratio'])->toBe(1.0);
+});
+
+it('computeInitialPopulationBatchQuality flags low_signature_diversity at 50 percent uniqueness', function (): void {
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'computeInitialPopulationBatchQuality');
+
+    // 2 únicos de 4 = 50 %  →  abaixo do limite de 75 %
+    $result = $method->invoke($engine, [80.0, 90.0, 100.0, 110.0], 2, 4);
+
+    expect($result['issues'])->toContain('low_signature_diversity');
+});
+
+it('computeInitialPopulationBatchQuality flags fitness_collapsed when all fitness values are identical', function (): void {
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'computeInitialPopulationBatchQuality');
+
+    $result = $method->invoke($engine, [100.0, 100.0, 100.0, 100.0], 4, 4);
+
+    expect($result['issues'])->toContain('fitness_collapsed');
+});
+
+it('computeInitialPopulationBatchQuality returns verdict empty when population is empty', function (): void {
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+    );
+
+    $method = new ReflectionMethod(GeneticAlgorithmEngine::class, 'computeInitialPopulationBatchQuality');
+
+    $result = $method->invoke($engine, [], 0, 0);
+
+    expect($result['verdict'])->toBe('empty')
+        ->and($result['fitness_min'])->toBeNull();
+});
 
 function makeCountingMutationOperator()
 {

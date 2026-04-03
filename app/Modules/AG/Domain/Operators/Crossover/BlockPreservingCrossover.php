@@ -21,7 +21,7 @@ final class BlockPreservingCrossover implements CrossoverOperatorInterface
         if ($size < 2) {
             return [
                 $parentA->copy(),
-                $parentB->copy()
+                $parentB->copy(),
             ];
         }
 

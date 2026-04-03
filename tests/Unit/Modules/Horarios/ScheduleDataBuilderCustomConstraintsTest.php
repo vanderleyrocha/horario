@@ -11,8 +11,9 @@ use App\Models\Turma;
 use App\Modules\Horarios\Domain\Builders\ScheduleDataBuilder;
 use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
-uses(Tests\TestCase::class, RefreshDatabase::class);
+uses(TestCase::class, RefreshDatabase::class);
 
 it('injects custom constraint snapshots into schedule data', function (): void {
     $horario = Horario::factory()->create();
@@ -60,7 +61,7 @@ it('injects custom constraint snapshots into schedule data', function (): void {
         ],
     );
 
-    $scheduleData = (new ScheduleDataBuilder())->build($horario, [$constraint]);
+    $scheduleData = (new ScheduleDataBuilder)->build($horario, [$constraint]);
 
     expect($scheduleData->customConstraints)
         ->toHaveCount(1)

@@ -7,12 +7,10 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 final class FitnessSharingCalculator
 {
-    public function __construct(private GeneticDistance $distance, private SharingFunction $sharing)
-    {
-    }
+    public function __construct(private GeneticDistance $distance, private SharingFunction $sharing) {}
 
     /**
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
     public function sharedFitness(Cromossomo $individual, array $population): float
     {

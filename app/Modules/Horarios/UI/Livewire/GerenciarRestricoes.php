@@ -2,22 +2,25 @@
 
 namespace App\Modules\Horarios\UI\Livewire;
 
-use App\Models\Horario;
-use App\Models\RestricaoTempo;
-use App\Models\Professor;
-use App\Models\Turma;
 use App\Models\Disciplina;
+use App\Models\Horario;
+use App\Models\Professor;
+use App\Models\RestricaoTempo;
+use App\Models\Turma;
 use Livewire\Component;
 
-class GerenciarRestricoes extends Component {
+class GerenciarRestricoes extends Component
+{
     public Horario $horario;
 
     // Configurações
     public $diasSemana = [];
+
     public $tempos = [];
 
     // Seleção
     public $tipoEntidade = 'professor'; // professor, turma, disciplina
+
     public $entidadeSelecionada = null;
 
     // Grade de Restrições
@@ -25,13 +28,19 @@ class GerenciarRestricoes extends Component {
 
     // Modal de Edição Rápida
     public $modalEdicao = false;
+
     public $edicaoDia = null;
+
     public $edicaoTempo = null;
+
     public $edicaoStatus = 'livre';
+
     public $edicaoMotivo = '';
+
     public $edicaoPeso = 1;
 
-    public function mount(Horario $horario) {
+    public function mount(Horario $horario)
+    {
         $this->horario = $horario;
 
         // ✅ CORREÇÃO: Usar configuracaoHorario (relacionamento) em vez de configuracao (campo JSON)
@@ -47,18 +56,22 @@ class GerenciarRestricoes extends Component {
         }
     }
 
-    public function updatedTipoEntidade() {
+    public function updatedTipoEntidade()
+    {
         $this->entidadeSelecionada = null;
         $this->restricoes = [];
     }
 
-    public function updatedEntidadeSelecionada() {
+    public function updatedEntidadeSelecionada()
+    {
         $this->carregarRestricoes();
     }
 
-    public function carregarRestricoes() {
-        if (!$this->entidadeSelecionada) {
+    public function carregarRestricoes()
+    {
+        if (! $this->entidadeSelecionada) {
             $this->restricoes = [];
+
             return;
         }
 
@@ -68,7 +81,7 @@ class GerenciarRestricoes extends Component {
             ->where('entidade_type', $modelClass)
             ->where('entidade_id', $this->entidadeSelecionada)
             ->get()
-            ->keyBy(fn($r) => "{$r->dia_semana}_{$r->tempo}");
+            ->keyBy(fn ($r) => "{$r->dia_semana}_{$r->tempo}");
 
         $this->restricoes = [];
         foreach ($this->diasSemana as $dia) {
@@ -79,7 +92,8 @@ class GerenciarRestricoes extends Component {
         }
     }
 
-    protected function getModelClass() {
+    protected function getModelClass()
+    {
         return match ($this->tipoEntidade) {
             'professor' => Professor::class,
             'turma' => Turma::class,
@@ -87,7 +101,8 @@ class GerenciarRestricoes extends Component {
         };
     }
 
-    public function alterarStatus($dia, $tempo) {
+    public function alterarStatus($dia, $tempo)
+    {
         $key = "{$dia}_{$tempo}";
         $statusAtual = $this->restricoes[$key] ?? 'livre';
 
@@ -102,7 +117,8 @@ class GerenciarRestricoes extends Component {
         $this->salvarRestricao($dia, $tempo, $this->restricoes[$key]);
     }
 
-    public function abrirModalEdicao($dia, $tempo) {
+    public function abrirModalEdicao($dia, $tempo)
+    {
         $key = "{$dia}_{$tempo}";
         $restricao = RestricaoTempo::where('horario_id', $this->horario->id)
             ->where('entidade_type', $this->getModelClass())
@@ -119,7 +135,8 @@ class GerenciarRestricoes extends Component {
         $this->modalEdicao = true;
     }
 
-    public function salvarEdicao() {
+    public function salvarEdicao()
+    {
         $this->salvarRestricao(
             $this->edicaoDia,
             $this->edicaoTempo,
@@ -132,8 +149,9 @@ class GerenciarRestricoes extends Component {
         $this->carregarRestricoes();
     }
 
-    protected function salvarRestricao($dia, $tempo, $status, $motivo = null, $peso = 1) {
-        if (!$this->entidadeSelecionada) {
+    protected function salvarRestricao($dia, $tempo, $status, $motivo = null, $peso = 1)
+    {
+        if (! $this->entidadeSelecionada) {
             return;
         }
 
@@ -153,9 +171,11 @@ class GerenciarRestricoes extends Component {
         );
     }
 
-    public function aplicarBloqueioMassa($status) {
-        if (!$this->entidadeSelecionada) {
+    public function aplicarBloqueioMassa($status)
+    {
+        if (! $this->entidadeSelecionada) {
             session()->flash('error', 'Selecione uma entidade primeiro');
+
             return;
         }
 
@@ -169,8 +189,9 @@ class GerenciarRestricoes extends Component {
         session()->flash('success', 'Bloqueio em massa aplicado!');
     }
 
-    public function limparRestricoes() {
-        if (!$this->entidadeSelecionada) {
+    public function limparRestricoes()
+    {
+        if (! $this->entidadeSelecionada) {
             return;
         }
 
@@ -183,19 +204,23 @@ class GerenciarRestricoes extends Component {
         session()->flash('success', 'Restrições removidas!');
     }
 
-    public function getProfessoresProperty() {
+    public function getProfessoresProperty()
+    {
         return Professor::ativo()->orderBy('nome')->get();
     }
 
-    public function getTurmasProperty() {
+    public function getTurmasProperty()
+    {
         return Turma::ativa()->orderBy('nome')->get();
     }
 
-    public function getDisciplinasProperty() {
+    public function getDisciplinasProperty()
+    {
         return Disciplina::ativa()->orderBy('nome')->get();
     }
 
-    public function getEntidadesProperty() {
+    public function getEntidadesProperty()
+    {
         return match ($this->tipoEntidade) {
             'professor' => $this->professores,
             'turma' => $this->turmas,
@@ -203,12 +228,15 @@ class GerenciarRestricoes extends Component {
         };
     }
 
-    public function getDiaNome($dia) {
+    public function getDiaNome($dia)
+    {
         $dias = [1 => 'Seg', 2 => 'Ter', 3 => 'Qua', 4 => 'Qui', 5 => 'Sex', 6 => 'Sáb'];
+
         return $dias[$dia] ?? '';
     }
 
-    public function render() {
+    public function render()
+    {
         return view('modules.horarios.livewire.gerenciar-restricoes', [
             'entidades' => $this->entidades,
         ]);

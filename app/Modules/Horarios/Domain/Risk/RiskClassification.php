@@ -7,9 +7,13 @@ namespace App\Modules\Horarios\Domain\Risk;
 final class RiskClassification
 {
     public const MINIMO = 'MINIMO';
+
     public const BAIXO = 'BAIXO';
+
     public const MODERADO = 'MODERADO';
+
     public const ALTO = 'ALTO';
+
     public const CRITICO = 'CRITICO';
 
     public function classify(int $riskIndex): string

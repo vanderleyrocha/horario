@@ -10,7 +10,7 @@ use App\Modules\Horarios\Domain\Constraints\ValueObjects\ConstraintTargetGroup;
 abstract class AbstractConstraintValidator implements ConstraintValidator
 {
     /**
-     * @param list<string> $keys
+     * @param  list<string>  $keys
      */
     protected function requireKeys(array $payload, array $keys): void
     {
@@ -105,7 +105,8 @@ abstract class AbstractConstraintValidator implements ConstraintValidator
 
     /**
      * @template T of \BackedEnum
-     * @param class-string<T> $enumClass
+     *
+     * @param  class-string<T>  $enumClass
      * @return T
      */
     protected function requireEnumValue(array $payload, string $key, string $enumClass): \BackedEnum

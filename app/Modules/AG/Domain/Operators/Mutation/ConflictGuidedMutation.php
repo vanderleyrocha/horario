@@ -6,9 +6,7 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 final class ConflictGuidedMutation implements MutationOperatorInterface
 {
-    public function __construct(private readonly int $maxDias, private readonly int $maxPeriodosPorDia)
-    {
-    }
+    public function __construct(private readonly int $maxDias, private readonly int $maxPeriodosPorDia) {}
 
     public function mutate(Cromossomo $cromossomo): Cromossomo
     {

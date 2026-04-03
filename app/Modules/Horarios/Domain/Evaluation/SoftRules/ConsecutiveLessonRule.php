@@ -6,8 +6,10 @@ use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class ConsecutiveLessonRule implements SoftRuleInterface {
-    public function evaluate(EvaluationContext $context): RuleResult {
+final class ConsecutiveLessonRule implements SoftRuleInterface
+{
+    public function evaluate(EvaluationContext $context): RuleResult
+    {
         $penalty = 0.0;
 
         $slotsPorAula = $context->cromossomo()->aulaSlotsIndex();
@@ -30,7 +32,8 @@ final class ConsecutiveLessonRule implements SoftRuleInterface {
         return new RuleResult($penalty, self::class);
     }
 
-    public function isHard(): bool {
+    public function isHard(): bool
+    {
         return false;
     }
 }

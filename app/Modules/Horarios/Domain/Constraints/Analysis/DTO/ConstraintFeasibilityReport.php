@@ -7,14 +7,13 @@ namespace App\Modules\Horarios\Domain\Constraints\Analysis\DTO;
 final class ConstraintFeasibilityReport
 {
     /**
-     * @param list<array<string, mixed>> $blockingIssues
-     * @param list<array<string, mixed>> $warnings
+     * @param  list<array<string, mixed>>  $blockingIssues
+     * @param  list<array<string, mixed>>  $warnings
      */
     public function __construct(
         private readonly array $blockingIssues = [],
         private readonly array $warnings = [],
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<array<string, mixed>>

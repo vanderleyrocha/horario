@@ -2,11 +2,13 @@
 
 namespace App\Modules\AG\Domain\Intensification\Kempe;
 
-use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\ConflictGraph\ConflictGraph;
+use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class KempeChainBuilder {
-    public function build(Cromossomo $c, ConflictGraph $graph, int $seedGeneId, int $targetSlot): KempeChain {
+class KempeChainBuilder
+{
+    public function build(Cromossomo $c, ConflictGraph $graph, int $seedGeneId, int $targetSlot): KempeChain
+    {
 
         $seed = $c->genes()[$seedGeneId];
 
@@ -19,7 +21,7 @@ class KempeChainBuilder {
 
         $visited = [];
 
-        while (!empty($queue)) {
+        while (! empty($queue)) {
 
             $geneId = array_pop($queue);
 

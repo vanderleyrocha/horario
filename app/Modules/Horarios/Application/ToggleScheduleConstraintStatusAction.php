@@ -15,8 +15,7 @@ final class ToggleScheduleConstraintStatusAction
     public function __construct(
         private readonly ScheduleConstraintRepository $repository,
         private readonly ScheduleConstraintFactory $factory,
-    ) {
-    }
+    ) {}
 
     public function execute(int $id, int $horarioId, ?int $actorId = null): ScheduleConstraint
     {

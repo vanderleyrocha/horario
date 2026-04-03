@@ -27,9 +27,7 @@ class GerarHorarioJob implements ShouldQueue
 
     public $timeout = 3600;
 
-    public function __construct(public Horario $horario, public ?int $executionId = null)
-    {
-    }
+    public function __construct(public Horario $horario, public ?int $executionId = null) {}
 
     public function handle(): void
     {
@@ -42,7 +40,7 @@ class GerarHorarioJob implements ShouldQueue
         $telemetryLogger = app(GATelemetryLogger::class);
 
         $cacheReporter = new CacheProgressReporter($this->horario->id);
-        $dbRecorder = new ExecutionMetricsRecorder();
+        $dbRecorder = new ExecutionMetricsRecorder;
 
         try {
             $dbRecorder->startExecution(
@@ -111,7 +109,7 @@ class GerarHorarioJob implements ShouldQueue
             );
 
             Log::warning("Execucao cancelada [ID: {$this->horario->id}]");
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $statusContext = $this->buildExecutionStatusContext(
                 status: 'failed',
                 executionId: $dbRecorder->hasExecutionId() ? $dbRecorder->getExecutionId() : $this->executionId,
@@ -132,7 +130,7 @@ class GerarHorarioJob implements ShouldQueue
                 $dbRecorder->hasExecutionId() ? $dbRecorder->getExecutionId() : $this->executionId
             );
 
-            Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: " . $e->getMessage());
+            Log::error("Erro na geracao de horario [ID: {$this->horario->id}]: ".$e->getMessage());
 
             throw $e;
         }

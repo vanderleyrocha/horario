@@ -27,12 +27,11 @@ use App\Modules\Horarios\Domain\Constraints\ValueObjects\TimePlacementWindow;
 final class ScheduleConstraintFactory
 {
     /**
-     * @param array<string, ConstraintValidator>|null $validators
+     * @param  array<string, ConstraintValidator>|null  $validators
      */
     public function __construct(
         private readonly ?array $validators = null,
-    ) {
-    }
+    ) {}
 
     public function fromCreateInput(CreateScheduleConstraintInput $input): ScheduleConstraint
     {
@@ -182,9 +181,9 @@ final class ScheduleConstraintFactory
     private function validators(): array
     {
         return $this->validators ?? [
-            ConstraintType::SYNC_SAME_TIMESLOT->value => new SyncSameTimeslotConstraintValidator(),
-            ConstraintType::MUTUAL_EXCLUSION->value => new MutualExclusionConstraintValidator(),
-            ConstraintType::TIME_PLACEMENT->value => new TimePlacementConstraintValidator(),
+            ConstraintType::SYNC_SAME_TIMESLOT->value => new SyncSameTimeslotConstraintValidator,
+            ConstraintType::MUTUAL_EXCLUSION->value => new MutualExclusionConstraintValidator,
+            ConstraintType::TIME_PLACEMENT->value => new TimePlacementConstraintValidator,
         ];
     }
 }

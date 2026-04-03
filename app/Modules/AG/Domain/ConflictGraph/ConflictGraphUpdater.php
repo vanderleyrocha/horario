@@ -4,8 +4,10 @@ namespace App\Modules\AG\Domain\ConflictGraph;
 
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 
-class ConflictGraphUpdater {
-    public function indexGene(ConflictGraph $graph, int $geneIndex, Gene $gene, array $genes): void {
+class ConflictGraphUpdater
+{
+    public function indexGene(ConflictGraph $graph, int $geneIndex, Gene $gene, array $genes): void
+    {
 
         foreach ($genes as $otherIndex => $other) {
 
@@ -23,7 +25,8 @@ class ConflictGraphUpdater {
         }
     }
 
-    public function removeGene(ConflictGraph $graph, int $geneIndex): void {
+    public function removeGene(ConflictGraph $graph, int $geneIndex): void
+    {
 
         foreach ($graph->neighbors($geneIndex) as $neighbor) {
 

@@ -1,56 +1,74 @@
 <?php
 
-
 namespace App\Modules\Horarios\UI\Livewire;
 
-use App\Models\Horario;
 use App\Models\Aula;
+use App\Models\Horario;
+use App\Modules\Horarios\Support\ComDadosComuns;
 use Livewire\Component;
 use Livewire\WithPagination;
-use App\Modules\Horarios\Support\ComDadosComuns;
 
-class GerenciarAulas extends Component {
-    use WithPagination;
+class GerenciarAulas extends Component
+{
     use ComDadosComuns;
+    use WithPagination;
 
     public Horario $horario;
 
     // Modal de Adicionar/Editar
     public $modalAberto = false;
+
     public $editandoId = null;
 
     // Formulário
     public $professor_id = '';
+
     public $disciplina_id = '';
+
     public $turma_id = '';
+
     public $aulas_semana = 2;
+
     public $tipo = 'simples';
+
     public $aulas_consecutivas = false;
+
     public $max_aulas_dia = 2;
+
     public $min_intervalo_dias = 0;
+
     public $preferencia_periodo = 'qualquer';
+
     public $dias_preferidos = [];
+
     public $tempos_preferidos = [];
+
     public $observacoes = '';
 
     // Filtros
     public $filtroTurma = '';
+
     public $filtroProfessor = '';
+
     public $busca = '';
 
     protected $paginationTheme = 'tailwind';
+
     protected $listeners = ['fecharModal' => 'fecharModal'];
 
-    public function mount(Horario $horario) {
+    public function mount(Horario $horario)
+    {
         $this->horario = $horario;
     }
 
-    public function abrirModal() {
+    public function abrirModal()
+    {
         $this->resetearFormulario();
         $this->modalAberto = true;
     }
 
-    public function resetearFormulario() {
+    public function resetearFormulario()
+    {
         $this->editandoId = null;
         $this->professor_id = '';
         $this->disciplina_id = '';
@@ -67,12 +85,14 @@ class GerenciarAulas extends Component {
         $this->resetValidation();
     }
 
-    public function fecharModal() {
+    public function fecharModal()
+    {
         $this->modalAberto = false;
         $this->resetearFormulario();
     }
 
-    public function editar($aulaId) {
+    public function editar($aulaId)
+    {
         $aula = Aula::findOrFail($aulaId);
 
         $this->editandoId = $aula->id;
@@ -99,7 +119,8 @@ class GerenciarAulas extends Component {
         $this->modalAberto = true;
     }
 
-    public function salvar() {
+    public function salvar()
+    {
         $this->validate([
             'professor_id' => 'required|exists:professores,id',
             'disciplina_id' => 'required|exists:disciplinas,id',
@@ -120,8 +141,8 @@ class GerenciarAulas extends Component {
             'max_aulas_dia' => $this->max_aulas_dia,
             'min_intervalo_dias' => $this->min_intervalo_dias,
             'preferencia_periodo' => $this->preferencia_periodo,
-            'dias_preferidos' => !empty($this->dias_preferidos) ? $this->dias_preferidos : null,
-            'tempos_preferidos' => !empty($this->tempos_preferidos) ? $this->tempos_preferidos : null,
+            'dias_preferidos' => ! empty($this->dias_preferidos) ? $this->dias_preferidos : null,
+            'tempos_preferidos' => ! empty($this->tempos_preferidos) ? $this->tempos_preferidos : null,
             'observacoes' => $this->observacoes,
             'ativa' => true,
         ];
@@ -139,7 +160,8 @@ class GerenciarAulas extends Component {
         $this->resetPage();
     }
 
-    public function duplicar($aulaId) {
+    public function duplicar($aulaId)
+    {
         $aula = Aula::findOrFail($aulaId);
 
         $novaAula = $aula->replicate();
@@ -149,7 +171,8 @@ class GerenciarAulas extends Component {
         $this->resetPage();
     }
 
-    public function excluir($aulaId) {
+    public function excluir($aulaId)
+    {
         $aula = Aula::findOrFail($aulaId);
         $aula->delete();
 
@@ -157,7 +180,8 @@ class GerenciarAulas extends Component {
         $this->resetPage();
     }
 
-    public function getAulasProperty() {
+    public function getAulasProperty()
+    {
         $query = Aula::where('horario_id', $this->horario->id)
             ->with(['professor', 'disciplina', 'turma']);
 
@@ -188,7 +212,8 @@ class GerenciarAulas extends Component {
             ->paginate(15);
     }
 
-    public function render() {
+    public function render()
+    {
         return view('modules.horarios.livewire.gerenciar-aulas', [
             'aulas' => $this->aulas,
             'professores' => $this->professores,

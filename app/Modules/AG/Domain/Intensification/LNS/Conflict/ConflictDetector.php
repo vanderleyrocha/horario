@@ -4,8 +4,10 @@ namespace App\Modules\AG\Domain\Intensification\LNS\Conflict;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class ConflictDetector {
-    public function detect(Cromossomo $cromossomo): ConflictSet {
+class ConflictDetector
+{
+    public function detect(Cromossomo $cromossomo): ConflictSet
+    {
         $conflicts = [];
 
         $profIndex = $cromossomo->professorPeriodoIndex();

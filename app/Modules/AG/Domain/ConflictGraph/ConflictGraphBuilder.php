@@ -4,9 +4,11 @@ namespace App\Modules\AG\Domain\ConflictGraph;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-class ConflictGraphBuilder {
-    public function build(Cromossomo $c): ConflictGraph {
-        $graph = new ConflictGraph();
+class ConflictGraphBuilder
+{
+    public function build(Cromossomo $c): ConflictGraph
+    {
+        $graph = new ConflictGraph;
 
         foreach ($c->genes() as $gene) {
             $graph->addNode($gene->id);

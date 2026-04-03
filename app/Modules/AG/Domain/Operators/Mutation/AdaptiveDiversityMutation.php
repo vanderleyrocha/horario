@@ -7,13 +7,11 @@ namespace App\Modules\AG\Domain\Operators\Mutation;
 use App\Modules\AG\Domain\Operators\Mutation\Interfaces\DiversityAwareMutationInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class AdaptiveDiversityMutation implements MutationOperatorInterface, DiversityAwareMutationInterface
+final class AdaptiveDiversityMutation implements DiversityAwareMutationInterface, MutationOperatorInterface
 {
     private float $diversity = 1.0;
 
-    public function __construct(private readonly StructuredSwapMutation $structured, private readonly GeneSwapMutation $swap, private readonly ConflictGuidedMutation $conflict)
-    {
-    }
+    public function __construct(private readonly StructuredSwapMutation $structured, private readonly GeneSwapMutation $swap, private readonly ConflictGuidedMutation $conflict) {}
 
     public function setDiversity(float $diversity): void
     {

@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\Horario;
 use App\Modules\AG\Application\RunGeneticAlgorithm;
+use Illuminate\Console\Command;
 
 class TestGeneticSolver extends Command
 {
@@ -16,15 +16,15 @@ class TestGeneticSolver extends Command
 
     public function handle()
     {
-        $this->info("=================================");
-        $this->info(" TESTE DO SOLVER ");
-        $this->info("=================================");
+        $this->info('=================================');
+        $this->info(' TESTE DO SOLVER ');
+        $this->info('=================================');
 
         $horario = Horario::first();
 
-        if (!$horario) {
+        if (! $horario) {
 
-            $this->error("Nenhum horário encontrado no banco.");
+            $this->error('Nenhum horário encontrado no banco.');
 
             return Command::FAILURE;
         }
@@ -41,12 +41,12 @@ class TestGeneticSolver extends Command
 
             $time = round(microtime(true) - $start, 2);
 
-            $this->info("Execução concluída.");
+            $this->info('Execução concluída.');
             $this->info("Tempo total: {$time}s");
 
         } catch (\Throwable $e) {
 
-            $this->error("Erro na execução:");
+            $this->error('Erro na execução:');
             $this->error($e->getMessage());
         }
 

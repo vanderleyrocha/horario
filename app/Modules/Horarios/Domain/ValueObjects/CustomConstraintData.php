@@ -15,8 +15,7 @@ final class CustomConstraintData
         public readonly int $weight,
         public readonly bool $isActive,
         public readonly array $payload,
-    ) {
-    }
+    ) {}
 
     public function toArray(): array
     {

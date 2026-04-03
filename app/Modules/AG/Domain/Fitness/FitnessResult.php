@@ -2,7 +2,8 @@
 
 namespace App\Modules\AG\Domain\Fitness;
 
-final class FitnessResult {
+final class FitnessResult
+{
     public function __construct(
         private readonly float $score,
         private readonly float $totalPenalty,
@@ -12,7 +13,8 @@ final class FitnessResult {
         $this->validate();
     }
 
-    private function validate(): void {
+    private function validate(): void
+    {
         if ($this->score < 0) {
             throw new \InvalidArgumentException('Fitness score não pode ser negativo.');
         }
@@ -40,19 +42,23 @@ final class FitnessResult {
      |  GETTERS
      ============================================================ */
 
-    public function score(): float {
+    public function score(): float
+    {
         return $this->score;
     }
 
-    public function totalPenalty(): float {
+    public function totalPenalty(): float
+    {
         return $this->totalPenalty;
     }
 
-    public function hardPenalty(): float {
+    public function hardPenalty(): float
+    {
         return $this->hardPenalty;
     }
 
-    public function softPenalty(): float {
+    public function softPenalty(): float
+    {
         return $this->softPenalty;
     }
 
@@ -60,11 +66,13 @@ final class FitnessResult {
      |  UTILITÁRIOS
      ============================================================ */
 
-    public function isPerfect(): bool {
+    public function isPerfect(): bool
+    {
         return $this->totalPenalty === 0.0;
     }
 
-    public function toArray(): array {
+    public function toArray(): array
+    {
         return [
             'score' => $this->score,
             'total_penalty' => $this->totalPenalty,

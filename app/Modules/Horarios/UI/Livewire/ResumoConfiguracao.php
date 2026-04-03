@@ -4,11 +4,12 @@ namespace App\Modules\Horarios\UI\Livewire;
 
 use App\Models\Horario;
 use App\Models\RestricaoTempo;
-use Livewire\Component;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Livewire\Component;
 
-class ResumoConfiguracao extends Component {
+class ResumoConfiguracao extends Component
+{
     public Horario $horario;
 
     // ✅ ATUALIZADO: Array para mapear dias da semana com string e display name
@@ -22,7 +23,8 @@ class ResumoConfiguracao extends Component {
         7 => ['string' => 'domingo', 'display' => 'Domingo'],
     ];
 
-    public function mount(Horario $horario) {
+    public function mount(Horario $horario)
+    {
         $this->horario = $horario->load([
             'configuracaoHorario',
             'aulas.professor',
@@ -33,7 +35,8 @@ class ResumoConfiguracao extends Component {
         ]);
     }
 
-    public function getEstatisticasProperty() {
+    public function getEstatisticasProperty()
+    {
         $config = $this->horario->configuracaoHorario;
         $aulas = $this->horario->aulas;
 
@@ -67,7 +70,8 @@ class ResumoConfiguracao extends Component {
         ];
     }
 
-    public function getRestricoesProperty() {
+    public function getRestricoesProperty()
+    {
         return RestricaoTempo::where('horario_id', $this->horario->id)
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
@@ -76,7 +80,8 @@ class ResumoConfiguracao extends Component {
             ->toArray();
     }
 
-    public function getAulasPorTurmaProperty(): Collection {
+    public function getAulasPorTurmaProperty(): Collection
+    {
         return $this->horario->aulas->groupBy('turma_id')->map(function ($aulasDaTurma) {
 
             $turma = $aulasDaTurma->first()->turma;
@@ -97,28 +102,34 @@ class ResumoConfiguracao extends Component {
         });
     }
 
-    public function getProntoParaGerarProperty() {
+    public function getProntoParaGerarProperty()
+    {
         $config = $this->horario->configuracaoHorario;
         $aulas = $this->horario->aulas->count();
 
         return $config && $aulas > 0;
     }
 
-    public function iniciarGeracao() {
-        if (!$this->prontoParaGerar) {
+    public function iniciarGeracao()
+    {
+        if (! $this->prontoParaGerar) {
             session()->flash('error', 'Configure o horário antes de gerar!');
+
             return;
         }
 
         return redirect()->route('algoritmo.center', ['horario' => $this->horario->id]);
     }
 
-    public function voltarParaEdicao($etapa) {
+    public function voltarParaEdicao($etapa)
+    {
         $this->dispatch('irParaEtapa', etapa: $etapa);
     }
 
-    public function render() {
+    public function render()
+    {
         Log::info("Renderizando view modules.horarios.livewire.resumo-configuracao via app\Livewire\Horarios\ResumoConfiguracao.php");
+
         return view('modules.horarios.livewire.resumo-configuracao', [
             'estatisticas' => $this->estatisticas,
             'restricoes' => $this->restricoes,

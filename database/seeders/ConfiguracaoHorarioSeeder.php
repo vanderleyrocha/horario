@@ -1,10 +1,11 @@
 <?php
+
 // database/seeders/ConfiguracaoHorarioSeeder.php
 
 namespace Database\Seeders;
 
-use App\Models\Horario;
 use App\Models\ConfiguracaoHorario;
+use App\Models\Horario;
 use Illuminate\Database\Seeder;
 
 class ConfiguracaoHorarioSeeder extends Seeder

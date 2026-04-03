@@ -2,9 +2,9 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\HardRules;
 
-use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
 use App\Modules\AG\Domain\Fitness\Delta\Dependency\RuleDependency;
+use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
@@ -57,7 +57,7 @@ final class WorkloadExceededRule implements HardRuleInterface, IncrementalRule
     public function dependencies(): array
     {
         return [
-            RuleDependency::TURMA
+            RuleDependency::TURMA,
         ];
     }
 

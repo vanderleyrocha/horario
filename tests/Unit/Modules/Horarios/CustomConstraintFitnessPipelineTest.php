@@ -143,9 +143,9 @@ it('returns diagnostic details grouped by constraint', function (): void {
 function makeConstraintPipeline(): ConstraintEvaluationPipeline
 {
     return new ConstraintEvaluationPipeline([
-        new SyncSameTimeslotConstraintEvaluator(),
-        new MutualExclusionConstraintEvaluator(),
-        new TimePlacementConstraintEvaluator(),
+        new SyncSameTimeslotConstraintEvaluator,
+        new MutualExclusionConstraintEvaluator,
+        new TimePlacementConstraintEvaluator,
     ]);
 }
 

@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
@@ -28,7 +29,7 @@ test('email can be verified', function () {
     Event::assertDispatched(Verified::class);
 
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
-    $response->assertRedirect(route('dashboard', absolute: false) . '?verified=1');
+    $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
 });
 
 test('email is not verified with invalid hash', function () {
@@ -51,11 +52,11 @@ test('already verified user visiting verification link is redirected without fir
     Event::fake();
 
     $verificationUrl = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), ['id' => $user->id, 'hash' => sha1($user->email)]);
-    /** @var Illuminate\Contracts\Auth\Authenticatable $user */
+    /** @var Authenticatable $user */
     $this->actingAs($user)->get($verificationUrl)
-        ->assertRedirect(route('dashboard', absolute: false) . '?verified=1');
+        ->assertRedirect(route('dashboard', absolute: false).'?verified=1');
 
-    /** @var App\Models\User $user */
+    /** @var User $user */
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
     Event::assertNotDispatched(Verified::class);
 });

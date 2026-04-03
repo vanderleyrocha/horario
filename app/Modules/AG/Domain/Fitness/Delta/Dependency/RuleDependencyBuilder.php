@@ -6,11 +6,11 @@ class RuleDependencyBuilder
 {
     public static function build(array $rules): RuleDependencyGraph
     {
-        $graph = new RuleDependencyGraph();
+        $graph = new RuleDependencyGraph;
 
         foreach ($rules as $rule) {
 
-            if (!method_exists($rule, 'dependencies')) {
+            if (! method_exists($rule, 'dependencies')) {
                 continue;
             }
 

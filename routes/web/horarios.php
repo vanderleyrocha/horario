@@ -2,8 +2,12 @@
 
 use App\Models\Horario;
 use App\Modules\Horarios\UI\Livewire\Aulas as HorariosAulas;
+use App\Modules\Horarios\UI\Livewire\Create;
 use App\Modules\Horarios\UI\Livewire\Disciplinas as HorariosDisciplinas;
+use App\Modules\Horarios\UI\Livewire\Index;
+use App\Modules\Horarios\UI\Livewire\Manage;
 use App\Modules\Horarios\UI\Livewire\Professores as HorariosProfessores;
+use App\Modules\Horarios\UI\Livewire\Show;
 use App\Modules\Horarios\UI\Livewire\Turmas as HorariosTurmas;
 use Illuminate\Support\Facades\Route;
 
@@ -25,11 +29,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/disciplinas/{disciplina}/editar', HorariosDisciplinas\Edit::class)->name('disciplinas.edit');
 
     Route::prefix('horarios')->name('horarios.')->group(function () {
-        Route::get('/', App\Modules\Horarios\UI\Livewire\Index::class)->name('index');
-        Route::get('/criar', App\Modules\Horarios\UI\Livewire\Create::class)->name('create');
+        Route::get('/', Index::class)->name('index');
+        Route::get('/criar', Create::class)->name('create');
 
-        Route::get('/{horario}/manage', App\Modules\Horarios\UI\Livewire\Manage::class)->name('manage');
-        Route::get('/{horario}/visualizar', App\Modules\Horarios\UI\Livewire\Show::class)->name('show');
+        Route::get('/{horario}/manage', Manage::class)->name('manage');
+        Route::get('/{horario}/visualizar', Show::class)->name('show');
         Route::get('/{horario}/configurar', function (Horario $horario) {
             $etapa = (int) request()->integer('etapa', 1);
             $tabByEtapa = [

@@ -12,9 +12,7 @@ use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
 final class CustomConstraintHardRule implements HardRuleInterface
 {
-    public function __construct(private readonly ConstraintEvaluationPipeline $pipeline)
-    {
-    }
+    public function __construct(private readonly ConstraintEvaluationPipeline $pipeline) {}
 
     public function evaluate(EvaluationContext $context): RuleResult
     {

@@ -67,7 +67,7 @@ test('users can logout', function () {
     /** @var TestCase $this */
     $user = User::factory()->create();
 
-    /** @var App\Models\User $user */
+    /** @var User $user */
     $response = $this->actingAs($user)->post(route('logout'));
 
     $response->assertRedirect(route('dashboard'));

@@ -82,21 +82,21 @@ class ExecutionCenter extends Component
 
     public function getHistoricalReadinessReportProperty(): array
     {
-        return (new SearchResponseHistoricalReadinessReportBuilder())
+        return (new SearchResponseHistoricalReadinessReportBuilder)
             ->build($this->executions)
             ->toArray();
     }
 
     public function getGlobalPolicyReadinessReportProperty(): array
     {
-        return (new SearchResponseGlobalPolicyReadinessReportBuilder())
+        return (new SearchResponseGlobalPolicyReadinessReportBuilder)
             ->build($this->executions)
             ->toArray();
     }
 
     public function getActivationImpactReportProperty(): array
     {
-        return (new SearchResponseActivationImpactReportBuilder())
+        return (new SearchResponseActivationImpactReportBuilder)
             ->build($this->executions, windowSize: 2)
             ->toArray();
     }

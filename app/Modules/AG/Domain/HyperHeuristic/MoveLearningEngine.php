@@ -15,11 +15,11 @@ final class MoveLearningEngine
 
         $key = $state->value;
 
-        if (!isset($this->table[$key])) {
+        if (! isset($this->table[$key])) {
             $this->table[$key] = [];
         }
 
-        if (!isset($this->table[$key][$operator])) {
+        if (! isset($this->table[$key][$operator])) {
             $this->table[$key][$operator] = [];
         }
 
@@ -35,7 +35,7 @@ final class MoveLearningEngine
 
         $key = $state->value;
 
-        if (!isset($this->table[$key][$operator])) {
+        if (! isset($this->table[$key][$operator])) {
             return 0;
         }
 
@@ -49,7 +49,7 @@ final class MoveLearningEngine
 
         $key = $state->value;
 
-        if (!isset($this->table[$key])) {
+        if (! isset($this->table[$key])) {
             return null;
         }
 

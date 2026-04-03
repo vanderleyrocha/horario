@@ -6,11 +6,13 @@ namespace App\Modules\AG\Domain\Metrics;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-final class PopulationEntropyCalculator {
+final class PopulationEntropyCalculator
+{
     /**
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
-    public function calculate(array $population): float {
+    public function calculate(array $population): float
+    {
         $n = count($population);
 
         if ($n === 0) {
@@ -39,7 +41,8 @@ final class PopulationEntropyCalculator {
     /**
      * Normaliza a entropia para [0,1]
      */
-    public function normalized(array $population): float {
+    public function normalized(array $population): float
+    {
         $n = count($population);
 
         if ($n <= 1) {

@@ -14,7 +14,7 @@ final class ConstraintTargetGroup
     private array $lessonIds;
 
     /**
-     * @param list<int> $lessonIds
+     * @param  list<int>  $lessonIds
      */
     public function __construct(array $lessonIds)
     {

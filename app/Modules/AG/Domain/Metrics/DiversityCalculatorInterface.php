@@ -6,11 +6,12 @@ namespace App\Modules\AG\Domain\Metrics;
 
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
-interface DiversityCalculatorInterface {
+interface DiversityCalculatorInterface
+{
     /**
      * Calcula diversidade genética normalizada (0–1)
      *
-     * @param Cromossomo[] $population
+     * @param  Cromossomo[]  $population
      */
     public function calculate(array $population): float;
 }

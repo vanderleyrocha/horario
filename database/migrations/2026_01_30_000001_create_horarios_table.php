@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('horarios', function (Blueprint $table) {
@@ -17,7 +18,6 @@ return new class () extends Migration {
 
             $table->json('diagnostico_json')->nullable();
             $table->unsignedTinyInteger('indice_risco')->nullable();
-
 
             $table->integer('geracoes_executadas')->nullable();
             $table->integer('geracoes_sem_melhoria')->nullable();
@@ -43,7 +43,6 @@ return new class () extends Migration {
             $table->enum('status', ['rascunho', 'em_geracao', 'concluido', 'ativo'])->default('rascunho');
             $table->timestamp('gerado_em')->nullable();
             $table->timestamps();
-
 
             // Índices
             $table->index('criado_por');

@@ -2,22 +2,24 @@
 
 namespace App\Modules\Horarios\Domain\Evaluation\HardRules;
 
-use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\AG\Domain\Fitness\Delta\AffectedRegion;
+use App\Modules\AG\Domain\Fitness\Incremental\IncrementalRule;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
-final class TeacherConflictRule
-implements HardRuleInterface, IncrementalRule {
-    public function isHard(): bool {
+final class TeacherConflictRule implements HardRuleInterface, IncrementalRule
+{
+    public function isHard(): bool
+    {
         return true;
     }
 
     /**
      * Avaliação completa
      */
-    public function evaluate(EvaluationContext $context): RuleResult {
+    public function evaluate(EvaluationContext $context): RuleResult
+    {
         $index = $context->cromossomo()->professorPeriodoIndex();
 
         $penalty = 0;
@@ -55,7 +57,7 @@ implements HardRuleInterface, IncrementalRule {
 
         foreach ($region->professores as $professor) {
 
-            if (!isset($index[$professor])) {
+            if (! isset($index[$professor])) {
                 continue;
             }
 

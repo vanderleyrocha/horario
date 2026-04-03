@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use DirectoryIterator;
+use Illuminate\Console\Command;
 
 class GenerateTree extends Command
 {
@@ -20,8 +20,9 @@ class GenerateTree extends Command
     {
         $basePath = realpath($this->argument('path'));
 
-        if (!$basePath || !is_dir($basePath)) {
+        if (! $basePath || ! is_dir($basePath)) {
             $this->error('Caminho inválido.');
+
             return Command::FAILURE;
         }
 
@@ -33,9 +34,9 @@ class GenerateTree extends Command
         $this->renderDirectory($basePath, $lines);
 
         $output = storage_path($this->option('output'));
-        file_put_contents($output, implode(PHP_EOL, $lines) . PHP_EOL);
+        file_put_contents($output, implode(PHP_EOL, $lines).PHP_EOL);
 
-        $this->info("Árvore gerada com sucesso em:");
+        $this->info('Árvore gerada com sucesso em:');
         $this->line($output);
 
         return Command::SUCCESS;
@@ -82,10 +83,10 @@ class GenerateTree extends Command
             $isLast = $index === $total - 1;
 
             $connector = $isLast ? '└── ' : '├── ';
-            $lines[] = $prefix . $connector . $entry['name'];
+            $lines[] = $prefix.$connector.$entry['name'];
 
             if ($entry['type'] === 'dir') {
-                $this->renderDirectory($path . DIRECTORY_SEPARATOR . $entry['name'], $lines, $prefix . ($isLast ? '    ' : '│   '));
+                $this->renderDirectory($path.DIRECTORY_SEPARATOR.$entry['name'], $lines, $prefix.($isLast ? '    ' : '│   '));
             }
         }
     }

@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\AG\Domain\Operators\Adaptive;
 
-final class AdaptiveOperatorSelector {
-    public function __construct(private readonly OperatorPerformanceTracker $tracker) {
-    }
+final class AdaptiveOperatorSelector
+{
+    public function __construct(private readonly OperatorPerformanceTracker $tracker) {}
 
-    public function select(array $operators): object {
+    public function select(array $operators): object
+    {
         $scores = [];
 
         foreach ($operators as $operator) {

@@ -5,7 +5,7 @@ use App\Modules\Horarios\Domain\Risk\RiskIndexCalculator;
 use App\Modules\Horarios\Domain\Risk\StructuralEntropyCalculator;
 
 it('calculates a bounded formal risk index using all structural dimensions', function () {
-    $calculator = new RiskIndexCalculator();
+    $calculator = new RiskIndexCalculator;
 
     $riskIndex = $calculator->calculate(
         globalSaturation: 118.0,
@@ -25,12 +25,12 @@ it('calculates a bounded formal risk index using all structural dimensions', fun
     expect($riskIndex)->toBeInt()
         ->and($riskIndex)->toBeGreaterThan(0)
         ->and($riskIndex)->toBeLessThanOrEqual(100)
-        ->and((new RiskClassification())->classify($riskIndex))->toBe('ALTO');
+        ->and((new RiskClassification)->classify($riskIndex))->toBe('ALTO');
 });
 
 it('calculates normalized structural entropy from load distribution', function () {
-    $entropy = (new StructuralEntropyCalculator())->calculate([10, 10, 10, 10]);
-    $concentratedEntropy = (new StructuralEntropyCalculator())->calculate([37, 1, 1, 1]);
+    $entropy = (new StructuralEntropyCalculator)->calculate([10, 10, 10, 10]);
+    $concentratedEntropy = (new StructuralEntropyCalculator)->calculate([37, 1, 1, 1]);
 
     expect($entropy)->toBeGreaterThan($concentratedEntropy)
         ->and($entropy)->toBeLessThanOrEqual(100.0)

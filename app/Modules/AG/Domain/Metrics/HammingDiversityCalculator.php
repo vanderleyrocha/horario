@@ -7,9 +7,10 @@ namespace App\Modules\AG\Domain\Metrics;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 
-final class HammingDiversityCalculator implements DiversityCalculatorInterface {
-
-    public function calculate(array $population): float {
+final class HammingDiversityCalculator implements DiversityCalculatorInterface
+{
+    public function calculate(array $population): float
+    {
         $n = count($population);
 
         if ($n < 2) {
@@ -40,7 +41,8 @@ final class HammingDiversityCalculator implements DiversityCalculatorInterface {
         return $distanceSum / $maxDistance;
     }
 
-    private function chromosomeDistance(Cromossomo $a, Cromossomo $b): int {
+    private function chromosomeDistance(Cromossomo $a, Cromossomo $b): int
+    {
 
         $genesA = $a->genes();
         $genesB = $b->genes();
@@ -51,7 +53,7 @@ final class HammingDiversityCalculator implements DiversityCalculatorInterface {
 
         for ($i = 0; $i < $length; $i++) {
 
-            if (!$this->genesEqual($genesA[$i], $genesB[$i])) {
+            if (! $this->genesEqual($genesA[$i], $genesB[$i])) {
                 $distance++;
             }
         }
@@ -59,7 +61,8 @@ final class HammingDiversityCalculator implements DiversityCalculatorInterface {
         return $distance;
     }
 
-    private function genesEqual(Gene $a, Gene $b): bool {
+    private function genesEqual(Gene $a, Gene $b): bool
+    {
         return
             $a->diaSemana() === $b->diaSemana() &&
             $a->periodoDia() === $b->periodoDia() &&

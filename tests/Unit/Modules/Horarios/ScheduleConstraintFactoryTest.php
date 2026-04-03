@@ -13,7 +13,7 @@ use App\Modules\Horarios\Domain\Constraints\Exceptions\InvalidScheduleConstraint
 use App\Modules\Horarios\Domain\Constraints\Factories\ScheduleConstraintFactory;
 
 it('builds a typed constraint from create input through the factory', function (): void {
-    $factory = new ScheduleConstraintFactory();
+    $factory = new ScheduleConstraintFactory;
 
     $constraint = $factory->fromCreateInput(new CreateScheduleConstraintInput(
         horarioId: 12,
@@ -37,7 +37,7 @@ it('builds a typed constraint from create input through the factory', function (
 });
 
 it('builds a typed constraint from persisted data through the factory', function (): void {
-    $factory = new ScheduleConstraintFactory();
+    $factory = new ScheduleConstraintFactory;
 
     $constraint = $factory->fromData(new ScheduleConstraintData(
         id: 7,
@@ -61,7 +61,7 @@ it('builds a typed constraint from persisted data through the factory', function
 });
 
 it('builds a typed constraint from update input when the persisted type is supplied', function (): void {
-    $factory = new ScheduleConstraintFactory();
+    $factory = new ScheduleConstraintFactory;
 
     $constraint = $factory->fromUpdateInput(
         new UpdateScheduleConstraintInput(
@@ -87,7 +87,7 @@ it('builds a typed constraint from update input when the persisted type is suppl
 });
 
 it('rejects invalid payloads with clear messages', function (): void {
-    $factory = new ScheduleConstraintFactory();
+    $factory = new ScheduleConstraintFactory;
 
     expect(fn (): SyncSameTimeslotConstraint => $factory->fromCreateInput(new CreateScheduleConstraintInput(
         horarioId: 12,
@@ -106,7 +106,7 @@ it('rejects invalid payloads with clear messages', function (): void {
 });
 
 it('rejects soft constraints with invalid weight', function (): void {
-    $factory = new ScheduleConstraintFactory();
+    $factory = new ScheduleConstraintFactory;
 
     expect(fn (): TimePlacementConstraint => $factory->fromCreateInput(new CreateScheduleConstraintInput(
         horarioId: 12,

@@ -2,10 +2,10 @@
 
 namespace App\Modules\Horarios\Domain\ValueObjects;
 
-class TurmaLoad {
+class TurmaLoad
+{
     public function __construct(
         public readonly int $turmaId,
         public readonly int $currentLoad,
-    ) {
-    }
+    ) {}
 }
