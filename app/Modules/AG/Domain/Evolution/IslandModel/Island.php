@@ -9,6 +9,7 @@ use App\Modules\AG\Domain\Operators\Replacement\ReplacementStrategyInterface;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Support\DateTimeHelper;
 use Illuminate\Support\Facades\Log;
+use Spatie\Async\Pool;
 
 final class Island
 {
@@ -32,16 +33,148 @@ final class Island
 
         Log::info("Iniciando população da ilha {$this->islandNum} com {$this->populationSize} indivíduos... Tempo decorrido = {$elapsed}");
 
-        for ($i = 0; $i < $this->populationSize; $i++) {
+        $parallelEnabled = (bool) config('ag.initial_population.parallel_construction_enabled', false);
 
-            $individual = $this->engine->createIndividual();
-
-            $this->population[] = $individual;
+        if ($parallelEnabled && $this->populationSize > 1) {
+            $this->initializeParallel();
+        } else {
+            $this->initializeSerial();
         }
 
         $elapsed = DateTimeHelper::formatElapsedTime(app('app.start_time'));
 
         Log::info("População da ilha {$this->islandNum} criada com sucesso! Tempo decorrido =  = {$elapsed}");
+    }
+
+    /**
+     * Construção serial padrão (preserva aprendizado de nogoods e qualidade gate adaptativo).
+     */
+    private function initializeSerial(): void
+    {
+        for ($i = 0; $i < $this->populationSize; $i++) {
+            $this->population[] = $this->engine->createIndividual();
+        }
+    }
+
+    /**
+     * Piloto de construção paralela.
+     *
+     * Estratégia:
+     * - Indivíduo 0: construído serialmente para acumular nogoods/aprendizado.
+     * - Demais: construídos em paralelo com instâncias isoladas (sem estado compartilhado).
+     * - Fallback automático para serial em caso de falha de serialização ou pool.
+     */
+    private function initializeParallel(): void
+    {
+        // Primeiro indivíduo sempre serial (preserva nogoods e histórico adaptativo).
+        $first = $this->engine->createIndividual();
+        $this->population[] = $first;
+
+        $remaining = $this->populationSize - 1;
+
+        if ($remaining <= 0) {
+            return;
+        }
+
+        $serializedEngine = $this->trySerialize($this->engine);
+
+        if ($serializedEngine === null) {
+            Log::warning('ag.island.parallel_construction.fallback_serial', [
+                'island' => $this->islandNum,
+                'reason' => 'engine_not_serializable',
+            ]);
+
+            for ($i = 0; $i < $remaining; $i++) {
+                $this->population[] = $this->engine->createIndividual();
+            }
+
+            return;
+        }
+
+        $concurrency = max(1, (int) config('ag.initial_population.parallel_construction_workers', 4));
+        $timeout = max(10, (int) config('ag.initial_population.parallel_construction_timeout_seconds', 60));
+
+        /** @var array<int, Cromossomo> $built */
+        $built = [];
+        $failedCount = 0;
+
+        try {
+            $pool = Pool::create()
+                ->concurrency($concurrency)
+                ->timeout($timeout)
+                ->autoload(base_path('vendor/autoload.php'));
+
+            for ($i = 0; $i < $remaining; $i++) {
+                $slot = $i;
+
+                $pool->add(static function () use ($serializedEngine, $slot): array {
+                    /** @var GeneticAlgorithmEngine $engine */
+                    $engine = unserialize(base64_decode($serializedEngine), ['allowed_classes' => true]);
+                    $individual = $engine->createIndividual();
+
+                    return [
+                        'slot' => $slot,
+                        'individual' => base64_encode(serialize($individual)),
+                    ];
+                })->then(static function (array $result) use (&$built): void {
+                    $individual = unserialize(base64_decode($result['individual']), ['allowed_classes' => true]);
+
+                    if ($individual instanceof Cromossomo) {
+                        $built[(int) $result['slot']] = $individual;
+                    }
+                })->catch(static function () use (&$failedCount): void {
+                    $failedCount++;
+                });
+            }
+
+            $pool->wait();
+        } catch (\Throwable $e) {
+            Log::warning('ag.island.parallel_construction.pool_error', [
+                'island' => $this->islandNum,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Adiciona os indivíduos construídos em paralelo (slots bem-sucedidos).
+        ksort($built);
+
+        foreach ($built as $individual) {
+            $this->population[] = $individual;
+        }
+
+        // Preenche slots falhos com construção serial de fallback.
+        $shortfall = $this->populationSize - count($this->population);
+
+        if ($shortfall > 0) {
+            Log::info('ag.island.parallel_construction.fallback_fill', [
+                'island' => $this->islandNum,
+                'shortfall' => $shortfall,
+                'failed_parallel' => $failedCount,
+            ]);
+
+            for ($i = 0; $i < $shortfall; $i++) {
+                $this->population[] = $this->engine->createIndividual();
+            }
+        }
+
+        Log::info('ag.island.parallel_construction.completed', [
+            'island' => $this->islandNum,
+            'population_size' => count($this->population),
+            'parallel_built' => count($built),
+            'failed_parallel' => $failedCount,
+            'serial_fallback' => $shortfall,
+        ]);
+    }
+
+    private function trySerialize(mixed $value): ?string
+    {
+        try {
+            $serialized = serialize($value);
+
+            return base64_encode($serialized);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

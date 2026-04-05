@@ -351,8 +351,7 @@
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Melhor contexto para
-                    ativacao</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Melhor contexto para ativacao</p>
                 <p class="mt-2 text-xl font-semibold text-slate-950">
                     @if ($betterTrend === 'improving')
                         improving

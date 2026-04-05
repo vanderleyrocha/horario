@@ -56,10 +56,11 @@ it('applies hard sync penalties to hardPenalty in the current fitness contract',
 
     $summary = $pipeline->lastSummary();
 
-    expect($result->hardPenalty())->toBe(1.0)
-        ->and($result->softPenalty())->toBe(0.0)
-        ->and($result->score())->toBeLessThan(50.0)
-        ->and($summary)->not->toBeNull()
+    $this->assertSame(1.0, $result->hardPenalty());
+    $this->assertSame(0.0, $result->softPenalty());
+    $this->assertLessThan(50.0, $result->score());
+
+    expect($summary)->not->toBeNull()
         ->and($summary?->violationsForConstraint(11))->toHaveCount(1);
 });
 
@@ -96,10 +97,10 @@ it('applies soft time placement weight to softPenalty', function (): void {
         ],
     ))->evaluate($context->cromossomo(), $context);
 
-    expect($result->hardPenalty())->toBe(0.0)
-        ->and($result->softPenalty())->toBe(4.0)
-        ->and($result->score())->toBeGreaterThan(50.0)
-        ->and($result->score())->toBeLessThan(100.0);
+    $this->assertSame(0.0, $result->hardPenalty());
+    $this->assertSame(4.0, $result->softPenalty());
+    $this->assertGreaterThan(50.0, $result->score());
+    $this->assertLessThan(100.0, $result->score());
 });
 
 it('returns diagnostic details grouped by constraint', function (): void {
@@ -129,23 +130,23 @@ it('returns diagnostic details grouped by constraint', function (): void {
     $summary = $pipeline->evaluate($context);
     $grouped = $summary->groupedByConstraint();
 
-    expect($summary->hardPenalty())->toBe(1.0)
-        ->and($grouped)->toHaveKey(31)
-        ->and($grouped[31]['constraint_name'])->toBe('Sem sobreposicao')
-        ->and($grouped[31]['effective_penalty'])->toBe(1.0)
-        ->and($grouped[31]['violations'])->toHaveCount(1)
-        ->and($grouped[31]['violations'][0]['details']['overlap_slots'][0])->toBe([
-            'dia' => 1,
-            'periodo' => 3,
-        ]);
+    $this->assertSame(1.0, $summary->hardPenalty());
+    $this->assertArrayHasKey(31, $grouped);
+    $this->assertSame('Sem sobreposicao', $grouped[31]['constraint_name']);
+    $this->assertSame(1.0, $grouped[31]['effective_penalty']);
+    $this->assertCount(1, $grouped[31]['violations']);
+    $this->assertSame([
+        'dia' => 1,
+        'periodo' => 3,
+    ], $grouped[31]['violations'][0]['details']['overlap_slots'][0]);
 });
 
 function makeConstraintPipeline(): ConstraintEvaluationPipeline
 {
     return new ConstraintEvaluationPipeline([
-        new SyncSameTimeslotConstraintEvaluator,
-        new MutualExclusionConstraintEvaluator,
-        new TimePlacementConstraintEvaluator,
+        new SyncSameTimeslotConstraintEvaluator(),
+        new MutualExclusionConstraintEvaluator(),
+        new TimePlacementConstraintEvaluator(),
     ]);
 }
 

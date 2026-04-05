@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Horario;
 use App\Models\ScheduleExecution;
 use App\Models\ScheduleGenerationMetric;
+use App\Modules\AG\Infrastructure\Health\ExecutionHealthBuilder;
 use App\Modules\AG\Infrastructure\Logging\GATelemetryLogger;
 use App\Modules\AG\Infrastructure\Metrics\ExecutionMetricsRecorder;
 use App\Modules\AG\Infrastructure\Progress\CacheAndDbProgressReporter;
@@ -196,6 +197,10 @@ class GerarHorarioJob implements ShouldQueue
             repairSummary: $repairSummary,
         );
 
+        $statusHealth = app(ExecutionHealthBuilder::class)
+            ->build($progress, $postExecutionReport['operational_counters'], $bottlenecks)
+            ->toArray();
+
         $suggestions = $this->buildExecutionSuggestions($status, $bottlenecks, $phase, $stage);
 
         return [
@@ -220,6 +225,7 @@ class GerarHorarioJob implements ShouldQueue
             'phase_timings_ms' => $postExecutionReport['timings_ms'],
             'dominant_bottleneck' => $postExecutionReport['dominant_bottleneck'],
             'operational_counters' => $postExecutionReport['operational_counters'],
+            'status_health' => $statusHealth,
             'suggestions' => $suggestions,
             'best_fitness' => $bestFitness,
                         'partial_solution' => ! $viable,

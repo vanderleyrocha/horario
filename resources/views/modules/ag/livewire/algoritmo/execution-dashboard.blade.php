@@ -195,7 +195,7 @@
             </div>
         </div>
 
-        @if (in_array($execution->status, ['running', 'cancel_requested'], true))
+        @if (in_array($execution->status, ['running'], true))
             <div class="mt-4 flex justify-end">
                 <button
                     wire:click="cancelExecution"

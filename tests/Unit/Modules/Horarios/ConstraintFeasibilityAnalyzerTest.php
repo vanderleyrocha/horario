@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Tests\Unit\Modules\Horarios;
+
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessWeights;
@@ -19,30 +21,21 @@ use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ProfessorData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
+use Pest\Expectation;
+use RuntimeException;
 use Tests\TestCase;
 
-final class ConstraintFeasibilityProgressSpy implements ProgressReporterInterface
-{
-    private array $reports = [];
-
-    public function report(array $data): void
+if (! function_exists(__NAMESPACE__ . '\\expect')) {
+    function expect(mixed $value = null): Expectation
     {
-        $this->reports[] = $data;
-    }
-
-    public function payloadsForStage(string $stage): array
-    {
-        return array_values(array_filter(
-            $this->reports,
-            static fn (array $payload): bool => ($payload['stage'] ?? null) === $stage,
-        ));
+        return new Expectation($value);
     }
 }
 
 uses(TestCase::class);
 
 it('detects invalid references and impossible required windows before the AG starts', function (): void {
-    $report = (new ConstraintFeasibilityAnalyzer)->analyze(makeConstraintFeasibilityScheduleData([
+    $report = (new ConstraintFeasibilityAnalyzer())->analyze(makeConstraintFeasibilityScheduleData([
         new CustomConstraintData(
             id: 101,
             name: 'Sync com aula inexistente',
@@ -83,7 +76,7 @@ it('detects invalid references and impossible required windows before the AG sta
 });
 
 it('flags suspicious synchronization and first-period pressure as warnings', function (): void {
-    $report = (new ConstraintFeasibilityAnalyzer)->analyze(makeConstraintFeasibilityScheduleData([
+    $report = (new ConstraintFeasibilityAnalyzer())->analyze(makeConstraintFeasibilityScheduleData([
         new CustomConstraintData(
             id: 201,
             name: 'Sync apertado',
@@ -142,15 +135,15 @@ it('aborts preventive diagnosis when a custom constraint is structurally impossi
                 ],
             ),
         ]),
-        contextBuilder: new EvaluationContextBuilder,
+        contextBuilder: new EvaluationContextBuilder(),
         fitnessEvaluator: new FitnessEvaluator(
-            weights: new FitnessWeights,
+            weights: new FitnessWeights(),
             rules: [
                 makeConstraintFeasibilityFixedHardPenaltyRule(0.0),
                 makeConstraintFeasibilityFixedSoftPenaltyRule(0.0),
             ],
         ),
-        repairOperator: new GreedyRepairOperator,
+        repairOperator: new GreedyRepairOperator(),
         progress: $progress,
     );
 
@@ -230,16 +223,32 @@ function makeConstraintFeasibilityScheduleData(array $constraints, string $scena
     );
 }
 
-function makeConstraintFeasibilityProgressSpy(): ConstraintFeasibilityProgressSpy
+function makeConstraintFeasibilityProgressSpy(): object
 {
-    return new ConstraintFeasibilityProgressSpy;
+    return new class () implements ProgressReporterInterface {
+        private array $reports = [];
+
+        public function report(array $data): void
+        {
+            $this->reports[] = $data;
+        }
+
+        public function payloadsForStage(string $stage): array
+        {
+            return array_values(array_filter(
+                $this->reports,
+                static fn (array $payload): bool => ($payload['stage'] ?? null) === $stage,
+            ));
+        }
+    };
 }
 
 function makeConstraintFeasibilityFixedHardPenaltyRule(float $penalty): HardRuleInterface
 {
-    return new class($penalty) implements HardRuleInterface
-    {
-        public function __construct(private readonly float $penalty) {}
+    return new class ($penalty) implements HardRuleInterface {
+        public function __construct(private readonly float $penalty)
+        {
+        }
 
         public function evaluate(EvaluationContext $context): RuleResult
         {
@@ -255,9 +264,10 @@ function makeConstraintFeasibilityFixedHardPenaltyRule(float $penalty): HardRule
 
 function makeConstraintFeasibilityFixedSoftPenaltyRule(float $penalty): SoftRuleInterface
 {
-    return new class($penalty) implements SoftRuleInterface
-    {
-        public function __construct(private readonly float $penalty) {}
+    return new class ($penalty) implements SoftRuleInterface {
+        public function __construct(private readonly float $penalty)
+        {
+        }
 
         public function evaluate(EvaluationContext $context): RuleResult
         {

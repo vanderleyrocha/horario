@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Tests\Unit\Modules\Horarios;
+
 use App\Modules\AG\Domain\Contracts\ProgressReporterInterface;
 use App\Modules\AG\Domain\Fitness\FitnessEvaluator;
 use App\Modules\AG\Domain\Fitness\FitnessWeights;
@@ -17,13 +19,17 @@ use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
+use Pest\Expectation;
+use ReflectionMethod;
+use ReflectionProperty;
+use RuntimeException;
 use Tests\TestCase;
 
-interface ScheduleProblemProgressSpyInterface extends ProgressReporterInterface
-{
-    public function stages(): array;
-
-    public function payloadsForStage(string $stage): array;
+if (! function_exists(__NAMESPACE__ . '\\expect')) {
+    function expect(mixed $value = null): Expectation
+    {
+        return new Expectation($value);
+    }
 }
 
 uses(TestCase::class);
@@ -791,9 +797,9 @@ function scheduleProblemSetPrivate(ScheduleProblem $problem, string $property, m
     $reflection->setValue($problem, $value);
 }
 
-function makeScheduleProblemProgressSpy(): ScheduleProblemProgressSpyInterface
+function makeScheduleProblemProgressSpy(): object
 {
-    return new class () implements ScheduleProblemProgressSpyInterface {
+    return new class () implements ProgressReporterInterface {
         private array $reports = [];
 
         public function report(array $data): void

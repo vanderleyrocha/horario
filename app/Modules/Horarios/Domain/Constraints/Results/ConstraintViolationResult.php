@@ -15,7 +15,8 @@ final class ConstraintViolationResult
         private readonly float $effectivePenalty,
         private readonly string $message,
         private readonly array $details = [],
-    ) {}
+    ) {
+    }
 
     public function constraintId(): int
     {

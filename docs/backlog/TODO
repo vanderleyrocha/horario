@@ -1,208 +1,33 @@
-# TODO Prioritario (Abr/2026)
+# TODO Prioritario (Proximo Ciclo)
 
 ## Objetivo
-Evoluir o solver com ganhos mensuraveis de qualidade/latencia, sem romper a arquitetura atual (AG + GRASP + ALNS + ilhas + telemetria).
+Evoluir o solver com ganho mensuravel de qualidade e latencia, preservando a arquitetura atual (AG + GRASP + ALNS + ilhas + telemetria) e evitando regressao operacional.
 
 ## Escopo Deste Backlog
-- Inclui itens concluidos e pendentes para rastreabilidade do ciclo.
-- Somente acoes viaveis no contexto atual do projeto.
-- Priorizacao por: impacto real, risco de regressao, custo de implementacao, aderencia arquitetural.
-
-## Status Consolidado (03/04/2026)
-- [x] 1) Corrigir contradicao do quality gate na populacao inicial
-- [x] 2) Benchmark reproduzivel A/B por cenario (incluindo repair customizado)
-- [x] 3) Relatorio pos-execucao consolidado (operacional)
-- [x] 4) Telemetria de efetividade do repair por tipo de constraint customizada
-- [x] 5) Adaptive ALNS por estado de landscape (frequencia dinamica)
-- [x] 6) Migracao diferenciada por perfil de ilha
-- [x] 7) Nogoods por perfil de problema (alem de horarioId)
-- [x] 8) Portifolio de construtores estruturais (alem de alpha)
-- [x] 9) Quality Gate Explainability API (interna)
-- [ ] 10) Health Check de execucao por heartbeat/stage
-
-## Changelog Curto (rollout/flags)
-- 03/04/2026: Item 4 em rollout com telemetria `repair_custom_constraint_effectiveness` e resumo antes/depois por passe.
-- 03/04/2026: Itens 5 e 6 em rollout com ajuste por config para ALNS adaptativo e migracao por perfil de ilha.
-- 03/04/2026: Itens 7 e 8 em rollout com assinatura de nogoods por cenario e portfolio de construtores por perfil/historico.
-- 03/04/2026: Itens 1, 2, 3 e 9 consolidados com quality gate explainability, benchmark A/B e relatorio pos-execucao.
-- Flags principais para rollback/controle:
-  - `AG_CUSTOM_CONSTRAINT_REPAIR_EXTENSION_ENABLED`
-  - `AG_CONSTRUCTOR_PORTFOLIO_ENABLED`
-  - `AG_NOGOODS_SIGNATURE_ENABLED`
-  - `AG_NOGOODS_SIGNATURE_CACHE_TTL_DAYS`
-  - `AG_NOGOODS_SIGNATURE_MAX_ENTRIES_PER_TYPE`
-  - `AG_MIGRATION_STRATEGY`
-  - `AG_MIGRATION_INTERVAL`
-  - `AG_MIGRATION_CONSERVATIVE_MIGRANTS`
-  - `AG_MIGRATION_BALANCED_MIGRANTS`
-  - `AG_MIGRATION_EXPLORATORY_MIGRANTS`
-  - `AG_ALNS_ADAPTIVE_ENABLED`
-  - `AG_ALNS_LANDSCAPE_FREQUENCY_DIVISOR`
-  - `AG_ALNS_COOLDOWN_BRAKE_MIN_SAMPLE_SIZE`
-  - `AG_ALNS_COOLDOWN_BRAKE_LOW_SUCCESS_RATE`
-  - `AG_ALNS_COOLDOWN_BRAKE_VERY_LOW_SUCCESS_RATE`
-  - `AG_ALNS_COOLDOWN_BRAKE_NON_POSITIVE_IMPROVEMENT`
-  - `AG_ALNS_COOLDOWN_BRAKE_NEGATIVE_IMPROVEMENT`
-  - `AG_ALNS_COOLDOWN_BRAKE_EXTRA_GENERATIONS_LOW_RETURN`
-  - `AG_ALNS_COOLDOWN_BRAKE_EXTRA_GENERATIONS_NEGATIVE_RETURN`
+- Somente itens pendentes.
+- Somente implementacoes viaveis no contexto atual do projeto.
+- Sem itens fora de escopo estrutural (multi-tenancy, reescrita ampla, UI cosmetica).
 
 ---
 
-## Prioridade P0 (curto prazo, alto impacto, baixo risco)
+## Implementado
 
-### [x] 1) Corrigir contradicao do quality gate na populacao inicial
-- Beneficio minimo: reduz rejeicoes falsas e acelera convergencia da fase mais custosa do solver.
-- Viabilidade: alta (ajuste localizado em regra de aceite/diagnostico).
-- Risco arquitetural: baixo.
-- Entregaveis:
-  - alinhar regra de score >= 50 com limites hard/viabilidade efetivamente aceitos;
-  - explicitar motivo dominante de rejeicao no payload/log (ex.: viability, score, hard_penalty, conflitos);
-  - testes unitarios cobrindo os cenarios contraditorios.
-
-### [x] 2) Benchmark reproduzivel A/B por cenario (incluindo repair customizado)
-- Beneficio minimo: permite validar se mudancas realmente melhoram latencia/qualidade antes de promover para producao.
-- Viabilidade: alta (infra de telemetria ja existe).
-- Risco arquitetural: baixo.
-- Entregaveis:
-  - script/runner com cenarios canonicos (pequeno, medio com constraints, pesado);
-  - saida comparativa por fase (inicial, evolucao, ALNS, repair, persistencia);
-  - secao padrao de leitura de resultados para tomada de decisao.
-
-### [x] 3) Relatorio pos-execucao consolidado (operacional)
-- Beneficio minimo: reduz tempo de diagnostico em incidentes e tuning manual.
-- Viabilidade: alta (dados ja existem em cache/db/logs).
-- Risco arquitetural: baixo.
-- Entregaveis:
-  - resumo por execucao com tempos por fase, rejeicoes do gate, passes de repair, uso de ALNS e migracao;
-  - destaque automatico de gargalo dominante;
-  - formato estavel para UI e logs.
+- **P0 — Benchmark com matriz de densidade de constraints**: `BenchmarkGeneticSolverAb` exibe matriz de tipo/contagem por cenario, `hard_penalty_gain`, `nogoods_loaded`, `nogoods_learned` por rodada e no sumario.
+- **P0 — Relatorio pos-execucao expandido**: `ScheduleProblem::nogoodsSummary()`, rastreamento de delta por rodada de migracao em `IslandModelEngine::migrationRoundSummary()`, campos `final_hard_penalty` e `execution_report` no retorno de `RunGeneticAlgorithm::execute()`.
+- **P1 — Portfolio de construtores estruturais**: ja existia (3 estrategias com selecao por perfil e historico de diversidade).
+- **P1 — Migracao direcional por perfil**: `ProfileAwareBestIndividualsMigration` com `directionalMatrix`, `resolveTarget()` e log de campo `directional`; configuravel via `ag.migration.profile_aware.directional_matrix`.
+- **P1 — ALNS adaptativo por landscape com frequencia dinamica**: ja existia (landscape-based frequency adjustment).
+- **P2 — Nogoods por assinatura de perfil**: ja existia (`scenarioSignatureForNogoods`).
+- **P2 — Paralelizacao controlada da construcao inicial (piloto)**: `Island::initializeParallel()` via `spatie/async` Pool; primeiro individuo sempre serial; fallback automatico; configuravel via `ag.initial_population.parallel_construction_*`.
 
 ---
 
-## Prioridade P1 (medio prazo, bom ROI, risco controlado)
+## Pendentes
 
-### [x] 4) Telemetria de efetividade do repair por tipo de constraint customizada
-- Beneficio minimo: identifica se TIME_PLACEMENT/MUTUAL_EXCLUSION/SYNC_SAME_TIMESLOT estao sendo de fato corrigidas.
-- Viabilidade: alta.
-- Risco arquitetural: baixo.
-- Entregaveis:
-  - contadores antes/depois por tipo de violacao custom;
-  - taxa de resolucao por passe de repair;
-  - testes de regressao no fluxo de progress reporter.
+Nenhum item pendente no momento.
 
-### [x] 5) Adaptive ALNS por estado de landscape (frequencia dinamica)
-- Beneficio minimo: evita custo desnecessario de ALNS quando ha progresso e intensifica quando ha estagnacao.
-- Viabilidade: media-alta (landscape ja disponivel).
-- Risco arquitetural: medio-baixo.
-- Entregaveis:
-  - politica configuravel de escalonamento de lnsFrequency;
-  - guardrails para nao sobreintensificar;
-  - logs comparativos de custo x ganho.
-
-### [x] 6) Migracao diferenciada por perfil de ilha
-- Beneficio minimo: melhora equilibrio exploracao/explotacao sem alterar nucleo de fitness.
-- Viabilidade: media.
-- Risco arquitetural: medio.
-- Entregaveis:
-  - matriz de migracao por perfil (Conservative/Balanced/Exploratory);
-  - metrica de impacto da migracao na ilha receptora;
-  - fallback para estrategia simetrica atual via config.
-
----
-
-## Prioridade P2 (evolucao incremental, requer validacao forte)
-
-### [x] 7) Nogoods por perfil de problema (alem de horarioId)
-- Beneficio minimo: aumenta reuso de aprendizado entre cenarios parecidos.
-- Viabilidade: media.
-- Risco arquitetural: medio (chaveamento/cache e risco de transferencia indevida).
-- Entregaveis:
-  - chave de assinatura do cenario (turmas, turnos, constraints ativas);
-  - politicas de expurgo/cap por assinatura;
-  - testes para evitar contaminacao entre cenarios diferentes.
-
-### [x] 8) Portifolio de construtores estruturais (alem de alpha)
-- Beneficio minimo: maior diversidade estrutural inicial entre ilhas.
-- Viabilidade: media.
-- Risco arquitetural: medio.
-- Entregaveis:
-  - ao menos 2 construtores novos (ex.: professores criticos first, blocos obrigatorios first);
-  - selecao controlada por perfil de ilha;
-  - medicao de diversidade inicial e impacto no best fitness.
-
----
-
-## Novas Funcionalidades Pertinentes (adicionadas)
-
-### [x] 9) Quality Gate Explainability API (interna)
-- Valor: padroniza motivo tecnico de rejeicao para UI, logs e testes.
-- Viabilidade: alta.
-- Risco: baixo.
-- Resultado esperado:
-  - DTO unico com decision, dominant_reason, supporting_signals;
-  - elimina ambiguidades de diagnostico no dashboard.
-
-### [ ] 10) Health Check de execucao por heartbeat/stage
-- Valor: alerta operacional precoce para execucoes degradadas sem depender de leitura manual de logs.
-- Viabilidade: alta.
-- Risco: baixo.
-- Resultado esperado:
-  - score de saude simples (ok/warn/critical);
-  - recomendacoes orientadas por fase (initial_population/evolution/repair).
-
----
-
-## Itens Fora de Escopo Agora (nao priorizar neste ciclo)
-- Multi-tenancy e RBAC amplo.
-- Reescrita estrutural grande (pacotizacao completa do modulo Horarios).
-- Paralelizacao pesada da construcao inicial sem benchmark e sem isolamento formal de estado.
-- Mudancas cosmeticas de UI sem impacto operacional direto no solver.
-
----
-
-## Ordem Recomendada de Implementacao
-1. Corrigir contradicao do quality gate + motivo dominante de rejeicao (P0.1)
-2. Benchmark reproduzivel A/B por cenario (P0.2)
-3. Relatorio pos-execucao consolidado (P0.3)
-4. Telemetria de efetividade do repair customizado (P1.4)
-5. Adaptive ALNS por landscape (P1.5)
-6. Migracao diferenciada por perfil de ilha (P1.6)
-7. Nogoods por perfil de problema (P2.7)
-8. Portifolio de construtores estruturais (P2.8)
-9. Quality Gate Explainability API (N9, pode ser antecipado junto do item 1)
-10. Health Check de execucao por heartbeat/stage (N10)
-
-## Proxima Entrega: Item 10 — Health Check de execucao por heartbeat/stage
-
-### Objetivo
-Produzir um score de saude simples (ok/warn/critical) por execucao, calculado a partir das stages ja emitidas no progress reporter, sem acrescentar overhead ao solver.
-
-### Criterios de Aceitacao
-1. Existe um servico/builder que consome o progresso atual de cache e retorna um DTO com tres campos:
-   - `health`: `ok` | `warn` | `critical`
-   - `dominant_phase`: fase com maior sinal de degradacao (ex.: `initial_population`, `evolution`, `repair`)
-   - `recommendations`: lista de recomendacoes orientadas pela fase dominante
-2. Regras minimas de classificacao cobertas por testes:
-   - `critical` quando `fail_fast_count > 0` ou `quality_gate_rejections >= attempt_limit`
-   - `warn` quando `repair_passes >= 3` ou `alns_activations == 0` com mais de 30 geracoes registradas
-   - `ok` em todos os demais casos
-3. O DTO e exposto no payload de status do job (`status_health`) sem alterar a estrutura dos campos ja existentes.
-4. Testes unitarios cobrindo ao menos os tres scores (ok/warn/critical) e as recomendacoes correspondentes.
-5. Nenhuma query nova em caminho critico da execucao; leitura exclusiva de dados ja em cache.
-
-### Arquivos Sugeridos
-- Novo builder: `app/Modules/AG/Infrastructure/Health/ExecutionHealthBuilder.php`
-- DTO: `app/Modules/AG/Infrastructure/Health/DTO/ExecutionHealthDTO.php`
-- Integracao no job: `app/Jobs/GerarHorarioJob.php` (injecao no `buildExecutionStatusContext`)
-- Teste: `tests/Unit/Jobs/ExecutionHealthBuilderTest.php`
-
-### Flag de Rollback
-Nenhuma flag necessaria: o campo `status_health` e aditivo e ignorado por consumidores que nao o conhecem.
-
----
-
-## Criterio de Pronto para cada item
-- Testes relevantes verdes (unit + feature alvo).
-- Telemetria/log suficiente para diagnostico.
-- Flag/config para rollback comportamental quando aplicavel.
-- Sem degradacao observada em cenario canonico de benchmark.
+## Criterio de Pronto
+- Testes relevantes verdes (unit e feature alvo).
+- Sem regressao nos cenarios canonicos.
+- Telemetria suficiente para diagnostico operacional.
+- Rollback comportamental disponivel por configuracao quando aplicavel.

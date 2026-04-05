@@ -30,6 +30,7 @@ Qualquer sugestão de código deve respeitar essa hierarquia de fitness.
 - **UI (Livewire)**: Apenas observa e despacha. Não sugira lógica de solver aqui.
 - **Orquestração (Jobs/Actions)**: Responsável pela telemetria e ciclo de vida.
 - **Core (Domain/Solver)**: Onde reside a inteligência imutável e os Value Objects (`ScheduleData`).
+- **Health Operacional**: Preserve o campo aditivo `status_health` no contexto final da execução (`health`, `dominant_phase`, `recommendations`) para suporte ao diagnóstico operacional.
 
 ## 4. Performance e Concorrência
 - O sistema opera com **Modelo de Ilhas**. Lembre-se que as populações são isoladas com migração periódica.

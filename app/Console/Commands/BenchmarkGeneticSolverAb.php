@@ -53,7 +53,18 @@ class BenchmarkGeneticSolverAb extends Command
         $results = [];
 
         foreach ($scenarioMap as $scenarioKey => $horario) {
-            $this->line(sprintf('Cenario %s (horario_id=%d, aulas=%d, constraints_ativas=%d)', $scenarioKey, $horario->id, (int) ($horario->aulas_count ?? 0), (int) ($horario->active_constraints_count ?? 0)));
+            $constraintDensity = $this->resolveConstraintTypeDensity($horario);
+            $densityLabel = collect($constraintDensity)
+                ->map(static fn (int $count, string $type): string => "{$type}:{$count}")
+                ->implode(', ');
+            $this->line(sprintf(
+                'Cenario %s (horario_id=%d, aulas=%d, constraints_ativas=%d) [%s]',
+                $scenarioKey,
+                $horario->id,
+                (int) ($horario->aulas_count ?? 0),
+                (int) ($horario->active_constraints_count ?? 0),
+                $densityLabel ?: 'sem constraints',
+            ));
 
             foreach ($variantMap as $variantKey => $overrides) {
                 for ($run = 1; $run <= $repeat; $run++) {
@@ -66,8 +77,12 @@ class BenchmarkGeneticSolverAb extends Command
                         'metrics' => $measurement,
                     ];
 
+                    $ffChecked = (int) ($measurement['evolution_fail_fast_checked'] ?? 0);
+                    $ffTriggered = (int) ($measurement['evolution_fail_fast_triggered'] ?? 0);
+                    $ffRate = $ffChecked > 0 ? round($ffTriggered / $ffChecked * 100, 1) : 0.0;
+
                     $this->line(sprintf(
-                        '  %s.%d total=%dms init=%dms evo=%dms alns=%dms repair=%dms persist=%dms best=%.4f',
+                        '  %s.%d total=%dms init=%dms evo=%dms alns=%dms repair=%dms persist=%dms best=%.4f hard_penalty=%.4f nogoods_loaded=%d nogoods_learned=%d ff_rate=%.1f%% (%d/%d)',
                         $variantKey,
                         $run,
                         $measurement['total_ms'],
@@ -77,6 +92,12 @@ class BenchmarkGeneticSolverAb extends Command
                         $measurement['repair_ms'],
                         $measurement['persist_ms'],
                         $measurement['best_fitness'],
+                        $measurement['final_hard_penalty'],
+                        $measurement['nogoods_loaded'],
+                        $measurement['nogoods_learned'],
+                        $ffRate,
+                        $ffTriggered,
+                        $ffChecked,
                     ));
                 }
             }
@@ -86,6 +107,7 @@ class BenchmarkGeneticSolverAb extends Command
 
         $summary = $this->summarizeResults($results);
         $this->renderSummaryTable($summary);
+        $this->renderConstraintDensityMatrix($scenarioMap);
 
         if ((bool) $this->option('json')) {
             $this->newLine();
@@ -182,6 +204,10 @@ class BenchmarkGeneticSolverAb extends Command
             /** @var array<string, mixed> */
             public array $lastPayload = [];
 
+            public int $evolutionRepairFailFastChecked = 0;
+
+            public int $evolutionRepairFailFastTriggered = 0;
+
             public function report(array $data): void
             {
                 $now = microtime(true);
@@ -192,6 +218,14 @@ class BenchmarkGeneticSolverAb extends Command
                 $this->touchWindow($this->phaseWindows, $phase, $now);
 
                 $stage = strtolower((string) ($data['stage'] ?? ''));
+
+                if ($stage === 'repair_runtime_fail_fast') {
+                    $this->evolutionRepairFailFastChecked++;
+
+                    if ((bool) ($data['should_fail_fast'] ?? false)) {
+                        $this->evolutionRepairFailFastTriggered++;
+                    }
+                }
 
                 if (str_contains($stage, 'repair')) {
                     $this->touchWindow($this->channelWindows, 'repair', $now);
@@ -315,6 +349,9 @@ class BenchmarkGeneticSolverAb extends Command
             ? $collector->lastPayload['initial_population_bottlenecks']
             : [];
 
+        $executionReport = is_array($result['execution_report'] ?? null) ? $result['execution_report'] : [];
+        $nogoodsSummary = is_array($executionReport['nogoods'] ?? null) ? $executionReport['nogoods'] : [];
+
         return [
             'total_ms' => $totalMs,
             'initial_population_ms' => $initialPopulationMs,
@@ -323,10 +360,15 @@ class BenchmarkGeneticSolverAb extends Command
             'repair_ms' => $repairMs,
             'persist_ms' => $persistMs,
             'best_fitness' => (float) ($result['best_fitness'] ?? 0.0),
+            'final_hard_penalty' => (float) ($result['final_hard_penalty'] ?? 0.0),
             'quality_gate_rejections' => (int) ($bottlenecks['quality_gate_rejections'] ?? 0),
             'fail_fast_count' => (int) ($bottlenecks['fail_fast_count'] ?? 0),
             'phase_payload_count' => count($collector->phaseWindows),
             'custom_constraint_repair_enabled' => (bool) ($configOverrides['ag.initial_population.custom_constraint_repair_extension_enabled'] ?? true),
+            'nogoods_loaded' => (int) ($nogoodsSummary['loaded_total'] ?? 0),
+            'nogoods_learned' => (int) ($nogoodsSummary['learned_total'] ?? 0),
+            'evolution_fail_fast_checked' => $collector->evolutionRepairFailFastChecked,
+            'evolution_fail_fast_triggered' => $collector->evolutionRepairFailFastTriggered,
         ];
     }
 
@@ -373,7 +415,13 @@ class BenchmarkGeneticSolverAb extends Command
                 'avg_repair_ms' => $this->average($metricsList, 'repair_ms'),
                 'avg_persist_ms' => $this->average($metricsList, 'persist_ms'),
                 'avg_best_fitness' => $this->average($metricsList, 'best_fitness'),
+                'avg_final_hard_penalty' => $this->average($metricsList, 'final_hard_penalty'),
                 'avg_quality_gate_rejections' => $this->average($metricsList, 'quality_gate_rejections'),
+                'avg_fail_fast_count' => $this->average($metricsList, 'fail_fast_count'),
+                'avg_nogoods_loaded' => $this->average($metricsList, 'nogoods_loaded'),
+                'avg_nogoods_learned' => $this->average($metricsList, 'nogoods_learned'),
+                'avg_evolution_fail_fast_checked' => $this->average($metricsList, 'evolution_fail_fast_checked'),
+                'avg_evolution_fail_fast_triggered' => $this->average($metricsList, 'evolution_fail_fast_triggered'),
             ];
         }
 
@@ -402,21 +450,97 @@ class BenchmarkGeneticSolverAb extends Command
     private function renderSummaryTable(array $summary): void
     {
         $this->table(
-            ['Scenario', 'Variant', 'Runs', 'Avg Total (ms)', 'Avg Init (ms)', 'Avg Evo (ms)', 'Avg ALNS (ms)', 'Avg Repair (ms)', 'Avg Persist (ms)', 'Avg Best Fitness', 'Avg QG Rejects'],
+            ['Scenario', 'Variant', 'Runs', 'Avg Total (ms)', 'Avg Init (ms)', 'Avg Evo (ms)', 'Avg ALNS (ms)', 'Avg Repair (ms)', 'Avg Persist (ms)', 'Avg Best Fitness', 'Avg Hard Penalty', 'Avg QG Rejects', 'Avg Fail-Fast', 'Nogoods Loaded', 'Nogoods Learned', 'Evo FF Rate (%)', 'FF Triggered', 'FF Checked'],
+            array_map(static function (array $row): array {
+                $ffChecked = (float) ($row['avg_evolution_fail_fast_checked'] ?? 0.0);
+                $ffTriggered = (float) ($row['avg_evolution_fail_fast_triggered'] ?? 0.0);
+                $ffRate = $ffChecked > 0 ? round($ffTriggered / $ffChecked * 100, 1) : 0.0;
+
+                return [
+                    $row['scenario'],
+                    $row['variant'],
+                    $row['runs'],
+                    $row['avg_total_ms'],
+                    $row['avg_initial_ms'],
+                    $row['avg_evolution_ms'],
+                    $row['avg_alns_ms'],
+                    $row['avg_repair_ms'],
+                    $row['avg_persist_ms'],
+                    $row['avg_best_fitness'],
+                    $row['avg_final_hard_penalty'],
+                    $row['avg_quality_gate_rejections'],
+                    $row['avg_fail_fast_count'],
+                    $row['avg_nogoods_loaded'],
+                    $row['avg_nogoods_learned'],
+                    $ffRate,
+                    $ffTriggered,
+                    $ffChecked,
+                ];
+            }, $summary),
+        );
+    }
+
+    /**
+     * @param array<string, Horario> $scenarioMap
+     */
+    private function renderConstraintDensityMatrix(array $scenarioMap): void
+    {
+        if ($scenarioMap === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->info('Matriz de densidade de constraints por cenario:');
+
+        $rows = [];
+
+        foreach ($scenarioMap as $scenarioKey => $horario) {
+            $density = $this->resolveConstraintTypeDensity($horario);
+            $rows[] = array_merge(
+                ['scenario' => $scenarioKey, 'horario_id' => $horario->id],
+                [
+                    'SYNC_SAME_TIMESLOT' => $density['SYNC_SAME_TIMESLOT'] ?? 0,
+                    'MUTUAL_EXCLUSION' => $density['MUTUAL_EXCLUSION'] ?? 0,
+                    'TIME_PLACEMENT' => $density['TIME_PLACEMENT'] ?? 0,
+                    'outros' => array_sum($density) - ($density['SYNC_SAME_TIMESLOT'] ?? 0) - ($density['MUTUAL_EXCLUSION'] ?? 0) - ($density['TIME_PLACEMENT'] ?? 0),
+                    'total' => array_sum($density),
+                ],
+            );
+        }
+
+        $this->table(
+            ['Scenario', 'Horario ID', 'SYNC_SAME_TIMESLOT', 'MUTUAL_EXCLUSION', 'TIME_PLACEMENT', 'Outros', 'Total'],
             array_map(static fn (array $row): array => [
                 $row['scenario'],
-                $row['variant'],
-                $row['runs'],
-                $row['avg_total_ms'],
-                $row['avg_initial_ms'],
-                $row['avg_evolution_ms'],
-                $row['avg_alns_ms'],
-                $row['avg_repair_ms'],
-                $row['avg_persist_ms'],
-                $row['avg_best_fitness'],
-                $row['avg_quality_gate_rejections'],
-            ], $summary),
+                $row['horario_id'],
+                $row['SYNC_SAME_TIMESLOT'],
+                $row['MUTUAL_EXCLUSION'],
+                $row['TIME_PLACEMENT'],
+                $row['outros'],
+                $row['total'],
+            ], $rows),
         );
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function resolveConstraintTypeDensity(Horario $horario): array
+    {
+        /** @var array<string, int> $density */
+        $density = [];
+
+        $horario->scheduleConstraints()
+            ->where('is_active', true)
+            ->selectRaw('type, COUNT(*) as cnt')
+            ->groupBy('type')
+            ->orderBy('type')
+            ->get()
+            ->each(static function ($row) use (&$density): void {
+                $density[strtoupper((string) $row->type)] = (int) $row->cnt;
+            });
+
+        return $density;
     }
 
     private function parseBoolOption(string $name, bool $default): bool

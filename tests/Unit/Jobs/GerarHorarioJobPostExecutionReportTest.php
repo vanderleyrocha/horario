@@ -87,7 +87,8 @@ it('builds a stable consolidated post execution report in status context', funct
         ->toHaveKey('post_execution_report')
         ->toHaveKey('phase_timings_ms')
         ->toHaveKey('dominant_bottleneck')
-        ->toHaveKey('operational_counters');
+        ->toHaveKey('operational_counters')
+        ->toHaveKey('status_health');
 
     $report = $statusContext['post_execution_report'];
 
@@ -102,7 +103,10 @@ it('builds a stable consolidated post execution report in status context', funct
 
     expect($statusContext['phase_timings_ms'])->toBe($report['timings_ms'])
         ->and($statusContext['dominant_bottleneck'])->toBe($report['dominant_bottleneck'])
-        ->and($statusContext['operational_counters'])->toBe($report['operational_counters']);
+        ->and($statusContext['operational_counters'])->toBe($report['operational_counters'])
+        ->and($statusContext['status_health']['health'])->toBe('critical')
+        ->and($statusContext['status_health']['dominant_phase'])->toBe('initial_population')
+        ->and($statusContext['status_health']['recommendations'])->not->toBeEmpty();
 
     Carbon::setTestNow();
 });

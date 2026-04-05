@@ -12,7 +12,9 @@ use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 
 final class CustomConstraintSoftRule implements SoftRuleInterface
 {
-    public function __construct(private readonly ConstraintEvaluationPipeline $pipeline) {}
+    public function __construct(private readonly ConstraintEvaluationPipeline $pipeline)
+    {
+    }
 
     public function evaluate(EvaluationContext $context): RuleResult
     {

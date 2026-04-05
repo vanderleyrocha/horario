@@ -30,6 +30,7 @@
 - Ao alterar o solver, mantenha alinhamento entre backend, UI e configuração em `config/ag.php`; a chave `islands` é usada explicitamente por mais de uma camada.
 - Em testes com SQLite, a tabela de professores pode não ter `nome_abreviado`; código e asserts devem aceitar fallback para `nome`.
 - O quality gate e a população inicial do solver têm histórico de regressões; valide mudanças nessa área com cuidado e consulte as notas técnicas em `docs/diagnostics/` quando o comportamento degradar.
+- O contexto de status operacional do job deve manter o campo aditivo `status_health` (health, dominant_phase, recommendations) ao evoluir observabilidade de execução.
 
 ## Pitfalls
 

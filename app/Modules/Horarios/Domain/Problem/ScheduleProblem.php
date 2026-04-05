@@ -70,6 +70,18 @@ final class ScheduleProblem implements GeneticProblem
 
     private const EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS = 30;
 
+    private const EVOLUTION_REPAIR_TIME_BUDGET_MS = 3000;
+
+    private const EVOLUTION_REPAIR_MAX_PASSES_WITHOUT_PROGRESS = 2;
+
+    private const EVOLUTION_REPAIR_FAIL_FAST_CONFLICT_RATIO = 0.35;
+
+    private const EVOLUTION_REPAIR_FAIL_FAST_HARD_PENALTY_PER_LESSON = 18.0;
+
+    private const EVOLUTION_REPAIR_FAIL_FAST_MIN_LENIENCY = 0.9;
+
+    private const EVOLUTION_REPAIR_FAIL_FAST_MAX_LENIENCY = 1.6;
+
     private const LONG_RUNNING_REPAIR_LOG_INTERVAL_SECONDS = 300;
 
     private const CANCELLATION_CHECK_INTERVAL_SECONDS = 2;
@@ -147,15 +159,6 @@ final class ScheduleProblem implements GeneticProblem
 
     private ?string $lastInitialPopulationSource = null;
 
-    /**
-     * @var array{
-     *     grasp_attempts_used: int,
-     *     quality_gate_evaluations: int,
-     *     quality_gate_passed: int,
-     *     quality_gate_rejected: int,
-     *     source: string
-     * }|null
-     */
     private ?array $lastInitialPopulationBuildStats = null;
 
     private int $currentInitialPopulationGraspAttempts = 0;
@@ -166,27 +169,14 @@ final class ScheduleProblem implements GeneticProblem
 
     private int $currentInitialPopulationQualityGateRejections = 0;
 
-    /**
-     * @var array{
-     *     lesson_slot: array<string, int>,
-     *     professor_slot: array<string, int>,
-     *     class_slot: array<string, int>
-     * }
-     */
     private array $initialPopulationNogoods = [
         'lesson_slot' => [],
         'professor_slot' => [],
         'class_slot' => [],
     ];
 
-    /**
-     * @var list<array<string, mixed>>
-     */
     private array $initialPopulationAttemptHistory = [];
 
-    /**
-     * @var array<string, int>
-     */
     private array $initialPopulationCounters = [
         'fail_fast' => 0,
         'quality_gate_rejected' => 0,
@@ -204,19 +194,9 @@ final class ScheduleProblem implements GeneticProblem
     private array $currentBuildAttemptLimitReductionCriteria = [];
 
     // 🔧 PRIORIDADE 10: Rastreamento de fitness anterior para evaluateDelta
-    /**
-     * @var array<string, FitnessResult>
-     *                                   Mapping de cromossomo signature -> fitness anterior
-     *                                   Usado para calcular delta em vez de reavaliar completo
-     */
+
     private array $previousFitnessCache = [];
 
-    /**
-     * Mapa de contenção de slots: slotId → quantas aulas no restante da fila podem usar este slot.
-     * Recalculado a cada reordenação dinâmica da fila.
-     *
-     * @var array<int, int>
-     */
     private array $currentSlotContention = [];
 
     // ─── Sprint 4: perfil de ilha ───────────────────────────────────────────
@@ -225,21 +205,12 @@ final class ScheduleProblem implements GeneticProblem
 
     // ─── Melhoria 2: portfólio de construtores (alpha profile history) ───────
 
-    /**
-     * Histórico de sucesso por perfil de alpha.
-     * Usado para bias epsilon-greedy na seleção de perfil.
-     *
-     * @var array<string, array{success: int, attempts: int}>
-     */
     private array $alphaProfileHistory = [
         'conservative' => ['success' => 0, 'attempts' => 0],
         'balanced' => ['success' => 0, 'attempts' => 0],
         'exploratory' => ['success' => 0, 'attempts' => 0],
     ];
 
-    /**
-     * @var array<string, array{success: int, attempts: int}>
-     */
     private array $constructorStrategyHistory = [
         'difficulty_default' => ['success' => 0, 'attempts' => 0],
         'critical_professor_first' => ['success' => 0, 'attempts' => 0],
@@ -1126,6 +1097,44 @@ final class ScheduleProblem implements GeneticProblem
     {
         $shouldReportProgress = $this->progress !== null && $this->executionId !== null;
 
+        $preRepairFailFast = $this->evaluateEvolutionRepairFailFast($individual);
+
+        if ($preRepairFailFast['should_fail_fast']) {
+            $this->rememberNogoodsFromAssignedGenes($individual->genes());
+
+            Log::warning('schedule.evolution.repair.fail_fast_precheck', [
+                'execution_id' => $this->executionId,
+                'hard_penalty' => $preRepairFailFast['hard_penalty'],
+                'hard_conflicts' => $preRepairFailFast['hard_conflicts'],
+                'max_hard_penalty' => $preRepairFailFast['max_hard_penalty'],
+                'max_hard_conflicts' => $preRepairFailFast['max_hard_conflicts'],
+                'rigidity_score' => $preRepairFailFast['rigidity_score'],
+                'leniency_multiplier' => $preRepairFailFast['leniency_multiplier'],
+                'constraint_density' => $preRepairFailFast['constraint_density'],
+                'message' => $preRepairFailFast['message'],
+            ]);
+
+            if ($shouldReportProgress) {
+                $this->progress?->report([
+                    'phase' => 'evolution',
+                    'stage' => 'repair_runtime_fail_fast',
+                    'execution_id' => $this->executionId,
+                    'current_operation' => 'repair_runtime_fail_fast',
+                    'operation_label' => 'Descendente descartado antes do repair pesado',
+                    'message' => $preRepairFailFast['message'],
+                    'hard_penalty' => $preRepairFailFast['hard_penalty'],
+                    'hard_conflicts' => $preRepairFailFast['hard_conflicts'],
+                    'max_hard_penalty' => $preRepairFailFast['max_hard_penalty'],
+                    'max_hard_conflicts' => $preRepairFailFast['max_hard_conflicts'],
+                    'rigidity_score' => $preRepairFailFast['rigidity_score'],
+                    'leniency_multiplier' => $preRepairFailFast['leniency_multiplier'],
+                    'constraint_density' => $preRepairFailFast['constraint_density'],
+                ]);
+            }
+
+            return $individual;
+        }
+
         return $this->repairWithTelemetry($individual, reportProgress: $shouldReportProgress, source: 'evolution_runtime');
     }
 
@@ -1186,13 +1195,18 @@ final class ScheduleProblem implements GeneticProblem
         if ($reportProgress && $source === 'evolution_runtime') {
             $heartbeat = function (array $heartbeatPayload) use ($source, $progressContext, $repairStartedAt, &$lastLongRunningRepairLogAt): void {
                 $now = microtime(true);
+                $repairEvent = (string) ($heartbeatPayload['event'] ?? '');
+                $processedInvalidGenes = (int) ($heartbeatPayload['processed_invalid_genes'] ?? 0);
+                $isCheckpointEvent = in_array($repairEvent, ['repair_aborted', 'pass_finished', 'pass_started', 'repair_started'], true);
+                $isGranularCheckpoint = $processedInvalidGenes > 0 && $processedInvalidGenes % 10 === 0;
 
                 $this->logLongRunningRepairOperation($source, $progressContext, $heartbeatPayload, $repairStartedAt, $lastLongRunningRepairLogAt);
 
                 if (
                     $this->lastEvolutionRepairHeartbeatAt !== null
                     && ($now - $this->lastEvolutionRepairHeartbeatAt) < self::EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS
-                    && ! in_array($heartbeatPayload['event'] ?? null, ['repair_aborted', 'pass_finished'], true)
+                    && ! $isCheckpointEvent
+                    && ! $isGranularCheckpoint
                 ) {
                     return;
                 }
@@ -1230,6 +1244,11 @@ final class ScheduleProblem implements GeneticProblem
             $limits = [
                 'max_millis' => self::INITIAL_QUALITY_GATE_REPAIR_TIME_BUDGET_MS,
                 'max_passes_without_progress' => self::INITIAL_QUALITY_GATE_REPAIR_MAX_PASSES_WITHOUT_PROGRESS,
+            ];
+        } elseif ($source === 'evolution_runtime') {
+            $limits = [
+                'max_millis' => self::EVOLUTION_REPAIR_TIME_BUDGET_MS,
+                'max_passes_without_progress' => self::EVOLUTION_REPAIR_MAX_PASSES_WITHOUT_PROGRESS,
             ];
         }
 
@@ -1307,6 +1326,26 @@ final class ScheduleProblem implements GeneticProblem
     public function lastRepairTelemetry(): array
     {
         return $this->lastRepairTelemetry;
+    }
+
+    /**
+     * Resumo de nogoods lidos do cache persistente e aprendidos nesta execução.
+     *
+     * @return array{loaded_lesson_slot: int, loaded_professor_slot: int, loaded_class_slot: int, loaded_total: int, learned_total: int}
+     */
+    public function nogoodsSummary(): array
+    {
+        $lessonSlot = count($this->initialPopulationNogoods['lesson_slot']);
+        $professorSlot = count($this->initialPopulationNogoods['professor_slot']);
+        $classSlot = count($this->initialPopulationNogoods['class_slot']);
+
+        return [
+            'loaded_lesson_slot' => $lessonSlot,
+            'loaded_professor_slot' => $professorSlot,
+            'loaded_class_slot' => $classSlot,
+            'loaded_total' => $lessonSlot + $professorSlot + $classSlot,
+            'learned_total' => $this->totalNogoodsLearned(),
+        ];
     }
 
     public function isFeasible(Cromossomo $individual): bool
@@ -1855,6 +1894,7 @@ final class ScheduleProblem implements GeneticProblem
         $constraintFeasibility = (new ConstraintFeasibilityAnalyzer())->analyze($this->data);
         $constraintInfeasibilities = $constraintFeasibility->blockingIssues();
         $constraintWarnings = $constraintFeasibility->warnings();
+        $constraintRiskContribution = (int) $constraintFeasibility->riskContribution();
 
         Log::info('schedule.initial_population.diagnosis', [
             'queue_size' => count($queue),
@@ -1862,7 +1902,7 @@ final class ScheduleProblem implements GeneticProblem
             'structural_infeasibilities' => $structuralInfeasibilities,
             'constraint_infeasibilities' => array_slice($constraintInfeasibilities, 0, 10),
             'constraint_warnings' => array_slice($constraintWarnings, 0, 10),
-            'constraint_risk_contribution' => $constraintFeasibility->riskContribution(),
+            'constraint_risk_contribution' => $constraintRiskContribution,
             'tightest_classes' => array_slice($classLoadPressure, 0, 5),
             'tightest_professors' => array_slice($professorLoadPressure, 0, 5),
         ]);
@@ -1883,6 +1923,7 @@ final class ScheduleProblem implements GeneticProblem
             'structural_infeasibilities' => $structuralInfeasibilities,
             'constraint_infeasibilities' => $constraintInfeasibilities,
             'constraint_warnings' => $constraintWarnings,
+            'constraint_risk_contribution' => $constraintRiskContribution,
             'tightest_classes' => $classLoadPressure,
             'tightest_professors' => $professorLoadPressure,
         ];
@@ -3052,6 +3093,168 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         return false;
+    }
+
+    /**
+     * @return array{should_fail_fast: bool, message: string, hard_penalty: float, hard_conflicts: int, max_hard_penalty: float, max_hard_conflicts: int, rigidity_score: float, leniency_multiplier: float, constraint_density: float}
+     */
+    private function evaluateEvolutionRepairFailFast(Cromossomo $individual): array
+    {
+        $lessonCount = max(1, count($this->data->lessons));
+        $hardConflicts = count($this->countSeedHardConflicts($individual));
+        $fitness = $this->evaluate($individual);
+        $hardPenalty = (float) $fitness->hardPenalty();
+
+        $calibration = $this->resolveEvolutionRepairFailFastCalibration($lessonCount);
+
+        $maxHardConflicts = max(6, (int) ceil($lessonCount * $calibration['conflict_ratio_threshold']));
+        $maxHardPenalty = max(120.0, $lessonCount * $calibration['hard_penalty_per_lesson_threshold']);
+
+        $conflictsExceeded = $hardConflicts > $maxHardConflicts;
+        $hardPenaltyExceeded = $hardPenalty > $maxHardPenalty;
+        $catastrophicHardPenalty = $hardPenalty > ($maxHardPenalty * 1.8);
+
+        $shouldFailFast = ($conflictsExceeded && $hardPenaltyExceeded) || $catastrophicHardPenalty;
+
+        $message = $shouldFailFast
+            ? sprintf(
+                'Descendente descartado antes do repair pesado (hard_penalty=%.4f, hard_conflicts=%d).',
+                $hardPenalty,
+                $hardConflicts,
+            )
+            : 'Descendente aprovado no precheck de repair evolutivo.';
+
+        return [
+            'should_fail_fast' => $shouldFailFast,
+            'message' => $message,
+            'hard_penalty' => $hardPenalty,
+            'hard_conflicts' => $hardConflicts,
+            'max_hard_penalty' => $maxHardPenalty,
+            'max_hard_conflicts' => $maxHardConflicts,
+            'rigidity_score' => $calibration['rigidity_score'],
+            'leniency_multiplier' => $calibration['leniency_multiplier'],
+            'constraint_density' => $calibration['constraint_density'],
+        ];
+    }
+
+    /**
+     * Ajusta o fail-fast conforme a rigidez real do cenário.
+     * Cenários menos rígidos recebem limiar mais leniente para evitar descarte de descendentes salváveis.
+     *
+     * @return array{conflict_ratio_threshold: float, hard_penalty_per_lesson_threshold: float, rigidity_score: float, leniency_multiplier: float, constraint_density: float}
+     */
+    private function resolveEvolutionRepairFailFastCalibration(int $lessonCount): array
+    {
+        $constraintTypeBreakdown = $this->customConstraintTypeBreakdown();
+        $totalConstraints = array_sum($constraintTypeBreakdown);
+        $constraintDensity = round($totalConstraints / max(1, $lessonCount), 4);
+
+        $syncCount = (int) ($constraintTypeBreakdown['SYNC_SAME_TIMESLOT'] ?? 0);
+        $mutualCount = (int) ($constraintTypeBreakdown['MUTUAL_EXCLUSION'] ?? 0);
+        $timePlacementCount = (int) ($constraintTypeBreakdown['TIME_PLACEMENT'] ?? 0);
+
+        $weightedConstraintPressure = (
+            ($syncCount * 1.0)
+            + ($mutualCount * 0.9)
+            + ($timePlacementCount * 0.7)
+        ) / max(1, $lessonCount);
+
+        $structuralTightness = $this->averageStructuralTightness();
+        $constraintRiskContribution = $this->resolveConstraintRiskContribution();
+
+        // Calibração por logs reais:
+        // - cenários com constraints baixas/risk baixo não devem sofrer fail-fast agressivo
+        //   mesmo quando a malha estrutural é "apertada".
+        // - portanto, constraints/risco pesam mais que rigidez estrutural na poda pré-repair.
+        $rigidityScore = round(
+            min(
+                2.0,
+                ($constraintDensity * 0.75)
+                + ($weightedConstraintPressure * 0.95)
+                + ($constraintRiskContribution * 0.85)
+                + ($structuralTightness * 0.30),
+            ),
+            4,
+        );
+
+        $leniencyMultiplier = match (true) {
+            $rigidityScore < 0.4 => 1.5,
+            $rigidityScore < 0.85 => 1.3,
+            $rigidityScore < 1.2 => 1.15,
+            $rigidityScore >= 1.6 => 0.95,
+            default => 1.0,
+        };
+
+        // Com o gatilho híbrido disponível, evitamos poda agressiva prematura.
+        if ((bool) config('ag.initial_population.hybrid_cp_assignment.enabled', false) && $rigidityScore < 1.2) {
+            $leniencyMultiplier += 0.05;
+        }
+
+        if ($totalConstraints === 0 && $constraintRiskContribution <= 0.0) {
+            $leniencyMultiplier += 0.05;
+        }
+
+        $leniencyMultiplier = max(
+            self::EVOLUTION_REPAIR_FAIL_FAST_MIN_LENIENCY,
+            min(self::EVOLUTION_REPAIR_FAIL_FAST_MAX_LENIENCY, $leniencyMultiplier),
+        );
+
+        return [
+            'conflict_ratio_threshold' => self::EVOLUTION_REPAIR_FAIL_FAST_CONFLICT_RATIO * $leniencyMultiplier,
+            'hard_penalty_per_lesson_threshold' => self::EVOLUTION_REPAIR_FAIL_FAST_HARD_PENALTY_PER_LESSON * $leniencyMultiplier,
+            'rigidity_score' => $rigidityScore,
+            'leniency_multiplier' => round($leniencyMultiplier, 4),
+            'constraint_density' => $constraintDensity,
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function customConstraintTypeBreakdown(): array
+    {
+        $breakdown = [];
+
+        foreach ($this->data->customConstraints as $constraint) {
+            $type = strtoupper((string) $constraint->type);
+            $breakdown[$type] = ($breakdown[$type] ?? 0) + 1;
+        }
+
+        ksort($breakdown);
+
+        return $breakdown;
+    }
+
+    private function averageStructuralTightness(): float
+    {
+        if ($this->baseDifficultyByLesson === []) {
+            return 0.0;
+        }
+
+        $values = array_values(array_filter(
+            array_map(
+                static fn (array $metrics): float => (float) ($metrics['structural_tightness'] ?? 0.0),
+                $this->baseDifficultyByLesson,
+            ),
+            static fn (float $value): bool => $value >= 0.0,
+        ));
+
+        if ($values === []) {
+            return 0.0;
+        }
+
+        return round(array_sum($values) / count($values), 4);
+    }
+
+    private function resolveConstraintRiskContribution(): float
+    {
+        $risk = (float) ($this->cachedDiagnostics['constraint_risk_contribution'] ?? 0.0);
+
+        if ($risk <= 0.0) {
+            return 0.0;
+        }
+
+        return round(min(1.0, $risk / 100.0), 4);
     }
 
     private function evaluateInitialPopulationQualityGate(Cromossomo $candidate, int $attempt, int $queueSize, array $telemetry, bool $recordEvaluation = true): array

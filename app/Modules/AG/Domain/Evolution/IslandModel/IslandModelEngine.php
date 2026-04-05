@@ -38,6 +38,13 @@ final class IslandModelEngine
     /** @var array<string, mixed>|null */
     private ?array $lastStagnationEvaluation = null;
 
+    /**
+     * Histórico consolidado de impacto de migrações: cada entrada corresponde a uma rodada.
+     *
+     * @var array<int, array{generation: int, avg_delta: float, islands: array<int, float>}>
+     */
+    private array $migrationRoundHistory = [];
+
     public function __construct(
         private readonly MigrationPolicyInterface $migrationPolicy,
         private readonly int $migrationInterval = 20,
@@ -121,7 +128,26 @@ final class IslandModelEngine
             }
 
             if ($generation % $this->migrationInterval === 0) {
+                $preMigrationFitness = [];
+
+                foreach ($this->islands as $island) {
+                    $preMigrationFitness[$island->getislandNum()] = $island->best()->fitness();
+                }
+
                 $this->migrationPolicy->migrate($this->islands);
+
+                $deltas = [];
+
+                foreach ($this->islands as $island) {
+                    $num = $island->getislandNum();
+                    $deltas[$num] = round($island->best()->fitness() - ($preMigrationFitness[$num] ?? 0.0), 6);
+                }
+
+                $this->migrationRoundHistory[] = [
+                    'generation' => $generation,
+                    'avg_delta' => count($deltas) > 0 ? round(array_sum($deltas) / count($deltas), 6) : 0.0,
+                    'islands' => $deltas,
+                ];
             }
 
             if ($this->globalMetrics && $this->progress) {
@@ -445,5 +471,25 @@ final class IslandModelEngine
         if (in_array($status, ['cancel_requested', 'cancelled'], true)) {
             throw ExecutionCancelledException::forExecution($this->executionId);
         }
+    }
+
+    /**
+     * Resume as rodadas de migração executadas: count, avg_delta e detalhe por rodada.
+     *
+     * @return array{count: int, avg_delta: float, rounds: array<int, array{generation: int, avg_delta: float, islands: array<int, float>}>}
+     */
+    public function migrationRoundSummary(): array
+    {
+        $rounds = $this->migrationRoundHistory;
+        $count = count($rounds);
+        $avgDelta = $count > 0
+            ? round(array_sum(array_column($rounds, 'avg_delta')) / $count, 6)
+            : 0.0;
+
+        return [
+            'count' => $count,
+            'avg_delta' => $avgDelta,
+            'rounds' => $rounds,
+        ];
     }
 }

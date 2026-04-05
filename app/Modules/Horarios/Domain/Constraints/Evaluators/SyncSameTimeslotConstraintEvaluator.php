@@ -139,7 +139,7 @@ final class SyncSameTimeslotConstraintEvaluator implements ConstraintEvaluatorIn
 
     private function slotKey(int $day, int $period): string
     {
-        return $day.':'.$period;
+        return $day . ':' . $period;
     }
 
     private function normalizeLessonIds(?array $lessonIds): ?array

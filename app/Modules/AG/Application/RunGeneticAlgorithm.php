@@ -200,11 +200,14 @@ final class RunGeneticAlgorithm
 
         $migrationPolicy = match ($migrationStrategy) {
             'best' => new BestIndividualsMigration(2),
-            default => new ProfileAwareBestIndividualsMigration([
-                IslandProfile::Conservative->value => max(1, (int) config('ag.migration.profile_aware.conservative_migrants', 1)),
-                IslandProfile::Balanced->value => max(1, (int) config('ag.migration.profile_aware.balanced_migrants', 2)),
-                IslandProfile::Exploratory->value => max(1, (int) config('ag.migration.profile_aware.exploratory_migrants', 3)),
-            ]),
+            default => new ProfileAwareBestIndividualsMigration(
+                migrantsByProfile: [
+                    IslandProfile::Conservative->value => max(1, (int) config('ag.migration.profile_aware.conservative_migrants', 1)),
+                    IslandProfile::Balanced->value => max(1, (int) config('ag.migration.profile_aware.balanced_migrants', 2)),
+                    IslandProfile::Exploratory->value => max(1, (int) config('ag.migration.profile_aware.exploratory_migrants', 3)),
+                ],
+                directionalMatrix: (array) config('ag.migration.profile_aware.directional_matrix', []),
+            ),
         };
 
         $islandEngine = new IslandModelEngine(
@@ -363,11 +366,17 @@ final class RunGeneticAlgorithm
         return [
             'best' => $finalResult['candidate'],
             'best_fitness' => $finalResult['candidate']->fitness(),
+            'final_hard_penalty' => $problem->evaluate($finalResult['candidate'])->hardPenalty(),
             'viable' => $finalResult['viable'],
             'generation_metrics' => array_map(
                 fn ($m) => $m->generationData(),
                 $metricsGlobal,
             ),
+            'execution_report' => [
+                'island_count' => $islandCount,
+                'nogoods' => $problem->nogoodsSummary(),
+                'migration_rounds' => $islandEngine->migrationRoundSummary(),
+            ],
         ];
     }
 

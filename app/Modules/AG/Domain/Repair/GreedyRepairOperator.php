@@ -83,6 +83,14 @@ final class GreedyRepairOperator
                 $processedInvalidGenes = 0;
 
                 foreach ($repairTargets as $target) {
+                    if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
+                        $this->lastTelemetry['aborted'] = true;
+                        $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
+                        $this->lastTelemetry['time_budget_ms'] = $maxMillis;
+                        $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
+                        break 2;
+                    }
+
                     $index = $target['index'];
                     $currentGenes = $child->genes();
 

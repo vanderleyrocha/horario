@@ -71,6 +71,25 @@ O GerarHorarioJob é a peça que conecta observabilidade e solver. Ele:
 - executa a action de geração
 - persiste o resultado
 - fecha execução como finished, cancelled ou failed
+- publica `status_health` (`health`, `dominant_phase`, `recommendations`) no contexto operacional final
+
+### Health Check Operacional por Heartbeat/Stage
+
+O ciclo atual incorpora um health check aditivo no status final da execução para reduzir diagnóstico manual em logs.
+
+Componentes:
+
+- `app/Modules/AG/Infrastructure/Health/ExecutionHealthBuilder.php`
+- `app/Modules/AG/Infrastructure/Health/DTO/ExecutionHealthDTO.php`
+- integração no `app/Jobs/GerarHorarioJob.php`
+
+Regras de classificação:
+
+- `critical`: `quality_gate_fail_fast > 0` ou `quality_gate_rejections >= attempt_limit`
+- `warn`: `repair_passes >= 3` ou `alns_activations == 0` com `generations_recorded >= 30`
+- `ok`: demais cenários
+
+Este campo é aditivo e não quebra consumidores antigos do payload de status.
 
 ### Camada de Aplicação do AG
 

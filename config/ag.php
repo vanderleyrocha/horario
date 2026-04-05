@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'islands' => (int) env('AG_ISLANDS', 2),
+    'islands' => (int) env('AG_ISLANDS', 1),
     'migration_interval' => (int) env('AG_MIGRATION_INTERVAL', 5),
     'parallel_evaluation' => true,
     'parallel_evaluation_threshold' => (int) env('AG_PARALLEL_EVALUATION_THRESHOLD', 200),
@@ -17,11 +17,18 @@ return [
         'nogoods_signature_enabled' => env('AG_NOGOODS_SIGNATURE_ENABLED', true),
         'nogoods_signature_cache_ttl_days' => (int) env('AG_NOGOODS_SIGNATURE_CACHE_TTL_DAYS', 7),
         'nogoods_signature_max_entries_per_type' => (int) env('AG_NOGOODS_SIGNATURE_MAX_ENTRIES_PER_TYPE', 500),
+        // Piloto de construção paralela: cria indivíduos da população inicial em paralelo.
+        // O primeiro indivíduo é sempre construído de forma serial (preserva aprendizado de nogoods).
+        // Os demais são construídos em paralelo com instâncias isoladas do problema.
+        // Desligado por padrão; ative com AG_PARALLEL_CONSTRUCTION_ENABLED=true.
+        'parallel_construction_enabled' => env('AG_PARALLEL_CONSTRUCTION_ENABLED', false),
+        'parallel_construction_workers' => (int) env('AG_PARALLEL_CONSTRUCTION_WORKERS', 4),
+        'parallel_construction_timeout_seconds' => (int) env('AG_PARALLEL_CONSTRUCTION_TIMEOUT_SECONDS', 60),
         'hybrid_cp_assignment' => [
             'enabled' => env('AG_HYBRID_CP_ASSIGNMENT_ENABLED', true),
-            'min_quality_gate_rejections' => (int) env('AG_HYBRID_CP_MIN_QG_REJECTIONS', 3),
-            'min_peak_hard_conflicts' => (int) env('AG_HYBRID_CP_MIN_PEAK_HARD_CONFLICTS', 4),
-            'require_attempt_limit_reduced' => env('AG_HYBRID_CP_REQUIRE_ATTEMPT_LIMIT_REDUCED', true),
+            'min_quality_gate_rejections' => (int) env('AG_HYBRID_CP_MIN_QG_REJECTIONS', 2),
+            'min_peak_hard_conflicts' => (int) env('AG_HYBRID_CP_MIN_PEAK_HARD_CONFLICTS', 2),
+            'require_attempt_limit_reduced' => env('AG_HYBRID_CP_REQUIRE_ATTEMPT_LIMIT_REDUCED', false),
         ],
     ],
     'migration' => [
@@ -31,6 +38,13 @@ return [
             'conservative_migrants' => (int) env('AG_MIGRATION_CONSERVATIVE_MIGRANTS', 1),
             'balanced_migrants' => (int) env('AG_MIGRATION_BALANCED_MIGRANTS', 2),
             'exploratory_migrants' => (int) env('AG_MIGRATION_EXPLORATORY_MIGRANTS', 3),
+            // Matriz direcional: define o perfil preferencial de destino por perfil de origem.
+            // null = fallback para round-robin sequencial.
+            'directional_matrix' => [
+                'conservative' => env('AG_MIGRATION_DIR_CONSERVATIVE_TARGET', 'exploratory'),
+                'exploratory' => env('AG_MIGRATION_DIR_EXPLORATORY_TARGET', 'conservative'),
+                'balanced' => env('AG_MIGRATION_DIR_BALANCED_TARGET', null),
+            ],
         ],
     ],
     'alns_adaptive' => [

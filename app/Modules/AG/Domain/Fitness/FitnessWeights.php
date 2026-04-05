@@ -21,7 +21,7 @@ final class FitnessWeights
 
     public function __construct(
         array $weights = [],
-        private readonly float $defaultWeight = 1.0
+        private readonly float $defaultWeight = 1.0,
     ) {
         $this->weights = [];
 
