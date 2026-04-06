@@ -24,6 +24,10 @@ final class CacheAndDbProgressReporter implements ProgressReporterInterface
 
     public function report(array $data): void
     {
+        if ($this->dbRecorder->hasExecutionId() && ! isset($data['execution_id'])) {
+            $data['execution_id'] = $this->dbRecorder->getExecutionId();
+        }
+
         $isEvolvingPhase = isset($data['phase']) && in_array($data['phase'], ['evolving', 'evolution', 'alns_intensification'], true);
 
         if ($isEvolvingPhase) {

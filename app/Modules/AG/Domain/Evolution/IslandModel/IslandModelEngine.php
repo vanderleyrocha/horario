@@ -127,6 +127,21 @@ final class IslandModelEngine
                 $globalPopulation = array_merge($globalPopulation, $island->population());
             }
 
+            $generationFinalizationStartedAt = microtime(true);
+
+            $this->reportGenerationFinalizationHeartbeat(
+                generation: $generation,
+                maxGenerations: $generations,
+                stage: 'finalizing_generation',
+                operation: 'Consolidando metricas globais da geracao',
+                operationStartedAt: $generationFinalizationStartedAt,
+                context: [
+                    'islands_processed' => count($telemetrySnapshots),
+                    'population_target' => count($globalPopulation),
+                ],
+                force: true,
+            );
+
             if ($generation % $this->migrationInterval === 0) {
                 $preMigrationFitness = [];
 
@@ -151,6 +166,19 @@ final class IslandModelEngine
             }
 
             if ($this->globalMetrics && $this->progress) {
+                $this->reportGenerationFinalizationHeartbeat(
+                    generation: $generation,
+                    maxGenerations: $generations,
+                    stage: 'aggregating_generation_metrics',
+                    operation: 'Agregando metricas globais da geracao',
+                    operationStartedAt: $generationFinalizationStartedAt,
+                    context: [
+                        'islands_processed' => count($telemetrySnapshots),
+                        'population_target' => count($globalPopulation),
+                    ],
+                    force: true,
+                );
+
                 $mutationRates = array_values(array_filter(array_map(
                     static fn (array $snapshot) => $snapshot['mutation_rate'] ?? null,
                     $telemetrySnapshots,
@@ -200,6 +228,21 @@ final class IslandModelEngine
                     $landscapeState ?? 'Exploracao Intensiva',
                 );
 
+                $this->reportGenerationFinalizationHeartbeat(
+                    generation: $generation,
+                    maxGenerations: $generations,
+                    stage: 'publishing_generation_metrics',
+                    operation: 'Publicando metricas globais da geracao',
+                    operationStartedAt: $generationFinalizationStartedAt,
+                    context: [
+                        'islands_processed' => count($telemetrySnapshots),
+                        'population_target' => count($globalPopulation),
+                        'best_fitness' => $metricsDto->bestFitness,
+                        'avg_fitness' => $metricsDto->avgFitness,
+                    ],
+                    force: true,
+                );
+
                 $this->progress->report([
                     'phase' => 'evolving',
                     'generation' => $metricsDto->generation,
@@ -220,6 +263,20 @@ final class IslandModelEngine
                     'alns_repair_operator' => $alnsRepairOperator,
                     'alns_improvement' => empty($alnsImprovements) ? null : array_sum($alnsImprovements) / count($alnsImprovements),
                 ]);
+
+                $this->reportGenerationFinalizationHeartbeat(
+                    generation: $generation,
+                    maxGenerations: $generations,
+                    stage: 'stagnation_policy_evaluation',
+                    operation: 'Avaliando politica de estagnacao da geracao',
+                    operationStartedAt: $generationFinalizationStartedAt,
+                    context: [
+                        'best_fitness' => $metricsDto->bestFitness,
+                        'diversity' => $metricsDto->diversity,
+                        'entropy' => $metricsDto->entropy,
+                    ],
+                    force: true,
+                );
 
                 $avgAlnsImprovement = empty($alnsImprovements)
                     ? null
@@ -272,6 +329,20 @@ final class IslandModelEngine
 
                     break;
                 }
+
+                $this->reportGenerationFinalizationHeartbeat(
+                    generation: $generation,
+                    maxGenerations: $generations,
+                    stage: 'generation_finalized',
+                    operation: 'Geracao consolidada e publicada',
+                    operationStartedAt: $generationFinalizationStartedAt,
+                    context: [
+                        'best_fitness' => $metricsDto->bestFitness,
+                        'avg_fitness' => $metricsDto->avgFitness,
+                        'stagnation_triggered' => $stagnationDecision['triggered'] ?? false,
+                    ],
+                    force: true,
+                );
             }
         }
 
@@ -491,5 +562,42 @@ final class IslandModelEngine
             'avg_delta' => $avgDelta,
             'rounds' => $rounds,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    private function reportGenerationFinalizationHeartbeat(
+        int $generation,
+        int $maxGenerations,
+        string $stage,
+        string $operation,
+        float $operationStartedAt,
+        array $context = [],
+        bool $force = false,
+    ): void {
+        if ($this->progress === null) {
+            return;
+        }
+
+        static $lastHeartbeatAt = null;
+        $now = microtime(true);
+
+        if (! $force && $lastHeartbeatAt !== null && ($now - $lastHeartbeatAt) < 30.0) {
+            return;
+        }
+
+        $this->progress->report([
+            'phase' => 'evolving',
+            'stage' => $stage,
+            'generation' => $generation,
+            'max_generations' => $maxGenerations,
+            'execution_id' => $this->executionId,
+            'current_operation' => $stage,
+            'operation_label' => $operation,
+            'operation_elapsed_seconds' => (int) round(max(0.0, $now - $operationStartedAt)),
+        ] + $context);
+
+        $lastHeartbeatAt = $now;
     }
 }

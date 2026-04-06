@@ -11,11 +11,13 @@ use App\Modules\AG\Domain\Repair\GreedyRepairOperator;
 use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 use App\Modules\AG\Domain\Representation\Entities\Gene;
 use App\Modules\Horarios\Domain\Builders\EvaluationContextBuilder;
+use App\Modules\Horarios\Domain\Constraints\Repair\CustomConstraintRepairExtension;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\HardRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\Contracts\SoftRuleInterface;
 use App\Modules\Horarios\Domain\Evaluation\EvaluationContext;
 use App\Modules\Horarios\Domain\Evaluation\RuleResult;
 use App\Modules\Horarios\Domain\Problem\ScheduleProblem;
+use App\Modules\Horarios\Domain\ValueObjects\CustomConstraintData;
 use App\Modules\Horarios\Domain\ValueObjects\LessonData;
 use App\Modules\Horarios\Domain\ValueObjects\ScheduleData;
 use App\Modules\Horarios\Domain\ValueObjects\TimeSlot;
@@ -264,6 +266,166 @@ it('skips expensive initial repair when candidate is clearly out of strict hard-
 
     expect($shouldSkipStrict)->toBeTrue()
         ->and($shouldSkipRelaxed)->toBeFalse();
+});
+
+it('skips expensive initial repair for custom-heavy candidates with no structural escape signals', function (): void {
+    $repairOperator = new GreedyRepairOperator([
+        new CustomConstraintRepairExtension(),
+    ]);
+
+    $problem = makeScheduleProblemFromData(
+        makeCustomHeavyScheduleData(),
+        hardPenalty: 90.0,
+        softPenalty: 2.0,
+        repairOperator: $repairOperator,
+    );
+
+    scheduleProblemSetPrivate($problem, 'cachedDiagnostics', [
+        'constraint_risk_contribution' => 40,
+    ]);
+
+    $candidate = new Cromossomo(makeCustomHeavyCandidateGenes());
+
+    $shouldSkip = scheduleProblemInvokePrivate($problem, 'shouldSkipInitialQualityGateRepair', [[
+        'hard_penalty' => 90.0,
+        'max_hard_penalty' => 30.0,
+        'hard_conflict_allocations' => 0,
+    ], 3, $candidate, [
+        'hard_conflict_allocations' => 0,
+    ]]);
+
+    expect($shouldSkip)->toBeTrue();
+});
+
+it('learns custom-only dead-end repair fingerprints for future quality gate skips', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+    );
+
+    scheduleProblemInvokePrivate($problem, 'rememberInitialRepairDeadEnd', [[
+        'aborted' => true,
+        'abort_reason' => 'time_budget_exhausted',
+        'passes_without_progress' => 0,
+        'invalid_genes_before' => 14,
+        'invalid_genes_after' => 14,
+        'relocations' => 0,
+        'swaps' => 0,
+        'local_rebuilds' => 0,
+        'repair_target_summary_before' => [
+            'custom_sync_same_timeslot' => 12,
+            'custom_mutual_exclusion' => 2,
+        ],
+    ]]);
+
+    $knownDeadEnd = scheduleProblemInvokePrivate($problem, 'isKnownInitialRepairDeadEnd', [[
+        'invalid_genes' => 14,
+        'repair_target_summary' => [
+            'custom_mutual_exclusion' => 2,
+            'custom_sync_same_timeslot' => 12,
+        ],
+    ]]);
+
+    $differentPattern = scheduleProblemInvokePrivate($problem, 'isKnownInitialRepairDeadEnd', [[
+        'invalid_genes' => 13,
+        'repair_target_summary' => [
+            'custom_mutual_exclusion' => 2,
+            'custom_sync_same_timeslot' => 11,
+        ],
+    ]]);
+
+    expect($knownDeadEnd)->toBeTrue()
+        ->and($differentPattern)->toBeFalse();
+});
+
+it('marks the initial construction attempt as timed out when the total budget is already exhausted', function (): void {
+    $problem = makeScheduleProblem(
+        hardPenalty: 0.0,
+        softPenalty: 1.0,
+        lessonCount: 1,
+        slotCount: 1,
+    );
+
+    $queue = scheduleProblemInvokePrivate($problem, 'buildPlacementQueue');
+    $assignedGenes = [];
+    $teacherBusy = [];
+    $classBusy = [];
+    $telemetry = [
+        'attempt' => 1,
+        'alpha' => 0.3,
+        'queue_size' => count($queue),
+        'allocations' => 0,
+        'forced_allocations' => 0,
+        'hard_conflict_allocations' => 0,
+        'dynamic_reorders' => 0,
+        'regret_selections' => 0,
+        'attempt_limit' => 1,
+        'attempt_started_at' => microtime(true),
+        'attempt_time_budget_ms' => 1,
+        'timed_out' => false,
+        'rcl_sizes' => [],
+        'constructor_strategy' => 'difficulty_default',
+        'constructor_reason' => 'test',
+    ];
+    $args = [$queue, 0.3, &$assignedGenes, &$teacherBusy, &$classBusy, &$telemetry];
+
+    scheduleProblemSetPrivate($problem, 'activeInitialConstructionTimeBudgetMs', 1);
+    scheduleProblemSetPrivate($problem, 'activeInitialConstructionDeadlineAt', microtime(true) - 1);
+
+    $constructed = scheduleProblemInvokePrivate($problem, 'constructWithGrasp', $args);
+
+    expect($constructed)->toBeFalse()
+        ->and($assignedGenes)->toBeEmpty()
+        ->and($telemetry['timed_out'])->toBeTrue()
+        ->and(scheduleProblemGetPrivate($problem, 'lastBuildFailure'))->toContain('budget total');
+});
+
+it('prioritizes synchronization-constrained lessons first and then higher professor pressure', function (): void {
+    $data = makeSyncPriorityScheduleData();
+    $problem = makeScheduleProblemFromData($data);
+    $queue = [
+        ['lesson' => $data->lessons[3], 'occurrence' => 1, 'candidate_count' => 4],
+        ['lesson' => $data->lessons[2], 'occurrence' => 1, 'candidate_count' => 4],
+        ['lesson' => $data->lessons[4], 'occurrence' => 1, 'candidate_count' => 4],
+        ['lesson' => $data->lessons[1], 'occurrence' => 1, 'candidate_count' => 2],
+    ];
+
+    $reordered = scheduleProblemInvokePrivate($problem, 'reorderQueueSyncConstraintsFirst', [$queue]);
+    $orderedLessonIds = array_map(
+        static fn (array $task): int => $task['lesson']->id,
+        $reordered,
+    );
+
+    expect($orderedLessonIds[0])->toBe(1)
+        ->and($orderedLessonIds[1])->toBe(2)
+        ->and(scheduleProblemInvokePrivate($problem, 'syncConstraintPriorityForLesson', [1]))->toBeGreaterThan(0.0)
+        ->and(scheduleProblemInvokePrivate($problem, 'syncConstraintPriorityForLesson', [3]))->toBe(0.0);
+});
+
+it('creates a sync hybrid seed candidate that keeps synchronized lessons in the same slot', function (): void {
+    config()->set('ag.initial_population.sync_hybrid_seed.enabled', true);
+    config()->set('ag.initial_population.sync_hybrid_seed.min_sync_constraints', 1);
+    config()->set('ag.initial_population.sync_hybrid_seed.min_queue_size', 1);
+    config()->set('ag.initial_population.sync_hybrid_seed.max_units', 6);
+
+    $data = makeCustomHeavyScheduleData();
+    $problem = makeScheduleProblemFromData($data);
+    $queue = scheduleProblemInvokePrivate($problem, 'buildPlacementQueue');
+    $candidate = scheduleProblemInvokePrivate($problem, 'tryCreateIndividualFromSyncHybridSeed', [$queue]);
+
+    expect($candidate)->toBeInstanceOf(Cromossomo::class)
+        ->and($candidate->count())->toBe(count($data->lessons));
+
+    $genesByLesson = [];
+
+    foreach ($candidate->genes() as $gene) {
+        $genesByLesson[$gene->aulaId()] = $gene;
+    }
+
+    expect($genesByLesson[1]->diaSemana())->toBe($genesByLesson[2]->diaSemana())
+        ->and($genesByLesson[1]->periodoDia())->toBe($genesByLesson[2]->periodoDia())
+        ->and($genesByLesson[3]->diaSemana())->toBe($genesByLesson[4]->diaSemana())
+        ->and($genesByLesson[3]->periodoDia())->toBe($genesByLesson[4]->periodoDia());
 });
 
 it('publishes alpha policy, reason and impact in grasp telemetry', function (): void {
@@ -690,7 +852,12 @@ function makeDenseConflictScheduleProblem(
     );
 }
 
-function makeScheduleProblemFromData(ScheduleData $data, float $hardPenalty = 0.0, float $softPenalty = 0.0): ScheduleProblem
+function makeScheduleProblemFromData(
+    ScheduleData $data,
+    float $hardPenalty = 0.0,
+    float $softPenalty = 0.0,
+    ?GreedyRepairOperator $repairOperator = null,
+): ScheduleProblem
 {
     $fitnessEvaluator = new FitnessEvaluator(
         weights: new FitnessWeights(),
@@ -704,7 +871,7 @@ function makeScheduleProblemFromData(ScheduleData $data, float $hardPenalty = 0.
         data: $data,
         contextBuilder: new EvaluationContextBuilder(),
         fitnessEvaluator: $fitnessEvaluator,
-        repairOperator: new GreedyRepairOperator(),
+        repairOperator: $repairOperator ?? new GreedyRepairOperator(),
         progress: null,
     );
 }
@@ -782,6 +949,231 @@ function makeScheduleDataForDynamicQueueSignals(
     );
 }
 
+function makeSyncPriorityScheduleData(): ScheduleData
+{
+    $lessons = [
+        1 => new LessonData(
+            id: 1,
+            professorId: 10,
+            classId: 20,
+            disciplinaId: 31,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        ),
+        2 => new LessonData(
+            id: 2,
+            professorId: 11,
+            classId: 21,
+            disciplinaId: 32,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        ),
+        3 => new LessonData(
+            id: 3,
+            professorId: 10,
+            classId: 22,
+            disciplinaId: 33,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        ),
+        4 => new LessonData(
+            id: 4,
+            professorId: 10,
+            classId: 23,
+            disciplinaId: 34,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        ),
+    ];
+
+    return new ScheduleData(
+        lessons: $lessons,
+        professors: [],
+        classes: [],
+        timeSlots: [
+            1 => new TimeSlot(1, 1, 1),
+            2 => new TimeSlot(2, 1, 2),
+            3 => new TimeSlot(3, 1, 3),
+            4 => new TimeSlot(4, 1, 4),
+        ],
+        restrictions: [],
+        lessonsByProfessor: [
+            10 => [1, 3, 4],
+            11 => [2],
+        ],
+        lessonsByClass: [
+            20 => [1],
+            21 => [2],
+            22 => [3],
+            23 => [4],
+        ],
+        restrictionsByProfessor: [],
+        restrictionsByClass: [],
+        expectedLoadByLesson: [
+            1 => 1,
+            2 => 1,
+            3 => 1,
+            4 => 1,
+        ],
+        availableSlotsByProfessor: [
+            10 => [1, 2, 3, 4],
+            11 => [1, 2, 3, 4],
+        ],
+        availableSlotsByClass: [
+            20 => [1, 2],
+            21 => [1, 2, 3, 4],
+            22 => [1, 2, 3, 4],
+            23 => [1, 2, 3, 4],
+        ],
+        totalTimeSlots: 4,
+        totalLessons: 4,
+        totalProfessors: 2,
+        totalClasses: 4,
+        customConstraints: [
+            new CustomConstraintData(
+                id: 1,
+                name: 'Sync pair 1',
+                description: null,
+                type: 'SYNC_SAME_TIMESLOT',
+                level: 'HARD',
+                weight: 1,
+                isActive: true,
+                payload: [
+                    'left_group' => ['lesson_ids' => [1]],
+                    'right_group' => ['lesson_ids' => [2]],
+                    'occurrence_mode' => 'ALL',
+                    'match_mode' => 'ALL_TO_ALL',
+                ],
+            ),
+        ],
+    );
+}
+
+function makeCustomHeavyScheduleData(): ScheduleData
+{
+    $lessons = [];
+    $timeSlots = [
+        1 => new TimeSlot(1, 1, 1),
+        2 => new TimeSlot(2, 1, 2),
+    ];
+    $availableProfessor = [];
+    $availableClass = [];
+    $lessonsByProfessor = [];
+    $lessonsByClass = [];
+    $expectedLoadByLesson = [];
+    $customConstraints = [];
+
+    for ($pair = 1; $pair <= 6; $pair++) {
+        $leftLessonId = (($pair - 1) * 2) + 1;
+        $rightLessonId = $leftLessonId + 1;
+        $leftProfessorId = 100 + $leftLessonId;
+        $rightProfessorId = 100 + $rightLessonId;
+        $leftClassId = 200 + $leftLessonId;
+        $rightClassId = 200 + $rightLessonId;
+
+        $lessons[$leftLessonId] = new LessonData(
+            id: $leftLessonId,
+            professorId: $leftProfessorId,
+            classId: $leftClassId,
+            disciplinaId: 300 + $leftLessonId,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        );
+        $lessons[$rightLessonId] = new LessonData(
+            id: $rightLessonId,
+            professorId: $rightProfessorId,
+            classId: $rightClassId,
+            disciplinaId: 300 + $rightLessonId,
+            requiredSlots: 1,
+            weeklyOccurrences: 1,
+            requiresConsecutive: false,
+        );
+
+        $availableProfessor[$leftProfessorId] = [1, 2];
+        $availableProfessor[$rightProfessorId] = [1, 2];
+        $availableClass[$leftClassId] = [1, 2];
+        $availableClass[$rightClassId] = [1, 2];
+        $lessonsByProfessor[$leftProfessorId] = [$leftLessonId];
+        $lessonsByProfessor[$rightProfessorId] = [$rightLessonId];
+        $lessonsByClass[$leftClassId] = [$leftLessonId];
+        $lessonsByClass[$rightClassId] = [$rightLessonId];
+        $expectedLoadByLesson[$leftClassId] = 1;
+        $expectedLoadByLesson[$rightClassId] = 1;
+
+        $customConstraints[] = new CustomConstraintData(
+            id: $pair,
+            name: "Sync pair {$pair}",
+            description: null,
+            type: 'SYNC_SAME_TIMESLOT',
+            level: 'HARD',
+            weight: 1,
+            isActive: true,
+            payload: [
+                'left_group' => ['lesson_ids' => [$leftLessonId]],
+                'right_group' => ['lesson_ids' => [$rightLessonId]],
+                'occurrence_mode' => 'ALL',
+                'match_mode' => 'ALL_TO_ALL',
+            ],
+        );
+    }
+
+    return new ScheduleData(
+        lessons: $lessons,
+        professors: [],
+        classes: [],
+        timeSlots: $timeSlots,
+        restrictions: [],
+        lessonsByProfessor: $lessonsByProfessor,
+        lessonsByClass: $lessonsByClass,
+        restrictionsByProfessor: [],
+        restrictionsByClass: [],
+        expectedLoadByLesson: $expectedLoadByLesson,
+        availableSlotsByProfessor: $availableProfessor,
+        availableSlotsByClass: $availableClass,
+        totalTimeSlots: count($timeSlots),
+        totalLessons: count($lessons),
+        totalProfessors: count($lessonsByProfessor),
+        totalClasses: count($lessonsByClass),
+        customConstraints: $customConstraints,
+    );
+}
+
+function makeCustomHeavyCandidateGenes(): array
+{
+    $genes = [];
+
+    for ($pair = 1; $pair <= 6; $pair++) {
+        $leftLessonId = (($pair - 1) * 2) + 1;
+        $rightLessonId = $leftLessonId + 1;
+
+        $genes[] = new Gene(
+            aulaId: $leftLessonId,
+            professorId: 100 + $leftLessonId,
+            turmaId: 200 + $leftLessonId,
+            disciplinaId: 300 + $leftLessonId,
+            diaSemana: 1,
+            periodoDia: 1,
+            duracaoTempos: 1,
+        );
+        $genes[] = new Gene(
+            aulaId: $rightLessonId,
+            professorId: 100 + $rightLessonId,
+            turmaId: 200 + $rightLessonId,
+            disciplinaId: 300 + $rightLessonId,
+            diaSemana: 1,
+            periodoDia: 2,
+            duracaoTempos: 1,
+        );
+    }
+
+    return $genes;
+}
+
 function scheduleProblemInvokePrivate(ScheduleProblem $problem, string $method, array $args = []): mixed
 {
     $reflection = new ReflectionMethod(ScheduleProblem::class, $method);
@@ -795,6 +1187,14 @@ function scheduleProblemSetPrivate(ScheduleProblem $problem, string $property, m
     $reflection = new ReflectionProperty(ScheduleProblem::class, $property);
     $reflection->setAccessible(true);
     $reflection->setValue($problem, $value);
+}
+
+function scheduleProblemGetPrivate(ScheduleProblem $problem, string $property): mixed
+{
+    $reflection = new ReflectionProperty(ScheduleProblem::class, $property);
+    $reflection->setAccessible(true);
+
+    return $reflection->getValue($problem);
 }
 
 function makeScheduleProblemProgressSpy(): object

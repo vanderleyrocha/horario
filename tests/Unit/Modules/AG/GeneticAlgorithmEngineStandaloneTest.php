@@ -13,7 +13,11 @@ use App\Modules\AG\Domain\Intensification\LNS\ALNS\OperatorSelectionStrategy;
 use App\Modules\AG\Domain\Intensification\LNS\Destroy\DestroyOperatorInterface;
 use App\Modules\AG\Domain\Intensification\LNS\DTO\PartialSolution;
 use App\Modules\AG\Domain\Intensification\LNS\Repair\RepairOperatorInterface;
+use App\Modules\AG\Domain\Landscape\LandscapeAnalyzer;
+use App\Modules\AG\Domain\Landscape\LandscapeDetector;
 use App\Modules\AG\Domain\Landscape\LandscapeEngine;
+use App\Modules\AG\Domain\Landscape\LandscapeMemory;
+use App\Modules\AG\Domain\Landscape\LandscapeResponseStrategy;
 use App\Modules\AG\Domain\Metrics\GeneticDistance;
 use App\Modules\AG\Domain\Metrics\MetricsRecorder;
 use App\Modules\AG\Domain\Operators\Adaptive\AdaptiveMutationController;
@@ -128,7 +132,7 @@ it('publishes the same structured progress payload for the frontend through the 
         ->values()
         ->all();
 
-    expect($progress->reports)->toHaveCount(4)
+    expect(count($progress->reports))->toBeGreaterThanOrEqual(4)
         ->and($generationReport)->toBeArray()
         ->and($generationReport)->toMatchArray([
             'phase' => 'evolution',
@@ -145,6 +149,79 @@ it('publishes the same structured progress payload for the frontend through the 
             'entropy',
         ])
         ->and($operationalStages)->toContain('generation_started', 'evaluating_population');
+});
+
+it('publishes evaluation watchdog substages while finalizing a generation in standalone mode', function (): void {
+    $progress = makeCollectingProgressReporter();
+    $engine = makeStandaloneEngine(
+        problem: makeStandaloneFakeProblem(),
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        progress: $progress,
+    );
+
+    $engine->run(4);
+
+    $evaluationSubstages = collect($progress->reports)
+        ->filter(fn (array $payload): bool => ($payload['stage'] ?? null) === 'evaluating_population')
+        ->pluck('evaluation_substage')
+        ->filter()
+        ->values()
+        ->all();
+
+    expect($evaluationSubstages)->toContain(
+        'trajectory_signals_started',
+        'trajectory_signals_completed',
+        'post_process_started',
+        'post_process_completed',
+    );
+});
+
+it('publishes island evaluation watchdog substages while completing evolveGeneration', function (): void {
+    $progress = makeCollectingProgressReporter();
+    $problem = makeStandaloneFakeProblem();
+    $engine = makeStandaloneEngine(
+        problem: $problem,
+        mutation: makeCountingMutationOperator(),
+        termination: makeStandaloneTerminationCriterion(maxGenerationExclusive: 1),
+        progress: $progress,
+        landscapeEngine: new LandscapeEngine(
+            new LandscapeAnalyzer(),
+            new LandscapeDetector(),
+            new LandscapeResponseStrategy(),
+            new LandscapeMemory(),
+        ),
+    );
+
+    $population = [
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+        $problem->createIndividual(),
+    ];
+
+    (new PopulationFitnessEvaluator($problem))->evaluate($population);
+
+    $engine->evolveGeneration($population, 4);
+
+    $evaluationSubstages = collect($progress->reports)
+        ->filter(fn (array $payload): bool => ($payload['stage'] ?? null) === 'evaluating_population')
+        ->pluck('evaluation_substage')
+        ->filter()
+        ->values()
+        ->all();
+
+    expect($evaluationSubstages)->toContain(
+        'trajectory_signals_started',
+        'trajectory_signals_completed',
+        'generation_step_completed',
+        'local_metrics_recording_started',
+        'local_metrics_recorded',
+        'landscape_evaluation_started',
+        'landscape_evaluation_completed',
+        'trigger_resolution_completed',
+        'evolution_generation_completed',
+    );
 });
 
 it('logs the current long-running operation when a generation stage exceeds five minutes', function (): void {
@@ -206,7 +283,8 @@ it('triggers alns adaptively in short runs and publishes trigger telemetry', fun
 
     $alnsReports = array_values(array_filter(
         $progress->reports,
-        static fn (array $payload): bool => ($payload['alns_triggered'] ?? false) === true,
+        static fn (array $payload): bool => ($payload['alns_triggered'] ?? false) === true
+            && ($payload['alns_trigger_reason'] ?? null) !== null,
     ));
 
     expect($alnsReports)->not->toBeEmpty()

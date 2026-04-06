@@ -1,0 +1,22 @@
+Diagnóstico: o problema não era do projeto, e sim da instalação da extensão Blade.
+
+O erro repetido indica isso:
+
+O módulo typescript estava instalado, mas incompleto.
+O package.json dele apontava para lib/typescript.js.
+Esse arquivo realmente não existia, então o LSP entrava em crash loop e reinício contínuo.
+O que foi validado e corrigido agora:
+
+Confirmei ausência de typescript.js e presença de package.json.
+Reinstalei o pacote TypeScript esperado pela extensão (2.7.1), restaurando o arquivo ausente.
+Testei a inicialização direta do servidor da extensão com Node, sem novo MODULE_NOT_FOUND.
+Como melhorar para não voltar:
+
+Recarregue a janela do VS Code: Developer: Reload Window.
+Se o erro voltar, faça reinstalação limpa da extensão:
+code --uninstall-extension onecentlin.laravel-blade
+apague a pasta da extensão em .vscode/extensions
+code --install-extension onecentlin.laravel-blade
+Adicione exceção no antivírus para a pasta .vscode/extensions, porque esse padrão costuma ser arquivo removido/quarentenado após update.
+Se persistir mesmo limpa, migre para outra extensão Blade mais ativa, porque essa versão usa TypeScript bem antigo e tende a quebrar em ambientes novos.
+Se quiser, eu já te passo um checklist de 2 minutos para confirmar no Output do VS Code se o servidor estabilizou (sem restart loop).

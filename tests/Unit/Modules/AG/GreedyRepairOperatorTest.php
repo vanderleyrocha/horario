@@ -145,6 +145,43 @@ it('aborts the repair early when no progress is made under an explicit no-progre
         ->and($events)->toContain('repair_aborted');
 });
 
+it('honors the time budget even when a single relocation search becomes expensive', function (): void {
+    $chromosome = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+        new Gene(2, 1, 2, 1, 1, 1, 1),
+    ]);
+
+    $events = [];
+    $repair = new GreedyRepairOperator();
+
+    $repair->repair(
+        $chromosome,
+        makeRelocationScheduleData(),
+        static function (): array {
+            usleep(20_000);
+
+            return [
+                'hard_penalty' => 20.0,
+                'soft_penalty' => 0.0,
+                'score' => 0.0,
+            ];
+        },
+        function (array $payload) use (&$events): void {
+            $events[] = $payload['event'] ?? null;
+        },
+        [
+            'max_millis' => 5,
+        ],
+    );
+
+    $telemetry = $repair->lastTelemetry();
+
+    expect($telemetry['aborted'])->toBeTrue()
+        ->and($telemetry['abort_reason'])->toBe('time_budget_exhausted')
+        ->and($telemetry['time_budget_ms'])->toBe(5)
+        ->and($events)->toContain('repair_aborted');
+});
+
 it('allows repair extensions to add targets and restrict candidate slots', function (): void {
     $chromosome = new Cromossomo([
         new Gene(1, 1, 1, 1, 1, 1, 1),

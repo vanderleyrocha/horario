@@ -17,6 +17,7 @@ return [
         'nogoods_signature_enabled' => env('AG_NOGOODS_SIGNATURE_ENABLED', true),
         'nogoods_signature_cache_ttl_days' => (int) env('AG_NOGOODS_SIGNATURE_CACHE_TTL_DAYS', 7),
         'nogoods_signature_max_entries_per_type' => (int) env('AG_NOGOODS_SIGNATURE_MAX_ENTRIES_PER_TYPE', 500),
+        'grasp_attempt_time_budget_ms' => (int) env('AG_GRASP_ATTEMPT_TIME_BUDGET_MS', 480000),
         // Piloto de construção paralela: cria indivíduos da população inicial em paralelo.
         // O primeiro indivíduo é sempre construído de forma serial (preserva aprendizado de nogoods).
         // Os demais são construídos em paralelo com instâncias isoladas do problema.
@@ -24,6 +25,12 @@ return [
         'parallel_construction_enabled' => env('AG_PARALLEL_CONSTRUCTION_ENABLED', false),
         'parallel_construction_workers' => (int) env('AG_PARALLEL_CONSTRUCTION_WORKERS', 4),
         'parallel_construction_timeout_seconds' => (int) env('AG_PARALLEL_CONSTRUCTION_TIMEOUT_SECONDS', 60),
+        'sync_hybrid_seed' => [
+            'enabled' => env('AG_SYNC_HYBRID_SEED_ENABLED', true),
+            'min_sync_constraints' => (int) env('AG_SYNC_HYBRID_MIN_SYNC_CONSTRAINTS', 3),
+            'min_queue_size' => (int) env('AG_SYNC_HYBRID_MIN_QUEUE_SIZE', 12),
+            'max_units' => (int) env('AG_SYNC_HYBRID_MAX_UNITS', 12),
+        ],
         'hybrid_cp_assignment' => [
             'enabled' => env('AG_HYBRID_CP_ASSIGNMENT_ENABLED', true),
             'min_quality_gate_rejections' => (int) env('AG_HYBRID_CP_MIN_QG_REJECTIONS', 2),
@@ -57,6 +64,11 @@ return [
         'cooldown_brake_negative_improvement' => (float) env('AG_ALNS_COOLDOWN_BRAKE_NEGATIVE_IMPROVEMENT', -5.0),
         'cooldown_brake_extra_generations_low_return' => (int) env('AG_ALNS_COOLDOWN_BRAKE_EXTRA_GENERATIONS_LOW_RETURN', 2),
         'cooldown_brake_extra_generations_negative_return' => (int) env('AG_ALNS_COOLDOWN_BRAKE_EXTRA_GENERATIONS_NEGATIVE_RETURN', 3),
+    ],
+    'alns_step' => [
+        // Timeout máximo por passo ALNS (destroy + repair + evaluate).
+        // Evita bloquear a fase de evaluating_population por longos períodos sem checkpoint.
+        'max_millis' => (int) env('AG_ALNS_STEP_MAX_MILLIS', 15000),
     ],
     'stagnation_policy' => [
         'enabled' => env('AG_STAGNATION_POLICY_ENABLED', true),

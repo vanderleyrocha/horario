@@ -29,6 +29,18 @@ final class GreedyRepairOperator
      */
     private $activeFitnessProbe = null;
 
+    private ?float $activeDeadlineAt = null;
+
+    private bool $activeTimeBudgetExceeded = false;
+
+    /**
+     * Cache local de fitness por assinatura para evitar reavaliações repetidas
+     * durante o ranking de candidatos no mesmo ciclo de repair.
+     *
+     * @var array<string, array<string, float|null>>
+     */
+    private array $repairRankingFitnessCache = [];
+
     /**
      * @var array<int, RepairHeuristicExtension>
      */
@@ -51,23 +63,25 @@ final class GreedyRepairOperator
     ): Cromossomo {
         $this->activeData = $data;
         $this->activeFitnessProbe = $fitnessProbe;
+        $this->activeTimeBudgetExceeded = false;
+        $this->repairRankingFitnessCache = [];
 
         try {
             $child = $chromosome->copy();
             $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
             $startedAt = microtime(true);
             $maxMillis = isset($limits['max_millis']) ? max(1, (int) $limits['max_millis']) : null;
+            $this->activeDeadlineAt = $maxMillis !== null
+                ? $startedAt + ($maxMillis / 1000)
+                : null;
             $maxPassesWithoutProgress = isset($limits['max_passes_without_progress'])
                 ? max(1, (int) $limits['max_passes_without_progress'])
                 : null;
             $passesWithoutProgress = 0;
 
             for ($pass = 1; $pass <= self::MAX_PASSES; $pass++) {
-                if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
-                    $this->lastTelemetry['aborted'] = true;
-                    $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
-                    $this->lastTelemetry['time_budget_ms'] = $maxMillis;
-                    $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
+                if ($this->deadlineExceeded()) {
+                    $this->abortForTimeBudget($progressHeartbeat, $pass, $maxMillis, $passesWithoutProgress);
                     break;
                 }
 
@@ -83,11 +97,8 @@ final class GreedyRepairOperator
                 $processedInvalidGenes = 0;
 
                 foreach ($repairTargets as $target) {
-                    if ($this->timeBudgetExceeded($startedAt, $maxMillis)) {
-                        $this->lastTelemetry['aborted'] = true;
-                        $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
-                        $this->lastTelemetry['time_budget_ms'] = $maxMillis;
-                        $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $maxMillis, $passesWithoutProgress);
+                    if ($this->deadlineExceeded()) {
+                        $this->abortForTimeBudget($progressHeartbeat, $pass, $maxMillis, $passesWithoutProgress);
                         break 2;
                     }
 
@@ -104,6 +115,11 @@ final class GreedyRepairOperator
 
                     $candidate = $this->attemptRelocation($child, $index, $data, $target['violations'] ?? []);
 
+                    if ($this->deadlineExceeded()) {
+                        $this->abortForTimeBudget($progressHeartbeat, $pass, $maxMillis, $passesWithoutProgress);
+                        break 2;
+                    }
+
                     if ($candidate !== null) {
                         $child = $candidate;
                         $passTelemetry['relocations']++;
@@ -114,6 +130,11 @@ final class GreedyRepairOperator
 
                     $candidate = $this->attemptSwap($child, $index, $data, $target['violations'] ?? []);
 
+                    if ($this->deadlineExceeded()) {
+                        $this->abortForTimeBudget($progressHeartbeat, $pass, $maxMillis, $passesWithoutProgress);
+                        break 2;
+                    }
+
                     if ($candidate !== null) {
                         $child = $candidate;
                         $passTelemetry['swaps']++;
@@ -123,6 +144,11 @@ final class GreedyRepairOperator
                     }
 
                     $candidate = $this->attemptLocalRebuild($child, $index, $data, $target['violations'] ?? []);
+
+                    if ($this->deadlineExceeded()) {
+                        $this->abortForTimeBudget($progressHeartbeat, $pass, $maxMillis, $passesWithoutProgress);
+                        break 2;
+                    }
 
                     if ($candidate !== null) {
                         $child = $candidate;
@@ -173,6 +199,57 @@ final class GreedyRepairOperator
         } finally {
             $this->activeData = null;
             $this->activeFitnessProbe = null;
+            $this->activeDeadlineAt = null;
+            $this->activeTimeBudgetExceeded = false;
+            $this->repairRankingFitnessCache = [];
+        }
+    }
+
+    /**
+     * @return array{
+     *     invalid_genes: int,
+     *     repair_target_summary: array<string, int>,
+     *     structural_violations: int,
+     *     custom_violations: int,
+     *     custom_only: bool
+     * }
+     */
+    public function inspectTargets(Cromossomo $chromosome, ScheduleData $data): array
+    {
+        $previousData = $this->activeData;
+        $previousFitnessProbe = $this->activeFitnessProbe;
+        $previousDeadlineAt = $this->activeDeadlineAt;
+        $previousBudgetExceeded = $this->activeTimeBudgetExceeded;
+
+        try {
+            $this->activeData = $data;
+            $this->activeFitnessProbe = null;
+            $this->activeDeadlineAt = null;
+            $this->activeTimeBudgetExceeded = false;
+
+            $targets = $this->prioritizeRepairTargets($chromosome);
+            $summary = $this->summarizeRepairTargets($targets);
+            $structuralViolations = (int) ($summary['overlap'] ?? 0) + (int) ($summary['mandatory_block'] ?? 0);
+            $customViolations = 0;
+
+            foreach ($summary as $type => $count) {
+                if (str_starts_with((string) $type, 'custom_')) {
+                    $customViolations += (int) $count;
+                }
+            }
+
+            return [
+                'invalid_genes' => count($targets),
+                'repair_target_summary' => $summary,
+                'structural_violations' => $structuralViolations,
+                'custom_violations' => $customViolations,
+                'custom_only' => count($targets) > 0 && $structuralViolations === 0 && $customViolations > 0,
+            ];
+        } finally {
+            $this->activeData = $previousData;
+            $this->activeFitnessProbe = $previousFitnessProbe;
+            $this->activeDeadlineAt = $previousDeadlineAt;
+            $this->activeTimeBudgetExceeded = $previousBudgetExceeded;
         }
     }
 
@@ -409,6 +486,10 @@ final class GreedyRepairOperator
         $bestRanking = null;
 
         foreach ($genes as $targetIndex => $targetGene) {
+            if ($this->deadlineExceeded()) {
+                return null;
+            }
+
             if ($targetIndex === $sourceGeneIndex) {
                 continue;
             }
@@ -482,6 +563,10 @@ final class GreedyRepairOperator
         $remainingIndexes = $orderedNeighborhood;
 
         foreach ($orderedNeighborhood as $geneIndex) {
+            if ($this->deadlineExceeded()) {
+                return null;
+            }
+
             $gene = $working->genes()[$geneIndex];
             $ignoredIndexes = array_values(array_diff($remainingIndexes, [$geneIndex]));
             $candidate = $this->findBestRelocation(
@@ -534,6 +619,10 @@ final class GreedyRepairOperator
         $turmaIndex = $chromosome->turmaPeriodoIndex();
 
         foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            if ($this->deadlineExceeded()) {
+                break;
+            }
+
             $slot = $data->timeSlots[$slotId] ?? null;
 
             if ($slot === null) {
@@ -575,6 +664,10 @@ final class GreedyRepairOperator
         $baselineRanking = $this->buildRepairRanking($chromosome, $gene, $sourceGeneIndex, $violationTypes);
 
         foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            if ($this->deadlineExceeded()) {
+                break;
+            }
+
             $slot = $data->timeSlots[$slotId] ?? null;
 
             if ($slot === null) {
@@ -682,7 +775,13 @@ final class GreedyRepairOperator
      */
     private function buildRepairRanking(Cromossomo $chromosome, Gene $candidate, int $sourceGeneIndex, array $violationTypes): array
     {
-        $fitness = $this->probeFitness($chromosome, $this->activeFitnessProbe);
+        $signature = $chromosome->signature();
+
+        if (! isset($this->repairRankingFitnessCache[$signature])) {
+            $this->repairRankingFitnessCache[$signature] = $this->probeFitness($chromosome, $this->activeFitnessProbe);
+        }
+
+        $fitness = $this->repairRankingFitnessCache[$signature];
         $hardPenalty = $fitness['hard_penalty'] ?? INF;
         $softPenalty = $fitness['soft_penalty'] ?? INF;
         $remainingViolations = $this->countRemainingTargetViolations($chromosome, $sourceGeneIndex, $violationTypes);
@@ -1118,6 +1217,35 @@ final class GreedyRepairOperator
             'time_budget_ms' => $timeBudgetMs,
             'passes_without_progress' => $passesWithoutProgress,
         ]);
+    }
+
+    private function abortForTimeBudget(
+        ?callable $progressHeartbeat,
+        int $pass,
+        ?int $timeBudgetMs,
+        int $passesWithoutProgress,
+    ): void {
+        $this->lastTelemetry['aborted'] = true;
+        $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
+        $this->lastTelemetry['time_budget_ms'] = $timeBudgetMs;
+        $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $timeBudgetMs, $passesWithoutProgress);
+    }
+
+    private function deadlineExceeded(): bool
+    {
+        if ($this->activeDeadlineAt === null) {
+            return false;
+        }
+
+        if ($this->activeTimeBudgetExceeded) {
+            return true;
+        }
+
+        if (microtime(true) >= $this->activeDeadlineAt) {
+            $this->activeTimeBudgetExceeded = true;
+        }
+
+        return $this->activeTimeBudgetExceeded;
     }
 
     private function timeBudgetExceeded(float $startedAt, ?int $maxMillis): bool

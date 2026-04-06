@@ -462,3 +462,56 @@ it('publica o encerramento terminal da execucao no cache especifico da execucao'
         ->and($progress['reason'] ?? null)->toBe('A populacao inicial acumulou conflitos hard demais.')
         ->and($progress['initial_population_bottlenecks']['fail_fast_count'] ?? null)->toBe(6);
 });
+
+it('touches the execution heartbeat for incomplete evaluation watchdog payloads', function () {
+    $horario = Horario::factory()->create();
+
+    $recorder = new ExecutionMetricsRecorder;
+    $executionId = $recorder->startExecution(
+        horarioId: $horario->id,
+        populationSize: 60,
+        generations: 20,
+        parameters: ['populacao' => 60, 'geracoes' => 20]
+    );
+
+    DB::table('schedule_executions')
+        ->where('id', $executionId)
+        ->update([
+            'updated_at' => now()->subMinute(),
+        ]);
+
+    $reporter = new CacheAndDbProgressReporter(
+        new CacheProgressReporter($horario->id),
+        $recorder,
+        app(GATelemetryLogger::class),
+        $horario->id
+    );
+
+    $reporter->report([
+        'phase' => 'evolution',
+        'stage' => 'finalizing_generation',
+        'generation' => 3,
+        'max_generations' => 20,
+        'current_operation' => 'finalizing_generation',
+        'operation_label' => 'Consolidando metricas globais da geracao',
+        'operation_elapsed_seconds' => 41,
+        'population_target' => 60,
+        'evaluation_substage' => 'metrics_recording_started',
+    ]);
+
+    $execution = DB::table('schedule_executions')
+        ->where('id', $executionId)
+        ->first();
+
+    $progress = Cache::get("ga_execution_progress_{$executionId}");
+
+    expect($execution)->not->toBeNull()
+        ->and($execution->updated_at)->not->toBeNull()
+        ->and($progress)->toBeArray()
+        ->and($progress['stage'] ?? null)->toBe('finalizing_generation')
+        ->and($progress['evaluation_substage'] ?? null)->toBe('metrics_recording_started')
+        ->and($progress['incomplete_generation_snapshot_count'] ?? null)->toBe(1);
+
+    expect(DB::table('schedule_generation_metrics')->where('execution_id', $executionId)->count())->toBe(0)
+        ->and(Cache::get("ga_execution_metrics_{$executionId}"))->toBeNull();
+});
