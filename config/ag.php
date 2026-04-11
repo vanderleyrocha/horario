@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'islands' => (int) env('AG_ISLANDS', 1),
+    'islands' => (int) env('AG_ISLANDS', 2),
     'migration_interval' => (int) env('AG_MIGRATION_INTERVAL', 5),
     'parallel_evaluation' => true,
     'parallel_evaluation_threshold' => (int) env('AG_PARALLEL_EVALUATION_THRESHOLD', 200),
@@ -69,6 +69,12 @@ return [
         // Timeout máximo por passo ALNS (destroy + repair + evaluate).
         // Evita bloquear a fase de evaluating_population por longos períodos sem checkpoint.
         'max_millis' => (int) env('AG_ALNS_STEP_MAX_MILLIS', 15000),
+    ],
+    'final_repair' => [
+        // Budget do reparo final executado após a última geração.
+        'max_millis' => (int) env('AG_FINAL_REPAIR_MAX_MILLIS', 12000),
+        'max_passes_without_progress' => (int) env('AG_FINAL_REPAIR_MAX_PASSES_WITHOUT_PROGRESS', 2),
+        'heartbeat_interval_seconds' => (int) env('AG_FINAL_REPAIR_HEARTBEAT_INTERVAL_SECONDS', 3),
     ],
     'stagnation_policy' => [
         'enabled' => env('AG_STAGNATION_POLICY_ENABLED', true),

@@ -50,4 +50,22 @@ class ScheduleGenerationMetric extends Model
     {
         return $this->belongsTo(ScheduleExecution::class, 'execution_id');
     }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function getScheduleExecutionIdAttribute(): ?int
+    {
+        $value = $this->getAttribute('execution_id');
+
+        return $value !== null ? (int) $value : null;
+    }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function setScheduleExecutionIdAttribute(mixed $value): void
+    {
+        $this->setAttribute('execution_id', $value);
+    }
 }

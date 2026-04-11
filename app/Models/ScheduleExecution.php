@@ -65,4 +65,36 @@ class ScheduleExecution extends Model
     {
         return $this->hasMany(Alocacao::class, 'execution_id');
     }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function getStartedAtAttribute(): mixed
+    {
+        return $this->getAttribute('start_time');
+    }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function setStartedAtAttribute(mixed $value): void
+    {
+        $this->setAttribute('start_time', $value);
+    }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function getFinishedAtAttribute(): mixed
+    {
+        return $this->getAttribute('end_time');
+    }
+
+    /**
+     * Compatibilidade com nomenclatura legada.
+     */
+    public function setFinishedAtAttribute(mixed $value): void
+    {
+        $this->setAttribute('end_time', $value);
+    }
 }

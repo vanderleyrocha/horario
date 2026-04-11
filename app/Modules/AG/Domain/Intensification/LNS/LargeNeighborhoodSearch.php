@@ -14,16 +14,16 @@ class LargeNeighborhoodSearch
 
     public function __construct(
         DestroyOperatorInterface $destroy,
-        RepairOperatorInterface $repair
+        RepairOperatorInterface $repair,
     ) {
         $this->destroy = $destroy;
         $this->repair = $repair;
     }
 
-    public function improve(Cromossomo $solution): Cromossomo
+    public function improve(Cromossomo $solution, array $context = []): Cromossomo
     {
         $partial = $this->destroy->destroy($solution);
 
-        return $this->repair->repair($partial);
+        return $this->repair->repair($partial, $context);
     }
 }

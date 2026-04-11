@@ -1036,9 +1036,48 @@ final class GeneticAlgorithmEngine
             'alns_timeout_ms' => $alnsTimeoutMs,
         ], true);
 
+        $remainingRepairBudgetMs = max(
+            1,
+            $alnsTimeoutMs - (int) round((microtime(true) - $stepStartedAt) * 1000),
+        );
+
+        $repairHeartbeat = function (array $heartbeatPayload) use ($emitWatchdog, $stepStartedAt, $alnsTimeoutMs): void {
+            $repairEvent = is_string($heartbeatPayload['event'] ?? null) && $heartbeatPayload['event'] !== ''
+                ? (string) $heartbeatPayload['event']
+                : 'progress';
+
+            $checkpoint = sprintf('inside_repair_%s', $repairEvent);
+            $this->assertAlnsStepNotTimedOut($stepStartedAt, $alnsTimeoutMs, $checkpoint);
+
+            $emitWatchdog('alns_repair_heartbeat', [
+                'alns_timeout_ms' => $alnsTimeoutMs,
+                'alns_elapsed_ms' => (int) round((microtime(true) - $stepStartedAt) * 1000),
+                'alns_repair_event' => $repairEvent,
+                'alns_repair_abort_reason' => $heartbeatPayload['abort_reason'] ?? null,
+                'alns_repair_pass' => $heartbeatPayload['pass'] ?? null,
+                'alns_repair_processed_invalid_genes' => $heartbeatPayload['processed_invalid_genes'] ?? null,
+                'alns_repair_total_invalid_genes' => $heartbeatPayload['total_invalid_genes'] ?? null,
+                'alns_repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
+                'alns_repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
+            ], in_array($repairEvent, ['repair_started', 'pass_started', 'pass_finished', 'repair_aborted'], true));
+        };
+
         $candidate = $this->lns->improve($current->copy(), [
             'trigger' => $triggerTelemetry,
             'landscape_observation' => $landscapeObservation,
+            'repair_context' => [
+                'abort_if_timed_out' => function (string $checkpoint = 'repair_progress') use ($stepStartedAt, $alnsTimeoutMs): void {
+                    $this->assertAlnsStepNotTimedOut(
+                        $stepStartedAt,
+                        $alnsTimeoutMs,
+                        sprintf('inside_repair_%s', $checkpoint),
+                    );
+                },
+                'progress_heartbeat' => $repairHeartbeat,
+                'limits' => [
+                    'max_millis' => $remainingRepairBudgetMs,
+                ],
+            ],
             // ✅ AÇÃO 04: Remover avaliação duplicada do callback
             // Problema: candidate era avaliado aqui e depois novamente abaixo
             // Solução: deixar apenas aqui a repair, sem evaluate

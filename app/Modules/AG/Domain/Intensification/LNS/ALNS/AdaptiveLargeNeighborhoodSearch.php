@@ -24,34 +24,34 @@ final class AdaptiveLargeNeighborhoodSearch
     private array $lastTelemetry = [];
 
     /**
-     * @param  DestroyOperatorInterface[]  $destroyOperators
-     * @param  RepairOperatorInterface[]  $repairOperators
+     * @param DestroyOperatorInterface[] $destroyOperators
+     * @param RepairOperatorInterface[] $repairOperators
      */
     public function __construct(
         private array $destroyOperators,
         private array $repairOperators,
-        private readonly ?OperatorSelectionStrategy $selector = null
+        private readonly ?OperatorSelectionStrategy $selector = null,
     ) {
         $this->scores = new OperatorScoreManager(
             $destroyOperators,
-            $repairOperators
+            $repairOperators,
         );
     }
 
     public function improve(Cromossomo $solution, array $context = []): Cromossomo
     {
-        $selector = $this->selector ?? new RouletteWheelSelector;
+        $selector = $this->selector ?? new RouletteWheelSelector();
 
         /** @var DestroyOperatorInterface $destroy */
         $destroy = $selector->select(
             $this->destroyOperators,
-            $this->scores->destroyStats()
+            $this->scores->destroyStats(),
         );
 
         /** @var RepairOperatorInterface $repair */
         $repair = $selector->select(
             $this->repairOperators,
-            $this->scores->repairStats()
+            $this->scores->repairStats(),
         );
 
         $profile = $this->resolveIntensityProfile($solution, $context);
@@ -59,7 +59,11 @@ final class AdaptiveLargeNeighborhoodSearch
         $this->scores->registerSelection($destroy, $repair);
 
         $partial = $destroy->destroy($solution);
-        $candidate = $repair->repair($partial);
+        $repairContext = is_array($context['repair_context'] ?? null)
+            ? $context['repair_context']
+            : [];
+
+        $candidate = $repair->repair($partial, $repairContext);
         $finalizeCandidate = $context['finalize_candidate'] ?? null;
 
         if (is_callable($finalizeCandidate)) {
@@ -196,7 +200,7 @@ final class AdaptiveLargeNeighborhoodSearch
     private function applyIntensityProfile(
         DestroyOperatorInterface $destroy,
         RepairOperatorInterface $repair,
-        array $profile
+        array $profile,
     ): void {
         if ($destroy instanceof AdaptiveDestroyOperatorInterface) {
             $destroy->configureDestroyIntensity((float) ($profile['intensity'] ?? 0.35));
@@ -236,7 +240,7 @@ final class AdaptiveLargeNeighborhoodSearch
         $totalImprovement = array_sum(array_column($this->recentOutcomes, 'improvement'));
         $successes = count(array_filter(
             $this->recentOutcomes,
-            static fn (array $outcome): bool => $outcome['success'] === true
+            static fn (array $outcome): bool => $outcome['success'] === true,
         ));
 
         return [

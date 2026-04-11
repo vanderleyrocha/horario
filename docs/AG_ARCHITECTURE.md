@@ -1,253 +1,113 @@
-# Arquitetura do Algoritmo Genético - Projeto Horário
+# Arquitetura Atual do Solver AG
 
-## Resumo Executivo
+## Objetivo deste documento
 
-O Projeto Horário implementa um solver híbrido para timetabling escolar baseado em:
+Este arquivo descreve o que está efetivamente implementado hoje no motor do solver de horários.
 
-- algoritmo genético multioperador com ilhas diferenciadas por perfil
-- construção inicial guiada por GRASP com alpha adaptativo, portfólio e salvage
-- intensificação por ALNS/LNS com seleção adaptativa de operadores
-- modelo de ilhas com migração periódica e perfis Conservative/Balanced/Exploratory
-- avaliação lexicográfica hard/soft com suporte a delta fitness
-- nogoods persistentes entre execuções (memória de longo prazo)
-- lookahead de custo crítico na alocação GRASP
-- meta de qualidade da população inicial (batch quality, diversidade e dispersão)
-- telemetria operacional detalhada em três camadas (cache, banco, logs)
-- monitoramento Livewire em tempo real
+O foco aqui é o wiring real do código: pipeline operacional, componentes ativos no fluxo principal, mecanismos de observabilidade, políticas de repair, ALNS, landscape, ilhas e persistência final.
 
-Na prática, o sistema não é apenas um AG clássico. Ele combina construção gulosa randomizada, repair iterativo, hiper-heurísticas, análise de landscape, portfólio adaptativo de estratégias de construção e observabilidade operacional suficiente para diagnosticar gargalos na população inicial e na evolução.
+Quando existir diferença entre infraestrutura disponível e componente realmente usado no caminho principal, o documento prioriza o caminho principal.
 
-## Escopo Real Implementado
+## Visão geral
 
-Hoje a arquitetura cobre, de ponta a ponta:
+O solver atual é um pipeline assíncrono em Laravel que combina:
 
-- acionamento pela UI de execução
-- criação de registro de execução
-- despacho assíncrono via fila
-- orquestração do solver na camada de aplicação
-- montagem do problema de horários com ScheduleData
-- evolução em ilhas com migração periódica (intervalo 5) e perfis diferenciados
-- repair durante a construção inicial e durante a evolução
-- ALNS para intensificação local com seleção epsilon-greedy de operadores
-- análise de landscape e resposta adaptativa
-- persistência transacional da melhor solução com validação final de integridade
-- cache, banco e logs para progresso e métricas
-- integração com constraints customizadas no solver, fitness, viabilidade e repair especializado
-- nogoods persistentes entre execuções (cache com TTL de 7 dias)
-- batch quality report da população inicial com veredito automatizado
-- perfis de ilha com parâmetros GRASP e de mutação diferenciados
+- construção inicial por GRASP adaptativo com quality gate
+- modelo de ilhas com perfis distintos
+- algoritmo genético com crossover fixo e mutação adaptativa
+- repair guloso com orçamento e telemetria detalhada
+- intensificação local por ALNS/LNS
+- análise de landscape para modular ALNS, mutação e pressão de seleção
+- migração periódica entre ilhas
+- persistência transacional da melhor solução
+- observabilidade em cache, banco e logs
 
-## Arquitetura em Camadas
+Na prática, o solver não é um AG simples. A construção inicial é sofisticada, a evolução incorpora mecanismos adaptativos, e a operação é fortemente instrumentada para diagnóstico de travas, degradação e baixa qualidade de sementes.
 
-### Camada de UI e Operação
+## Pipeline operacional
 
-Os principais componentes operacionais ficam em app/Modules/AG/UI/Livewire:
+O fluxo de execução ativo hoje é:
 
-- ExecutionCenter: inicia execuções, permite cancelamento e exibe histórico recente
-- ExecutionDashboard: central de acompanhamento da execução
-- ExecutionStatusPanel: monitora heartbeat, fases, possíveis travamentos e recomendações operacionais
-- ExecutionMetricsStream: stream de métricas ao longo da execução
-- DiagnosticoInviabilidade: apoio visual para análise de inviabilidade
+1. ExecutionCenter cria a execução e despacha o job.
+2. GerarHorarioJob sobe limites operacionais, inicia telemetria e reporters.
+3. GenerateScheduleAction delega para RunGeneticAlgorithm.
+4. RunGeneticAlgorithm monta problema, engine, ilhas e operadores.
+5. IslandModelEngine executa a evolução sincronizada das ilhas.
+6. RunGeneticAlgorithm aplica repair final na melhor solução.
+7. PersistBestSolutionService valida integridade estrutural e persiste em transação.
+8. GerarHorarioJob fecha a execução como finished, cancelled ou failed, com contexto operacional e status_health.
 
-Essa camada não executa o solver diretamente. Ela cria uma ScheduleExecution, despacha um job e acompanha o estado por cache, banco e logs.
+## Camada de job, telemetria e status final
 
-### Camada de Job e Orquestração
+GerarHorarioJob é o ponto central de operação. Hoje ele:
 
-O pipeline operacional passa por:
+- roda em fila com timeout de 3600 segundos
+- remove limite de memória e tempo do processo PHP
+- cria ExecutionMetricsRecorder para banco
+- cria CacheProgressReporter para feedback rápido da UI
+- cria CacheAndDbProgressReporter para sincronizar cache, banco e logs
+- usa GATelemetryLogger para logs estruturados
+- executa GenerateScheduleAction
+- em sucesso, grava best_fitness e contexto final
+- em cancelamento, grava status cancelled
+- em falha, grava status failed e relança a exceção
 
-1. ExecutionCenter::runSolver()
-2. GerarHorarioJob
-3. GenerateScheduleAction
-4. RunGeneticAlgorithm
-5. PersistBestSolutionService
+O status final inclui um contexto operacional mais rico, com:
 
-O GerarHorarioJob é a peça que conecta observabilidade e solver. Ele:
+- título e razão da finalização
+- fase e estágio da última telemetria disponível
+- resumo de counters operacionais
+- sugestões de diagnóstico
+- relatório pós-execução
+- status_health com health, dominant_phase e recommendations
 
-- sobe limite de memória e tempo
-- inicia ExecutionMetricsRecorder
-- cria CacheProgressReporter
-- cria CacheAndDbProgressReporter
-- usa GATelemetryLogger
-- executa a action de geração
-- persiste o resultado
-- fecha execução como finished, cancelled ou failed
-- publica `status_health` (`health`, `dominant_phase`, `recommendations`) no contexto operacional final
+O builder de health hoje usa regras simples e explícitas:
 
-### Health Check Operacional por Heartbeat/Stage
+- critical se houve fail-fast na população inicial
+- critical se quality gate rejeitou tentativas até o limite
+- warn se repair acumulou pressão alta
+- warn se ALNS não ativou em janela longa com gerações suficientes
+- ok nos demais casos
 
-O ciclo atual incorpora um health check aditivo no status final da execução para reduzir diagnóstico manual em logs.
+## RunGeneticAlgorithm: wiring real do solver
 
-Componentes:
+RunGeneticAlgorithm é a composição principal do motor.
 
-- `app/Modules/AG/Infrastructure/Health/ExecutionHealthBuilder.php`
-- `app/Modules/AG/Infrastructure/Health/DTO/ExecutionHealthDTO.php`
-- integração no `app/Jobs/GerarHorarioJob.php`
+Hoje ele faz o seguinte:
 
-Regras de classificação:
+1. Lê configuração via GeneticAlgorithmConfigDTO.
+2. Resolve island_count a partir da execução já criada ou do config.
+3. Carrega constraints customizadas ativas do horário.
+4. Converte essas constraints para snapshots solver-safe.
+5. Monta ScheduleData via ScheduleDataBuilder.
+6. Monta ConstraintEvaluationPipeline com os avaliadores customizados.
+7. Monta FitnessEvaluator com regras hard e soft.
+8. Instancia GreedyRepairOperator, opcionalmente com CustomConstraintRepairExtension.
+9. Instancia ScheduleProblem.
+10. Cria selection, crossover, elitism, termination, ALNS, landscape e hiper-heurística.
+11. Cria uma engine por ilha, com perfil próprio.
+12. Executa IslandModelEngine.
+13. Aplica repair final na melhor solução antes da persistência.
 
-- `critical`: `quality_gate_fail_fast > 0` ou `quality_gate_rejections >= attempt_limit`
-- `warn`: `repair_passes >= 3` ou `alns_activations == 0` com `generations_recorded >= 30`
-- `ok`: demais cenários
+### Constraints customizadas realmente carregadas
 
-Este campo é aditivo e não quebra consumidores antigos do payload de status.
+O pipeline ativo de constraints customizadas trabalha com três tipos:
 
-### Camada de Aplicação do AG
+- SYNC_SAME_TIMESLOT
+- MUTUAL_EXCLUSION
+- TIME_PLACEMENT
 
-O ponto principal é RunGeneticAlgorithm.
+Essas constraints entram em três pontos:
 
-Ele é responsável por:
+- avaliação hard e soft
+- diagnóstico de viabilidade durante a construção inicial
+- repair especializado via CustomConstraintRepairExtension
 
-- carregar GeneticAlgorithmConfigDTO
-- construir ScheduleData
-- carregar constraints ativas e convertê-las para snapshots solver-safe
-- montar regras hard e soft do fitness
-- instanciar o ScheduleProblem
-- montar engine de ilhas
-- compor crossover, mutação, replacement, ALNS, hyper-heuristics e landscape engine
-- executar repair final na melhor solução
+## Fitness e regras ativas
 
-## Fluxo de Execução Ponta a Ponta
+O FitnessEvaluator é montado com este conjunto de regras ativas:
 
-### 1. Disparo e preparação
-
-- a UI cria um ScheduleExecution
-- o job recebe Horario e executionId
-- a geração é iniciada de forma assíncrona
-
-### 2. Construção do problema
-
-- ScheduleDataBuilder transforma o contexto do horário em value objects imutáveis
-- RunGeneticAlgorithm injeta nesse snapshot as constraints customizadas ativas
-- o ScheduleProblem passa a operar em cima de ScheduleData
-
-### 3. Geração da população inicial
-
-- o ScheduleProblem roda diagnóstico preventivo
-- tenta reaproveitar sementes aceitas ou históricas
-- constrói indivíduos por GRASP com limite adaptativo de tentativas
-- aplica quality gate
-- usa repair quando necessário
-
-### 4. Evolução
-
-Cada ilha executa um GeneticAlgorithmEngine com loop de evolução contendo:
-
-- seleção
-- crossover
-- mutação
-- repair
-- avaliação
-- ALNS em frequência configurada
-- landscape analysis em checkpoints
-- replacement com niching
-- atualização de hiper-heurísticas
-- verificação de término
-
-### 5. Persistência final
-
-Ao final:
-
-- a melhor solução passa por repair final
-- PersistBestSolutionService valida conflitos estruturais antes de gravar
-- as alocações antigas são removidas
-- a nova melhor solução é persistida em transação
-
-## Representação da Solução
-
-### Cromossomo
-
-Cromossomo é a representação da solução completa.
-
-Ele mantém:
-
-- coleção de genes
-- assinatura estrutural para cache
-- índices auxiliares de professor, turma, período e blocos
-- estruturas derivadas para conflitos e janelas
-
-Esses índices são essenciais para reduzir custo de avaliação, repair e detecção de conflito.
-
-### Gene
-
-Gene representa uma aula alocada em um dia e período, com duração e metadados suficientes para validações, swap, relocation e rebuild local.
-
-## Construção da População Inicial
-
-### O que está implementado hoje
-
-A construção inicial está concentrada em ScheduleProblem e é um dos trechos mais sofisticados do solver.
-
-Elementos implementados:
-
-- fila de alocação orientada por dificuldade com live_tightness e avg_slot_contention
-- diagnóstico preventivo antes da construção
-- RCL com alpha adaptativo por contexto (portfólio de perfis aprendidos via epsilon-greedy)
-- lookahead crítico no score de slot: opções=0 gera penalidade de +15, opções=1 penalidade de +2.5
-- fallback controlado para alocações forçadas
-- quality gate para rejeitar sementes ruins cedo
-- fail-fast para interromper tentativas estruturalmente degradadas
-- reaproveitamento de semente aceita da própria execução
-- reaproveitamento de semente histórica de execuções anteriores
-- salvage: genes livres de conflito de tentativas rejeitadas são preservados e reusados como base
-- repair com orçamento operacional
-- nogoods persistentes entre execuções (carregados de cache com TTL de 7 dias)
-- batch quality report publicado após inicialização da população
-- telemetria detalhada da construção
-
-### Alpha Adaptativo e Portfólio de Perfis (Sprint 2 + Melhoria 2)
-
-O alpha do GRASP foi evoluído de um sorteio simples para um sistema em dois níveis:
-
-**Nível 1 — pressão adaptativa:** o alpha é ajustado com base na pressão de seleção corrente. Quando a tentativa está travando, o alpha se afasta do valor de pressão para romper bloqueio.
-
-**Nível 2 — portfólio epsilon-greedy:** o sistema mantém um histórico de resultados por perfil de alpha (conservative/balanced/exploratory). Com probabilidade 0.85 escolhe o perfil de maior taxa de sucesso histórica; com 0.15 explora aleatoriamente. Para ativar o portfólio são necessárias ao menos 3 tentativas por perfil.
-
-**Nível 3 — clamping por perfil de ilha (Sprint 4):** os bounds finais de alpha são recortados pelo perfil atribuído a cada ilha (Conservative: 0.15–0.185; Balanced: 0.175–0.215; Exploratory: 0.21–0.25).
-
-### Lookahead Crítico de Alocação (Melhoria 3)
-
-A função `futureFlexibilityScore()` avalia, para cada slot candidato, o impacto sobre as próximas aulas mais críticas da fila. Slots que eliminam todas as opções de uma aula futura recebem penalidade de +15.0; slots que deixam apenas uma opção recebem +2.5. Slots que preservam 7 ou mais opções encerram a avaliação antecipada (early-exit para economizar CPU).
-
-O score final do slot é: `rewardScore - blockingPenalty`. Valores negativos penalizam o slot diretamente no ranking da RCL.
-
-### Salvage de Tentativas Fracassadas (Melhoria 1)
-
-Quando uma tentativa é rejeitada pelo quality gate, o solver não a descarta inteiramente. O método `updateSalvageFromCandidate()` avalia se a tentativa contém ao menos 40% de genes livres de conflito com hard penalty abaixo de 4× o baseline. Se sim, esses genes são extraídos por `extractConflictFreeGenes()` e armazenados em `$bestSalvageGenes`.
-
-Na próxima tentativa, `tryCreateIndividualFromSalvage()` pré-aloca os genes do salvage e roda o GRASP apenas sobre o subproblema restante, reduzindo custo e aumentando a chance de obter uma semente viável.
-
-### Nogoods Persistentes (Melhoria 4)
-
-O sistema mantém memória de padrões que colapsam repetidamente entre execuções. No início de `createIndividual()` o solver chama `loadNogoodsFromPersistentCache()` para mesclar nogoods de execuções anteriores (chave `ag.nogoods.{horarioId}`, TTL 7 dias) ao mapa em memória. Ao rejeitar uma semente, `persistNogoodsToPersistentCache()` salva os nogoods atualizados (limitados a 500 entradas por tipo, via `capNogoodsForPersistence()`).
-
-### Quality Gate e Batch Quality (Quality Gate + Sprint 3)
-
-**Quality gate individual:** antes de aceitar cada semente, o solver avalia hard penalty total, razão de conflitos hard, degradação acumulada e capacidade de repair dentro do orçamento.
-
-**Batch quality report:** após inicializar toda a população, o `GeneticAlgorithmEngine` computa e publica um report estruturado com:
-- `uniqueness_ratio` — fração de assinaturas estruturais únicas
-- `fitness_min/max/avg/std_dev` — estatísticas de fitness
-- `fitness_coefficient_of_variation` — dispersão relativa
-- `verdict` — `ok`, `low_signature_diversity`, `fitness_collapsed`, `low_fitness_dispersion` ou `empty`
-- `issues[]` — lista de problemas detectados
-
-O report é publicado via `progress.report(phase='initial_population', stage='batch_quality')` e logado em `schedule.initial_population.batch_quality`.
-
-## Fitness e Avaliação
-
-### Modelo de score
-
-O sistema usa score lexicográfico.
-
-- soluções inviáveis ficam em [0, 50)
-- soluções viáveis ficam em [50, 100]
-- qualquer solução viável domina qualquer inviável
-
-Isso preserva a hierarquia entre viabilidade estrutural e qualidade fina.
-
-### Regras hard
-
-As regras hard atuais incluem:
+### Hard
 
 - TeacherConflictRule
 - ClassConflictRule
@@ -255,9 +115,7 @@ As regras hard atuais incluem:
 - MandatoryBlockViolationRule
 - CustomConstraintHardRule
 
-### Regras soft
-
-As regras soft atuais incluem:
+### Soft
 
 - WindowPenaltyRule
 - DistributionRule
@@ -266,436 +124,526 @@ As regras soft atuais incluem:
 - PreferredTimeRule
 - CustomConstraintSoftRule
 
-### Constraints customizadas
+O ScheduleProblem ainda expõe infraestrutura para avaliação incremental e cache de fitness, usada em partes do ciclo de repair e ALNS.
 
-O solver já recebe e aplica constraints customizadas em três grupos:
+## Construção da população inicial
 
-- SYNC_SAME_TIMESLOT
-- MUTUAL_EXCLUSION
-- TIME_PLACEMENT
+O ScheduleProblem concentra a fase mais sofisticada do solver.
 
-Além do fitness, elas também entram no diagnóstico prévio de viabilidade e no repair especializado durante a evolução.
+### Fluxo atual de criação de indivíduo
 
-### Delta Fitness
+Ao criar um indivíduo, o problema tenta, nesta ordem:
 
-Há infraestrutura para avaliação incremental baseada em região afetada e dependências de regras. O objetivo é recalcular apenas o que foi realmente impactado por mutações e operadores locais, reduzindo custo em relação a uma reavaliação global integral.
+1. accepted seed da própria execução, se existir
+2. historical seed reaproveitada de execuções anteriores
+3. sync hybrid seed
+4. salvage de genes aproveitáveis de tentativas rejeitadas
+5. construção GRASP completa com limite adaptativo de tentativas
 
-## Operadores Genéticos e Estratégias Evolutivas
+### O que está implementado na construção inicial
 
-### Seleção
+- fila de alocação por dificuldade
+- diagnóstico preventivo antes de construir
+- alpha adaptativo por contexto e por histórico recente
+- portfólio de construtores com viés epsilon-greedy
+- estratégias de construção identificadas por motivo e histórico
+- reorder dinâmico da fila durante o preenchimento
+- regret-based selection na fronteira da RCL
+- telemetria periódica a cada bloco de alocações
+- fallback controlado para alocações forçadas
+- fail-fast operacional
+- quality gate individual por tentativa
+- salvage de genes livres de conflito de tentativas rejeitadas
+- nogoods persistentes entre execuções
+- reaproveitamento de sementes históricas e da própria execução
 
-- TournamentSelection
-- integração com fitness sharing para diversidade
+### Quality gate e relaxamentos ativos
 
-### Crossover
+O quality gate da população inicial hoje não é fixo; ele relaxa de forma controlada ao longo das tentativas.
 
-O código monta múltiplos operadores e, no fluxo principal observado, privilegia composição que preserva estrutura útil da solução, como:
+O código mantém:
 
-- BlockPreservingCrossover
-- ConflictGraphCrossoverOperator
-- SinglePointCrossover
+- limites base de hard penalty e conflito hard
+- janela de fail-fast
+- modo relaxado após várias tentativas
+- modo emergencial quando as rejeições se acumulam cedo
+- possibilidade de pular repair quando a semente já nasce muito degradada
 
-### Mutação
+O objetivo é evitar gastar tempo com candidatos estruturalmente ruins, mas sem abandonar cedo demais cenários difíceis.
 
-Há um pool adaptativo de mutações com destaque para:
+### Repair na população inicial
+
+Na população inicial, o repair é usado com orçamento operacional próprio. Hoje existem limites explícitos para:
+
+- tempo máximo do repair da semente
+- número máximo de passes sem progresso
+- critérios de abort por falta de progresso
+
+Quando uma tentativa falha, o solver registra explainability e bottlenecks, o que alimenta tanto logs quanto o contexto operacional final.
+
+## ScheduleProblem como núcleo do problema de horários
+
+Além da construção inicial, o ScheduleProblem faz:
+
+- criação de cromossomos iniciais
+- avaliação de viabilidade e fitness
+- repair com telemetria e orçamento por origem
+- cache de fitness para reuso
+- manutenção de nogoods
+- tradução de progresso para a camada operacional
+- suporte a perfis de ilha, afetando a faixa efetiva do alpha
+
+Hoje o problema também contém lógica operacional explícita de cancelamento e heartbeat para evitar execuções silenciosamente travadas.
+
+## Modelo de ilhas
+
+O solver usa IslandModelEngine para orquestrar ilhas de forma sincronizada.
+
+Cada ilha encapsula:
+
+- uma GeneticAlgorithmEngine própria
+- seu tamanho de população
+- seu replacement
+- seu perfil de exploração
+
+### Perfis de ilha ativos
+
+Os perfis ativos são definidos por IslandProfile:
+
+- Conservative
+- Balanced
+- Exploratory
+
+Hoje os perfis controlam:
+
+- faixa de alpha do GRASP
+- mutation base rate
+- mutation amplification
+- mutation max rate
+
+### Atribuição atual dos perfis
+
+No wiring atual de RunGeneticAlgorithm:
+
+- ilha 0 recebe Conservative
+- ilha 1 recebe Exploratory
+- ilhas 2+ recebem Balanced
+
+O perfil é propagado para a GeneticAlgorithmEngine e desta para o ScheduleProblem.
+
+Detalhe importante da implementação atual:
+
+- se AG_ISLANDS = 1, a única ilha ativa é a ilha 0, portanto a execução roda somente com o perfil Conservative
+- nesse cenário, não há ilha Balanced nem Exploratory participando da busca
+- como consequência, a busca fica mais conservadora e a migração deixa de ter efeito prático
+
+### Migração entre ilhas
+
+O motor suporta duas políticas:
+
+- BestIndividualsMigration
+- ProfileAwareBestIndividualsMigration
+
+A política padrão atual é profile-aware, controlada por config.
+
+Na política profile-aware, o motor:
+
+- define número de migrantes por perfil de origem
+- pode usar matriz direcional por perfil
+- faz fallback para round-robin se não houver destino direcional
+- mede o delta de fitness causado na ilha receptora
+- registra histórico consolidado por rodada de migração
+
+Se houver apenas uma ilha, a migração é naturalmente inerte.
+
+## Loop evolutivo principal
+
+O caminho principal da evolução hoje é este:
+
+1. seleção por torneio com fitness sharing
+2. crossover principal fixo
+3. mutação adaptativa
+4. repair do descendente quando necessário
+5. avaliação da população nova
+6. análise de landscape
+7. possível ativação de ALNS
+8. replacement com niching
+9. registro de métricas e telemetria
+
+### Seleção ativa
+
+O operador de seleção usado no fluxo principal é TournamentSelection com apoio de FitnessSharingCalculator e SharingFunction.
+
+### Crossover ativo no fluxo principal
+
+O crossover usado no fluxo principal hoje é ConflictGraphCrossoverOperator.
+
+Importante: SinglePointCrossover e BlockPreservingCrossover existem e são registrados na camada de hiper-heurística para telemetria e aprendizado, mas não são o crossover principal do loop atual.
+
+### Mutação ativa no fluxo principal
+
+O operador principal de mutação é AdaptiveDiversityMutation, composto por:
 
 - StructuredSwapMutation
 - GeneSwapMutation
 - ConflictGuidedMutation
-- AdaptiveDiversityMutation
-- AdaptiveMutationController
 
-### Replacement e diversidade
+O AdaptiveMutationController calcula a taxa de mutação em função de diversidade e entropia, respeitando os limites do perfil da ilha.
 
-- AdaptiveNichingReplacement
-- TopEliteStrategy
-- cálculo de diversidade e entropia da população
+### Choque temporário de mutação e redução de pressão de seleção
 
-## Intensificação com ALNS/LNS
+O motor atual também possui mecanismos temporários para:
 
-### O que existe
+- mutation shock
+- selection pressure reduction
+- stagnation burst
 
-O sistema possui uma implementação real de ALNS em AdaptiveLargeNeighborhoodSearch.
+Esses mecanismos são armados pelo processamento de landscape e pela política de estagnação consolidada no IslandModelEngine e na GeneticAlgorithmEngine.
 
-Componentes associados:
+Eles alteram temporariamente:
 
-- destroy operators: RandomDestroyOperator, ConflictDestroyOperator, ClusterDestroyOperator
-- repair operators: LNSRepairAdapter, RegretInsertionOperator
-- política de aceitação: StrictScoreImprovementAcceptance
+- mutation rate efetiva
+- multiplicador de pressão de seleção
+- tamanho efetivo do torneio
+- elegibilidade e prioridade de ALNS em momentos de estagnação
 
-### Como opera
+## Avaliação da população
 
-O ALNS é disparado com frequência configurável ao longo da evolução para intensificação local. Ele remove parte da solução e tenta reinserir os genes com operadores distintos, escolhidos adaptativamente a partir de histórico de desempenho.
+Após montar a nova geração, a engine inicia uma etapa explícita de evaluating_population.
 
-## Landscape Analysis
+Hoje essa etapa publica heartbeats estruturados para subestágios como:
 
-### Elementos implementados
+- trajectory_signals_started
+- trajectory_signals_completed
+- generation_step_completed
+- local_metrics_recording_started
+- local_metrics_recorded
+- landscape_evaluation_started
+- landscape_evaluation_completed
+- trigger_resolution_completed
+- evolution_generation_completed
+
+Detalhe importante de numeração:
+
+- nos logs da GeneticAlgorithmEngine, o campo generation é zero-based dentro da ilha
+- o campo local_generation é one-based e corresponde à contagem operacional humana da ilha
+- nas métricas persistidas e nos resumos agregados, a geração aparece no formato consolidado esperado pela operação
+- por isso, a quarta geração operacional pode aparecer no heartbeat da engine como generation = 3 e local_generation = 4
+
+Isso é importante porque a avaliação não é um bloco opaco; o motor já expõe subetapas suficientes para diferenciar latência normal de travamento real.
+
+### Avaliação paralela
+
+RunGeneticAlgorithm escolhe entre:
+
+- AsyncFitnessEvaluator
+- PopulationFitnessEvaluator
+
+A avaliação paralela só é ligada quando:
+
+- a config permite parallel evaluation
+- o tamanho da população ultrapassa o threshold configurado
+
+Caso contrário, a avaliação permanece no caminho não paralelo.
+
+## Landscape analysis e respostas adaptativas
+
+O solver usa LandscapeEngine com estes componentes:
 
 - LandscapeAnalyzer
 - LandscapeDetector
-- LandscapeEngine
-- LandscapeMemory
 - LandscapeResponseStrategy
+- LandscapeMemory
 
-### Papel na arquitetura
+O landscape atual influencia diretamente:
 
-O solver observa o estado recente da população para detectar padrões como estagnação, vales e sinais de convergência prematura. Essa observação influencia a intensidade e o momento de respostas adaptativas, especialmente em ALNS e hyper-heuristics.
+- mutation multiplier
+- selection pressure multiplier
+- ativação dinâmica de ALNS
+- observação publicada em telemetria
 
-Também existe persistência e cache de landscape_state, landscape_phenomenon e landscape_observation.
+O motor registra:
 
-## Hiper-heurísticas
+- landscape_state
+- landscape_phenomenon
+- landscape_observation
 
-O código já inclui uma camada de aprendizado para operadores:
+Essa observação é incorporada às métricas e usada para enriquecer o contexto operacional.
+
+## Hiper-heurística
+
+O solver possui uma camada real de aprendizado de operadores com:
 
 - LearningHyperHeuristicController
 - OperatorPerformanceTracker
 - OperatorRewardCalculator
 - EpsilonGreedySelector
 
-Essa camada mede o efeito dos operadores e ajusta a exploração versus explotação com base em recompensa observada.
+Hoje essa camada registra e atualiza recompensa de operadores, incluindo operadores usados em mutação, crossover e ALNS.
 
-## Repair
+Ela não transforma o fluxo principal em seleção dinâmica completa de todos os operadores do AG; no wiring atual, alguns componentes continuam fixos no loop principal e a hiper-heurística atua principalmente como camada de aprendizado e tracking.
 
-### Repair atual
+## Repair atual
 
-O GreedyRepairOperator já executa:
+O repair principal é o GreedyRepairOperator.
 
-- priorização de genes inválidos
+### Estratégias ativas do repair
+
+Hoje ele executa:
+
+- priorização de repair targets
 - relocação
 - swap
 - local rebuild
+- ranking local com cache de fitness por assinatura
+- integração com extensões de repair
 - telemetria por passe
-- abort por falta de progresso
 - abort por orçamento de tempo
+- abort por falta de progresso
+- abort por ausência de movimentos estruturais
 
-### Extensão especializada para constraints customizadas
+### Targets de repair ativos
 
-Foi introduzido um contrato de extensão:
+O repair prioriza uma mistura de:
 
-- RepairHeuristicExtension
+- conflitos estruturais de professor e turma
+- violações de bloco obrigatório
+- targets adicionais vindos de extensões
 
-Ele permite:
+Quando o CustomConstraintRepairExtension está habilitado, ele acrescenta lógica para violações de constraints customizadas.
 
-- acrescentar repair targets
-- filtrar slots candidatos
-- injetar penalidade de ranking
-- contar violações remanescentes específicas
+### Limites operacionais do repair
 
-O módulo Horários registra `CustomConstraintRepairExtension` com heurísticas efetivas para:
+O GreedyRepairOperator hoje usa:
 
-- gerar targets de repair para violações de `TIME_PLACEMENT`, `MUTUAL_EXCLUSION` e `SYNC_SAME_TIMESLOT`
-- filtrar slots candidatos com base em janelas de `TIME_PLACEMENT` (REQUIRED/FORBIDDEN)
-- contar violações remanescentes customizadas no ranking interno do repair
+- até 4 passes
+- heartbeat de progresso por lote de genes inválidos
+- keepalive heartbeat em loops caros
+- deadline cooperativa quando recebe orçamento
+- payload de progresso sincronizado para heartbeats intermediários
 
-Esse comportamento roda dentro do `GreedyRepairOperator` sem acoplar regras de domínio no núcleo do AG.
+Essa camada foi reforçada para não ficar silenciosa em loops caros de relocação, swap, rebuild local e probing de fitness.
 
-## Modelo de Ilhas
+### Heartbeats do repair na evolução
 
-O solver roda em modelo de ilhas via:
+No ScheduleProblem, o repair da evolução usa orçamento operacional próprio, com destaque para:
 
-- IslandModelEngine
-- Island
-- BestIndividualsMigration
-- **IslandProfile** (Conservative / Balanced / Exploratory) — implementado no Sprint 4
+- heartbeat interval de 5 segundos para repair_runtime
+- budget de 3000 ms para repair da evolução
+- máximo de 2 passes sem progresso
 
-### Perfis de Ilha (Sprint 4)
+Esse heartbeat de 5 segundos vale para repair da evolução. Ele não substitui o heartbeat operacional global da engine, que continua em 30 segundos para estágios gerais da evolução.
 
-Cada ilha recebe um perfil diferenciado em `RunGeneticAlgorithm`, determinado pelo índice `$i`:
+## ALNS/LNS
 
-| Ilha | Perfil | Alpha GRASP | Mutation base | Mutation max |
-|------|--------|-------------|---------------|--------------|
-| 0 | Conservative | 0.15 – 0.185 | 0.015 | 0.28 |
-| 1 | Exploratory | 0.21 – 0.25 | 0.030 | 0.42 |
-| ≥2 | Balanced | 0.175 – 0.215 | 0.020 | 0.35 |
+O solver tem implementação real de ALNS em AdaptiveLargeNeighborhoodSearch.
 
-O perfil é propagado via `GeneticAlgorithmEngine::setIslandProfile()` → `ScheduleProblem::setIslandProfile()`. O `AdaptiveMutationController` de cada ilha é instanciado com os parâmetros do perfil. O ScheduleProblem usa o perfil para recortar os bounds finais do alpha GRASP em `resolveAdaptiveAlpha()`.
+### Operadores configurados no ALNS
 
-O log `solver.islands.profiles_configured` é emitido após a configuração de todas as ilhas, com a lista de perfis atribuídos.
+Destroy operators ativos:
 
-### Migração
+- RandomDestroyOperator
+- ConflictDestroyOperator
+- ClusterDestroyOperator
 
-A migração periódica usa `BestIndividualsMigration(2)` com intervalo de 5 gerações. Isso garante troca de material genético entre ilhas sem suprimir diversidade prematuramente.
+Repair operators ativos:
 
-## Critérios de Término
+- LNSRepairAdapter
+- RegretInsertionOperator
 
-O término considera combinação de:
+Critério de aceitação ativo:
+
+- StrictScoreImprovementAcceptance
+
+### Como o ALNS é executado hoje
+
+Na prática, o ALNS:
+
+- recebe o melhor indivíduo corrente
+- avalia o estado atual
+- executa improve com contexto de landscape e trigger
+- passa contexto cooperativo de timeout e heartbeat ao repair interno
+- avalia o candidato uma única vez ao fim da melhoria
+- decide aceitação pelo critério configurado
+- atualiza replacement e telemetria se aceito
+- registra destroy operator, repair operator, improvement e reward
+
+### Timeout cooperativo do ALNS
+
+O passo ALNS atual tem timeout explícito por etapa, com default de 15000 ms.
+
+Esse timeout não é apenas externo. Hoje ele é propagado para dentro do repair por meio de:
+
+- abort_if_timed_out
+- progress_heartbeat
+- limits com orçamento restante
+
+Isso evita o problema de o ALNS entrar em improve e o repair interno ficar preso sem checkpoint cooperativo.
+
+### O que acontece quando o ALNS estoura timeout
+
+Se o passo ALNS excede o tempo permitido:
+
+- a engine registra alns_timeout
+- grava warning ga.alns.step_timeout
+- considera o passo como não aceito
+- continua a geração normalmente
+
+Ou seja, timeout de ALNS hoje é um evento operacional recuperável, não uma falha fatal da execução.
+
+## Replacement, elitismo e diversidade
+
+O motor usa:
+
+- TopEliteStrategy para preservar elites
+- AdaptiveNichingReplacement para replacement
+- PopulationStatistics para variância, diversidade e entropia
+- HashDiversityCalculator
+- PopulationEntropyCalculator
+- GeneticDistance para diversidade e niching
+
+## Critérios de término
+
+O critério principal é VarianceBasedTerminationCriterion.
+
+Hoje ele considera:
 
 - número máximo de gerações
 - target fitness
 - gerações sem melhoria
-- variância da população
+- threshold de variância
+- janela mínima antes de ativar corte por variância
 - diversidade mínima
 - entropia mínima
-- cancelamento operacional
 
-Essa lógica é centralizada em VarianceBasedTerminationCriterion com apoio das métricas populacionais.
+O motor ainda respeita cancelamento operacional durante a execução.
 
-## Telemetria e Observabilidade
+## Heartbeats, cache, banco e logs
 
-### Telemetria operacional
+O sistema atual observa o solver em três níveis:
 
-O sistema possui observabilidade em três níveis:
+- cache para UI em tempo quase real
+- banco para histórico de execução e gerações
+- logs estruturados para investigação profunda
 
-- cache para feedback rápido da UI
-- banco para histórico de métricas por execução e geração
-- logs estruturados para diagnóstico profundo
+### Frequências e sinais importantes
 
-### Componentes principais
+Na GeneticAlgorithmEngine, hoje existem:
 
-- GATelemetryLogger
-- ExecutionMetricsRecorder
-- CacheProgressReporter
-- CacheAndDbProgressReporter
+- heartbeat operacional geral a cada 30 segundos
+- warning de long_running_operation a cada 300 segundos
+- verificação de cancelamento em intervalos curtos
 
-### O que é registrado
+No repair da evolução, existe keepalive específico de 5 segundos.
 
-Entre os dados observados no código e logs:
+### CacheAndDbProgressReporter: regra importante
 
-- início, falha, cancelamento e conclusão da execução
-- geração atual
-- melhor fitness, média, variância, diversidade e entropia
-- operador usado e recompensa
-- destroy/repair operators do ALNS
-- landscape state, phenomenon e observation
-- heartbeats de progresso
-- métricas e bottlenecks da população inicial
-- tentativas GRASP, fail-fast, repair e quality gate
-- carregamento de constraints customizadas no solver
+Nem todo heartbeat de evolução vira métrica no banco.
 
-### Heartbeat e monitoramento
+O comportamento real hoje é:
 
-ExecutionStatusPanel monitora heartbeat por fase e estágio. Quando o sinal envelhece demais, a UI destaca possibilidade de estagnação operacional e oferece mensagens orientativas específicas.
+- todo progresso recebido é cacheado e toca o heartbeat da execução
+- snapshots incompletos de geração ficam só no cache
+- somente payloads completos viram ScheduleGenerationMetric no banco
 
-Isso é um diferencial importante: o sistema já distingue travamento lógico, demora esperada em repair e ausência de sinal do worker.
+Isso é intencional. Heartbeats operacionais intermediários não devem ser confundidos com métricas consolidadas de geração.
 
-## UI e Experiência Operacional
+### Métricas gravadas no banco
 
-### ExecutionCenter
+Quando o snapshot está completo, o reporter persiste:
 
-É o centro de disparo da execução. Permite:
+- generation
+- best_fitness
+- avg_fitness
+- variance
+- diversity
+- entropy
+- mutation_rate
+- stagnation
+- landscape_state
+- operator_used e reward
+- destroy e repair operator do ALNS
+- alns_improvement
+- landscape_phenomenon e observation
 
-- configurar população, gerações e ilhas
-- iniciar execução
-- cancelar execução em andamento
-- consultar histórico recente
-- exibir relatórios de readiness e impacto para search response
+## Persistência final da solução
 
-### ExecutionDashboard e painéis
+Ao fim da evolução, RunGeneticAlgorithm ainda executa repair final da melhor solução.
 
-O acompanhamento operacional é composto por:
+### Repair final
 
-- status textual e traduzido da execução
-- elapsed time
-- contagem de métricas gravadas
-- snapshot do progresso corrente
-- summary de status final ou de interrupção
-- recomendações operacionais geradas a partir do contexto
+O fluxo final tenta até 3 ciclos de repair.
 
-### Diagnóstico de inviabilidade
+Se encontrar solução sem hard penalty e factível, encerra como resultado viável.
 
-Há suporte explícito na UI para leitura de causas prováveis de falha, principalmente quando o problema ocorre antes da evolução, na população inicial.
+Se não conseguir zerar as violações, mantém o melhor candidato encontrado e sinaliza que o resultado é parcial.
 
-## Persistência e Segurança da Solução Final
+### PersistBestSolutionService
 
-PersistBestSolutionService não apenas salva. Antes disso, ele valida conflitos estruturais finais por turma e professor. Se detectar incoerência, interrompe a persistência com exceção.
+Antes de gravar no banco, o serviço:
 
-Isso cria uma última barreira de integridade antes de gravar alocações finais.
+- valida ausência de conflitos estruturais por turma e professor
+- remove as alocações antigas do horário
+- persiste a nova solução em transação
+- associa execution_id a cada alocação criada
 
-## Pontos Fortes da Arquitetura Atual
+Importante: resultado parcial ainda pode ser persistido, mas nunca com conflito estrutural direto detectado por essa validação final.
 
-- pipeline completo, assíncrono e observável de ponta a ponta
-- construção inicial com GRASP adaptativo, lookahead, salvage, portfólio epsilon-greedy e nogoods persistentes
-- ilhas diferenciadas por perfil (Conservative/Balanced/Exploratory) com parâmetros autônomos de alpha e mutação
-- meta de qualidade do batch com veredito automatizado e publicação via progress event
-- separação clara entre AG genérico e problema de horários — ScheduleProblem não vaza para GeneticAlgorithmEngine além da interface GeneticProblem
-- integração madura de métricas, cache, banco e logs estruturados
-- landscape e hyper-heuristics acoplados ao fluxo principal de evolução
-- ALNS real com seleção adaptativa de destroy/repair e critério de aceitação configurável
-- proteção operacional contra estagnação, sementes ruins e execuções degradadas
-- suporte formal a constraints customizadas sem contaminar o núcleo do AG
-- cobertura de testes unitários validada: 104 passed, 0 failed
+## O que está realmente ativo hoje no fluxo principal
 
-## Limitações e Riscos Atuais
+Resumo objetivo do wiring principal:
 
-- repair especializado para constraints customizadas já está ativo, mas ainda sem benchmark A/B dedicado por cenário
-- a quantidade de heurísticas e parâmetros cresceu bastante; calibração e diagnóstico de interações complexas são custosos sem benchmark reproduzível
-- avaliação delta fitness existe na infraestrutura, mas o ganho real de performance depende de medir cobertura real de uso nos operadores
-- a construção inicial, embora muito mais sofisticada, ainda é serial — em cenários grandes, é o principal gargalo de latência
-- nogoods persistentes crescem com execuções; o cap de 500 por tipo é conservador e pode limitar o ganho em cenários com muitas repetições
+- seleção: TournamentSelection com fitness sharing
+- crossover principal: ConflictGraphCrossoverOperator
+- mutação principal: AdaptiveDiversityMutation
+- repair principal: GreedyRepairOperator
+- ALNS: ativo, com destroy e repair adaptativos
+- acceptance do ALNS: StrictScoreImprovementAcceptance
+- landscape: ativo e influenciando ALNS, mutação e seleção
+- hiper-heurística: ativa para tracking e rewards
+- replacement: AdaptiveNichingReplacement
+- elitismo: TopEliteStrategy
+- término: VarianceBasedTerminationCriterion
+- migração: profile-aware por padrão, configurável
 
-## Sugestões de Melhoria
+## O que existe na base mas não é o operador principal do loop
 
-### Melhorias gerais
+Estes componentes existem e participam de partes do ecossistema, mas não são o operador principal fixado no loop evolutivo atual:
 
-- consolidar uma matriz oficial de operadores realmente ativos por execução, para reduzir distância entre documentação e wiring real
-- instrumentar melhor tempo por operador (cpu/wall), não apenas por geração
-- separar mais explicitamente telemetria operacional de telemetria científica do AG, facilitando leitura por perfis diferentes
-- revisar periodicamente a documentação para mantê-la aderente ao wiring real do RunGeneticAlgorithm e do GeneticAlgorithmEngine
-- considerar um modo "debug verboso" ativável por config para logar decisões internas do portfólio e do salvage em diagnóstico
+- SinglePointCrossover
+- BlockPreservingCrossover
+- operadores adicionais usados principalmente via registro hiper-heurístico ou infra de comparação
 
-### Status de Implementação (Abr/2026)
+## Estado atual da observabilidade operacional
 
-Todas as melhorias de alto ROI para a população inicial e para o modelo de ilhas foram implementadas:
+Hoje a base já consegue distinguir bem:
 
-| Ciclo | Item | Status | Arquivo principal |
-|-------|------|--------|-------------------|
-| Sprint 1 | Ranking rico de candidate slots (live_tightness, contention) | ✅ Implementado | ScheduleProblem |
-| Sprint 2 | Alpha adaptativo por contexto e pressão | ✅ Implementado | ScheduleProblem::resolveAdaptiveAlpha() |
-| Sprint 3 | Meta de qualidade da população (batch quality) | ✅ Implementado | GeneticAlgorithmEngine::computeInitialPopulationBatchQuality() |
-| Sprint 4 | Perfis de ilha (Conservative/Balanced/Exploratory) | ✅ Implementado | IslandProfile, RunGeneticAlgorithm, GeneticAlgorithmEngine |
-| Melhoria 1 | Salvage de tentativas fracassadas | ✅ Implementado | ScheduleProblem::tryCreateIndividualFromSalvage() |
-| Melhoria 2 | Portfólio adaptativo de alpha (epsilon-greedy) | ✅ Implementado | ScheduleProblem::portfolioBiasedAlphaProfile() |
-| Melhoria 3 | Lookahead crítico de alocação (1-2 passos) | ✅ Implementado | ScheduleProblem::futureFlexibilityScore() |
-| Melhoria 4 | Nogoods persistentes entre execuções | ✅ Implementado | ScheduleProblem::loadNogoodsFromPersistentCache() |
+- execução saudável porém lenta
+- operação longa mas com heartbeat contínuo
+- timeout controlado de ALNS
+- degradação da população inicial
+- encerramento por cancelamento
+- falha de execução real
 
-### Cobertura de Testes
+Essa distinção existe porque o solver publica progresso suficiente por fase, estágio, subestágio e contexto de repair.
 
-| Arquivo de teste | Escopo |
-|-----------------|--------|
-| GeneticAlgorithmEngineStandaloneTest | Engine standalone, batch_quality report, Sprint 3 |
-| IslandProfileTest | Enum IslandProfile, ranges alpha/mutação, Sprint 4 |
-| RunGeneticAlgorithmConstraintLoadingTest | Carregamento de constraints no solver |
-| AlnsTelemetryTest | Telemetria ALNS |
-| FitnessEvaluatorLexicographicTest | Score lexicográfico hard/soft |
-| VarianceBasedTerminationCriterionTest | Critério de término por variância |
-| LandscapeObservationTest | Observação e memória de landscape |
-| HyperHeuristicContractTest | Contratos da hiper-heurística |
-| ConstraintFeasibilityAnalyzerTest | Analyzer de viabilidade de constraints |
+## Limites e riscos atuais
 
-## Próximos Passos Recomendados
+Os principais riscos ainda visíveis no código atual são:
 
-
-O ciclo atual (Sprints 1–4 + Melhorias 1–4) foi concluído. Todas as melhorias de alta prioridade para a população inicial e para o modelo de ilhas estão implementadas e cobertas por testes. As oportunidades abaixo são o próximo horizonte natural de evolução.
-
-### A. Benchmark do repair customizado por cenário (Alta viabilidade / Alto ROI)
-
-O repair especializado para constraints customizadas já está ativo via `CustomConstraintRepairExtension`. O próximo passo é medir, com cenários reproduzíveis, o impacto em latência e convergência quando há alta densidade de constraints `SYNC_SAME_TIMESLOT`, `MUTUAL_EXCLUSION` e `TIME_PLACEMENT`.
-
-**Esforço:** Baixo-Médio | **Risco:** Baixo | **ROI:** Alto
-
-### B. Benchmark A/B reproduzível por cenário (Alta viabilidade / ROI operacional)
-
-Criar um conjunto de cenários canônicos (ex: escola pequena, escola média com constraints, escola com blocos obrigatórios pesados) e um runner comparativo que mede custo por fase: população inicial, evolução, ALNS, repair, persistência. Isso permitiria quantificar o ganho de cada ciclo de melhoria e orientar decisões de configuração.
-
-**Esforço:** Médio | **Risco:** Baixo | **ROI:** Alto (operacional e diagnóstico)
-
-### C. Portfólio de construtores estruturalmente distintos (Alta viabilidade / Alto ROI futuro)
-
-O portfólio atual diferencia apenas pelo alpha do GRASP. O próximo passo é ter construtores com estratégias distintas de ordenação inicial:
-
-- construtor orientado a blocos obrigatórios desde a primeira rodada
-- construtor orientado a professores com disponibilidade restrita
-- construtor orientado a turmas com maior número de conflitos potenciais
-- construtor por regret inserção pura desde o início (sem GRASP)
-
-Isso aumenta a diversidade estrutural real entre ilhas, não apenas diversidade superficial de alpha.
-
-**Esforço:** Alto | **Risco:** Médio | **ROI:** Alto (em cenários complexos)
-
-### D. Estratégia de migração diferenciada por perfil de ilha (Média viabilidade / Médio ROI)
-
-Hoje a migração é simétrica (BestIndividualsMigration entre todas as ilhas). Um refinamento natural é:
-
-- ilha Exploratory envia apenas para Balanced (não para Conservative)
-- ilha Conservative recebe apenas de Balanced (filtra o "ruído" exploratório)
-- medir e logar impacto de cada evento de migração no fitness da ilha receptora
-
-**Esforço:** Médio | **Risco:** Baixo-Médio | **ROI:** Médio-Alto
-
-### E. Nogoods por perfil de configuração / turno (Média viabilidade / Médio ROI)
-
-Os nogoods persistentes hoje são salvos por `horarioId`. Uma versão mais poderosa salvaria por "perfil de problema" (ex: número de turmas, turnos, constraints ativas), permitindo transferência de conhecimento entre horários estruturalmente similares de anos letivos diferentes.
-
-**Esforço:** Médio | **Risco:** Baixo | **ROI:** Médio-Alto
-
-### F. Relatório pós-execução estruturado com custo por fase (Alta viabilidade / Alto ROI operacional)
-
-A telemetria em logs já está rica. Falta um relatório consolidado ao final de cada execução que mostre:
-
-- tempo e custo (tentativas, rejeições) da fase de população inicial por ilha
-- gerações totais e contribuição do ALNS versus evolução pura
-- número de migrações e seu efeito no fitness
-- resumo de nogoods aprendidos e persistidos
-- perfil de island utilizado e taxa de qualidade de batch por ilha
-
-Esse relatório informaria tanto operadores quanto o desenvolvimento do solver.
-
-**Esforço:** Baixo-Médio | **Risco:** Nenhum | **ROI:** Alto (operacional)
-
-### G. Avaliação paralela da população inicial (Alta viabilidade técnica / Médio-Alto ROI)
-
-A construção dos indivíduos da população inicial é hoje serial. Com coroutines ou pools de workers, seria possível construir os N indivíduos em paralelo, reduzindo o tempo da fase mais lenta do solver.
-
-**Pré-requisito:** garantir imutabilidade de ScheduleData e isolamento do estado de ScheduleProblem por instância.
-
-**Esforço:** Alto | **Risco:** Médio (concorrência) | **ROI:** Alto (latência)
-
-### H. Adaptive ALNS com frequência orientada por landscape (Média viabilidade / Médio ROI)
-
-Hoje o ALNS opera com frequência fixa (`lnsFrequency`). Uma evolução natural é disparar ALNS com frequência maior quando o landscape detecta estagnação e menor quando há progresso consistente. A infraestrutura de landscape já produz `LandscapeMetrics` que poderiam orientar esse ajuste.
-
-**Esforço:** Médio | **Risco:** Baixo | **ROI:** Médio
-
-## Arquivos Mais Relevantes
-
-### Orquestração
-
-- app/Modules/AG/Application/RunGeneticAlgorithm.php
-- app/Modules/Horarios/Application/GenerateScheduleAction.php
-- app/Jobs/GerarHorarioJob.php
-
-### Problema e construção inicial
-
-- app/Modules/Horarios/Domain/Problem/ScheduleProblem.php
-- app/Modules/AG/Infrastructure/Population/PopulationGenerator.php
-- app/Modules/AG/Domain/Repair/GreedyRepairOperator.php
-
-### Evolução e ilhas
-
-- app/Modules/AG/Application/GeneticAlgorithmEngine.php
-- app/Modules/AG/Domain/Evolution/IslandModel/IslandModelEngine.php
-- app/Modules/AG/Domain/Evolution/IslandModel/BestIndividualsMigration.php
-
-### Fitness e diversidade
-
-- app/Modules/AG/Domain/Fitness/FitnessEvaluator.php
-- app/Modules/AG/Domain/Fitness/FitnessWeights.php
-- app/Modules/AG/Domain/Fitness/Delta
-- app/Modules/AG/Domain/Operators/Selection/FitnessSharing
-
-### ALNS e landscape
-
-- app/Modules/AG/Domain/Intensification/LNS/ALNS/AdaptiveLargeNeighborhoodSearch.php
-- app/Modules/AG/Domain/Landscape/LandscapeEngine.php
-- app/Modules/AG/Domain/HyperHeuristic/LearningHyperHeuristicController.php
-
-### Telemetria e UI
-
-- app/Modules/AG/Infrastructure/Progress/CacheAndDbProgressReporter.php
-- app/Modules/AG/Infrastructure/Metrics/ExecutionMetricsRecorder.php
-- app/Modules/AG/UI/Livewire/ExecutionCenter.php
-- app/Modules/AG/UI/Livewire/ExecutionDashboard.php
-- app/Modules/AG/UI/Livewire/ExecutionStatusPanel.php
-
-### Constraints customizadas
-
-- app/Modules/Horarios/Domain/Constraints
-- app/Modules/Horarios/Application/LoadActiveScheduleConstraintsAction.php
-- app/Modules/Horarios/Application/Constraints/ConstraintSolverPayloadMapper.php
-
-### Perfis de ilha
-
-- app/Modules/AG/Domain/Evolution/IslandModel/IslandProfile.php
+- população inicial continua sendo fase cara e predominantemente serial
+- evolução ainda pode passar vários minutos em building_offspring em cenários difíceis
+- ALNS pode esgotar o timeout sem gerar candidato aceito, embora hoje isso seja tratado sem travar a execução
+- a calibração entre perfis de ilha, landscape, mutation shock e selection pressure continua sensível a configuração
 
 ## Conclusão
 
-A arquitetura do AG do Projeto Horário completou um ciclo completo de maturação (Sprints 1–4 + Melhorias 1–4). Ela vai muito além de um algoritmo genético simples e incorpora mecanismos modernos de intensificação, diversidade, observabilidade e adaptação.
+O motor atual do solver é um AG híbrido operacionalmente maduro, com forte ênfase em:
 
-O foco do ciclo concluído foi a fase de construção inicial e o modelo de ilhas, que eram os principais determinantes da eficiência do pipeline. Com portfólio adaptativo, lookahead, salvage, nogoods persistentes, perfis de ilha diferenciados e meta de qualidade do batch, essa fase está substancialmente mais robusta do que uma inicialização aleatória ou GRASP simples.
+- qualidade da população inicial
+- observabilidade em tempo real
+- resposta adaptativa a estagnação
+- repair cooperativo com timeout e heartbeat
+- integração explícita de constraints customizadas
 
-O próximo horizonte de evolução é diferente: não se trata mais de cobrir técnicas ausentes, mas de:
-
-1. **Medir o que foi ativado** — repair especializado para constraints customizadas já está em produção no `GreedyRepairOperator`; o próximo passo é benchmark A/B por cenário.
-2. **Medir com rigor** — benchmark reproduzível por cenário para quantificar ganho real de cada ajuste e orientar calibração.
-3. **Diversificar construtores além do alpha** — portfólio estruturalmente heterogêneo (regret puro, blocos obrigatórios first, professores críticos first) para aumentar diversidade real entre ilhas.
-4. **Reduzir latência** — construção paralela da população inicial como próximo salto de performance em cenários grandes.
+Ele já possui mecanismos importantes de defesa contra travas silenciosas, principalmente em ALNS e repair. O comportamento real de produção hoje é o de um pipeline robusto, embora ainda custoso em latência na construção inicial e em certos trechos da evolução.

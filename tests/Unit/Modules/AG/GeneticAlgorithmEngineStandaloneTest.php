@@ -543,7 +543,7 @@ it('arms a temporary selection pressure reduction via activation gate and applie
 
 it('applies an adaptive cooldown brake when recent alns outcomes have low return', function (): void {
     $repair = new class () implements RepairOperatorInterface {
-        public function repair(PartialSolution $partial): Cromossomo
+        public function repair(PartialSolution $partial, array $context = []): Cromossomo
         {
             $candidate = new Cromossomo(array_merge($partial->assigned(), $partial->unassigned()));
             $candidate->setFitness(4.0);
@@ -742,7 +742,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
         destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
         repairOperators: [
             new class () implements RepairOperatorInterface {
-                public function repair(PartialSolution $partial): Cromossomo
+                public function repair(PartialSolution $partial, array $context = []): Cromossomo
                 {
                     return new Cromossomo([
                         new Gene(1, 1, 1, 1, 1, 1, 1),
@@ -784,7 +784,7 @@ it('accepts ALNS candidates only when they strictly improve best fitness', funct
         destroyOperators: [makeStandaloneFakeDestroyOperator('AdaptiveDestroy')],
         repairOperators: [
             new class () implements RepairOperatorInterface {
-                public function repair(PartialSolution $partial): Cromossomo
+                public function repair(PartialSolution $partial, array $context = []): Cromossomo
                 {
                     return new Cromossomo([
                         new Gene(5000, 1, 1, 1, 1, 1, 1),
@@ -1158,7 +1158,7 @@ function makeStandaloneFakeRepairOperator(string $name): RepairOperatorInterface
         {
         }
 
-        public function repair(PartialSolution $partial): Cromossomo
+        public function repair(PartialSolution $partial, array $context = []): Cromossomo
         {
             $candidate = new Cromossomo([
                 new Gene(999, 1, 1, 1, 1, 1, 1),

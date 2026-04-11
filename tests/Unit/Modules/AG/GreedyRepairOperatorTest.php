@@ -182,6 +182,41 @@ it('honors the time budget even when a single relocation search becomes expensiv
         ->and($events)->toContain('repair_aborted');
 });
 
+it('emits keepalive progress heartbeats during expensive relocation scans', function (): void {
+    $chromosome = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+        new Gene(2, 1, 2, 1, 1, 1, 1),
+    ]);
+
+    $events = [];
+    $repair = new GreedyRepairOperator();
+
+    $repair->repair(
+        $chromosome,
+        makeRelocationScheduleData(),
+        static function (): array {
+            usleep(5_000);
+
+            return [
+                'hard_penalty' => 20.0,
+                'soft_penalty' => 0.0,
+                'score' => 0.0,
+            ];
+        },
+        function (array $payload) use (&$events): void {
+            $events[] = $payload['event'] ?? null;
+        },
+        [
+            'max_millis' => 12,
+            'heartbeat_interval_millis' => 1,
+        ],
+    );
+
+    expect($events)->toContain('pass_started')
+        ->and($events)->toContain('pass_progress')
+        ->and($events)->toContain('repair_aborted');
+});
+
 it('allows repair extensions to add targets and restrict candidate slots', function (): void {
     $chromosome = new Cromossomo([
         new Gene(1, 1, 1, 1, 1, 1, 1),

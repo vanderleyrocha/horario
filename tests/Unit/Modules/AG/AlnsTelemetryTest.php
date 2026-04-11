@@ -24,7 +24,7 @@ it('publishes destroy and repair telemetry with improvement after alns intensifi
     $alns = new AdaptiveLargeNeighborhoodSearch(
         destroyOperators: [$destroy],
         repairOperators: [$repair],
-        selector: $selector
+        selector: $selector,
     );
 
     $solution = new Cromossomo([
@@ -76,7 +76,7 @@ it('adjusts destroy and repair intensity using landscape pressure and recent aln
     $alns = new AdaptiveLargeNeighborhoodSearch(
         destroyOperators: [$destroy],
         repairOperators: [$repair],
-        selector: $selector
+        selector: $selector,
     );
 
     $solution = new Cromossomo([
@@ -132,11 +132,84 @@ it('adjusts destroy and repair intensity using landscape pressure and recent aln
         ->and($repair->configuredIntensities[1] ?? null)->toBeLessThan($repair->configuredIntensities[0] ?? 1.0);
 });
 
+it('propagates repair context to the selected alns repair operator', function (): void {
+    $observed = (object) [
+        'checkpoint' => null,
+        'heartbeatEvent' => null,
+        'limit' => null,
+    ];
+
+    $destroy = makeFakeDestroyOperator('ConflictDestroy');
+    $repair = new class ($observed) implements RepairOperatorInterface {
+        public function __construct(private object $observed)
+        {
+        }
+
+        public function repair(PartialSolution $partial, array $context = []): Cromossomo
+        {
+            $this->observed->limit = $context['limits']['max_millis'] ?? null;
+
+            if (is_callable($context['abort_if_timed_out'] ?? null)) {
+                $context['abort_if_timed_out']('context_forwarded');
+            }
+
+            if (is_callable($context['progress_heartbeat'] ?? null)) {
+                $context['progress_heartbeat'](['event' => 'repair_started']);
+            }
+
+            $candidate = new Cromossomo($partial->assigned());
+            $candidate->setFitness(5.0);
+
+            return $candidate;
+        }
+
+        public function getName(): string
+        {
+            return 'ContextAwareRepair';
+        }
+    };
+
+    $selector = makeFixedAlnsSelectionStrategy([
+        'ConflictDestroy',
+        'ContextAwareRepair',
+    ]);
+
+    $alns = new AdaptiveLargeNeighborhoodSearch(
+        destroyOperators: [$destroy],
+        repairOperators: [$repair],
+        selector: $selector,
+    );
+
+    $solution = new Cromossomo([
+        new Gene(1, 1, 1, 1, 1, 1, 1),
+    ]);
+    $solution->setFitness(1.0);
+
+    $alns->improve($solution, [
+        'repair_context' => [
+            'abort_if_timed_out' => function (string $checkpoint = 'unknown') use ($observed): void {
+                $observed->checkpoint = $checkpoint;
+            },
+            'progress_heartbeat' => function (array $payload) use ($observed): void {
+                $observed->heartbeatEvent = $payload['event'] ?? null;
+            },
+            'limits' => [
+                'max_millis' => 1234,
+            ],
+        ],
+    ]);
+
+    expect($observed->checkpoint)->toBe('context_forwarded')
+        ->and($observed->heartbeatEvent)->toBe('repair_started')
+        ->and($observed->limit)->toBe(1234);
+});
+
 function makeFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectionStrategy
 {
-    return new class($selectionOrder) implements OperatorSelectionStrategy
-    {
-        public function __construct(private array $selectionOrder) {}
+    return new class ($selectionOrder) implements OperatorSelectionStrategy {
+        public function __construct(private array $selectionOrder)
+        {
+        }
 
         public function select(array $operators, array $stats): object
         {
@@ -155,9 +228,10 @@ function makeFixedAlnsSelectionStrategy(array $selectionOrder): OperatorSelectio
 
 function makeFakeDestroyOperator(string $name): DestroyOperatorInterface
 {
-    return new class($name) implements DestroyOperatorInterface
-    {
-        public function __construct(private readonly string $name) {}
+    return new class ($name) implements DestroyOperatorInterface {
+        public function __construct(private readonly string $name)
+        {
+        }
 
         public function destroy(Cromossomo $solution): PartialSolution
         {
@@ -173,13 +247,14 @@ function makeFakeDestroyOperator(string $name): DestroyOperatorInterface
 
 function makeAdaptiveFakeDestroyOperator(string $name): AdaptiveDestroyOperatorInterface&DestroyOperatorInterface
 {
-    return new class($name) implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface
-    {
+    return new class ($name) implements AdaptiveDestroyOperatorInterface, DestroyOperatorInterface {
         public array $configuredIntensities = [];
 
         private float $intensity = 0.35;
 
-        public function __construct(private readonly string $name) {}
+        public function __construct(private readonly string $name)
+        {
+        }
 
         public function destroy(Cromossomo $solution): PartialSolution
         {
@@ -188,7 +263,7 @@ function makeAdaptiveFakeDestroyOperator(string $name): AdaptiveDestroyOperatorI
 
             return new PartialSolution(
                 array_slice($genes, $removeCount),
-                array_slice($genes, 0, $removeCount)
+                array_slice($genes, 0, $removeCount),
             );
         }
 
@@ -207,14 +282,14 @@ function makeAdaptiveFakeDestroyOperator(string $name): AdaptiveDestroyOperatorI
 
 function makeFakeRepairOperator(string $name, float $resultFitness): RepairOperatorInterface
 {
-    return new class($name, $resultFitness) implements RepairOperatorInterface
-    {
+    return new class ($name, $resultFitness) implements RepairOperatorInterface {
         public function __construct(
             private readonly string $name,
-            private readonly float $resultFitness
-        ) {}
+            private readonly float $resultFitness,
+        ) {
+        }
 
-        public function repair(PartialSolution $partial): Cromossomo
+        public function repair(PartialSolution $partial, array $context = []): Cromossomo
         {
             $candidate = new Cromossomo($partial->assigned());
             $candidate->setFitness($this->resultFitness);
@@ -231,20 +306,20 @@ function makeFakeRepairOperator(string $name, float $resultFitness): RepairOpera
 
 function makeAdaptiveFakeRepairOperator(
     string $name,
-    array $resultFitnessSequence
+    array $resultFitnessSequence,
 ): AdaptiveRepairOperatorInterface&RepairOperatorInterface {
-    return new class($name, $resultFitnessSequence) implements AdaptiveRepairOperatorInterface, RepairOperatorInterface
-    {
+    return new class ($name, $resultFitnessSequence) implements AdaptiveRepairOperatorInterface, RepairOperatorInterface {
         public array $configuredIntensities = [];
 
         private float $intensity = 0.35;
 
         public function __construct(
             private readonly string $name,
-            private array $resultFitnessSequence
-        ) {}
+            private array $resultFitnessSequence,
+        ) {
+        }
 
-        public function repair(PartialSolution $partial): Cromossomo
+        public function repair(PartialSolution $partial, array $context = []): Cromossomo
         {
             $candidate = new Cromossomo(array_merge($partial->assigned(), $partial->unassigned()));
             $candidate->setFitness(array_shift($this->resultFitnessSequence) ?? (4.0 + $this->intensity));

@@ -8,5 +8,5 @@ use App\Modules\AG\Domain\Representation\Entities\Cromossomo;
 
 interface RepairOperatorInterface extends EvolutionaryOperatorInterface
 {
-    public function repair(PartialSolution $partial): Cromossomo;
+    public function repair(PartialSolution $partial, array $context = []): Cromossomo;
 }

@@ -86,15 +86,14 @@ final class RunGeneticAlgorithm
         private readonly ScheduleDataBuilder $scheduleDataBuilder,
         private readonly LoadActiveScheduleConstraintsAction $loadActiveScheduleConstraints,
         private readonly ConstraintSolverPayloadMapper $constraintSolverPayloadMapper,
-    ) {
-    }
+    ) {}
 
     public function execute(Horario $horario, ?ProgressReporterInterface $progress = null, ?ExecutionMetricsRecorder $executionMetrics = null): array
     {
         Log::info('RunGeneticAlgorithm::execute() iniciado');
 
         $config = GeneticAlgorithmConfigDTO::fromModels($horario);
-        $executionMetrics ??= new ExecutionMetricsRecorder();
+        $executionMetrics ??= new ExecutionMetricsRecorder;
 
         // ✅ AÇÃO 06: Sincronizar island_count (UI/backend)
         if ($executionMetrics->hasExecutionId()) {
@@ -118,7 +117,7 @@ final class RunGeneticAlgorithm
             );
         }
 
-        $progress = $progress ?? new NullProgressReporter();
+        $progress = $progress ?? new NullProgressReporter;
 
         $constraintSnapshots = $this->loadConstraintSnapshots($horario, $executionId);
 
@@ -127,22 +126,22 @@ final class RunGeneticAlgorithm
         $maxLessonsPerDay = (int) ($horario->configuracaoHorario?->aulas_por_dia ?? 7);
 
         $constraintPipeline = new ConstraintEvaluationPipeline([
-            new SyncSameTimeslotConstraintEvaluator(),
-            new MutualExclusionConstraintEvaluator(),
-            new TimePlacementConstraintEvaluator(),
+            new SyncSameTimeslotConstraintEvaluator,
+            new MutualExclusionConstraintEvaluator,
+            new TimePlacementConstraintEvaluator,
         ]);
 
         $fitnessRules = [
-            new TeacherConflictRule(),
-            new ClassConflictRule(),
-            new WorkloadExceededRule(),
-            new MandatoryBlockViolationRule(),
+            new TeacherConflictRule,
+            new ClassConflictRule,
+            new WorkloadExceededRule,
+            new MandatoryBlockViolationRule,
             new CustomConstraintHardRule($constraintPipeline),
-            new WindowPenaltyRule(),
-            new DistributionRule(),
+            new WindowPenaltyRule,
+            new DistributionRule,
             new MaxLessonsPerDayRule($maxLessonsPerDay),
-            new ConsecutiveLessonRule(),
-            new PreferredTimeRule(),
+            new ConsecutiveLessonRule,
+            new PreferredTimeRule,
             new CustomConstraintSoftRule($constraintPipeline),
         ];
 
@@ -154,21 +153,21 @@ final class RunGeneticAlgorithm
         $repairExtensions = [];
 
         if ((bool) config('ag.initial_population.custom_constraint_repair_extension_enabled', true)) {
-            $repairExtensions[] = new CustomConstraintRepairExtension();
+            $repairExtensions[] = new CustomConstraintRepairExtension;
         }
 
         $repairOperator = new GreedyRepairOperator($repairExtensions);
 
         $problem = new ScheduleProblem(
             data: $scheduleData,
-            contextBuilder: new EvaluationContextBuilder(),
+            contextBuilder: new EvaluationContextBuilder,
             fitnessEvaluator: $fitnessEvaluator,
             repairOperator: $repairOperator,
             progress: $progress,
             executionId: $executionId,
         );
 
-        $distance = new GeneticDistance();
+        $distance = new GeneticDistance;
 
         $sharingFunction = new SharingFunction(sigma: 0.35, alpha: 1.0);
 
@@ -176,15 +175,15 @@ final class RunGeneticAlgorithm
 
         $selection = new TournamentSelection(3, $sharingCalculator);
 
-        $crossover = new ConflictGraphCrossoverOperator();
+        $crossover = new ConflictGraphCrossoverOperator;
 
         $elitism = new TopEliteStrategy(max(1, $config->eliteCount()));
 
         $termination = new VarianceBasedTerminationCriterion(
             maxGenerations: $config->numeroGeracoes,
             populationStatistics: new PopulationStatistics(
-                new HashDiversityCalculator(),
-                new PopulationEntropyCalculator(),
+                new HashDiversityCalculator,
+                new PopulationEntropyCalculator,
             ),
             targetFitness: $config->targetFitness,
             maxGenerationsWithoutImprovement: $config->maxGenerationsWithoutImprovement,
@@ -221,31 +220,35 @@ final class RunGeneticAlgorithm
 
         for ($i = 0; $i < $islandCount; $i++) {
             // Sprint 4: perfil da ilha determina alpha GRASP e parâmetros de mutação
-            $islandProfile = match ($i) {
-                0 => IslandProfile::Conservative,
-                1 => IslandProfile::Exploratory,
+            // Quando há apenas 1 ilha, usar Balanced em vez de Conservative:
+            // o perfil Conservative foi projetado para exploitar em conjunto com ilhas
+            // Exploratory/Balanced; sozinho ele converge prematuramente.
+            $islandProfile = match (true) {
+                $islandCount === 1 => IslandProfile::Balanced,
+                $i === 0 => IslandProfile::Conservative,
+                $i === 1 => IslandProfile::Exploratory,
                 default => IslandProfile::Balanced,
             };
 
-            $metrics = new MetricsRecorder();
+            $metrics = new MetricsRecorder;
             $metrics->setExecutionId($executionId);
             $metrics->setPopulationStatistics(
                 new PopulationStatistics(
-                    diversityCalculator: new HashDiversityCalculator(),
-                    entropyCalculator: new PopulationEntropyCalculator(),
+                    diversityCalculator: new HashDiversityCalculator,
+                    entropyCalculator: new PopulationEntropyCalculator,
                     diversitySamplingInterval: 5,
                     diversityCollapseThreshold: 0.05,
                 ),
             );
 
             $mutation = new AdaptiveDiversityMutation(
-                structured: new StructuredSwapMutation(),
-                swap: new GeneSwapMutation(),
+                structured: new StructuredSwapMutation,
+                swap: new GeneSwapMutation,
                 conflict: new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6),
             );
 
-            $tracker = new OperatorPerformanceTracker();
-            $rewardCalculator = new OperatorRewardCalculator();
+            $tracker = new OperatorPerformanceTracker;
+            $rewardCalculator = new OperatorRewardCalculator;
             $selectionStrategy = new EpsilonGreedySelector(epsilon: 0.15);
 
             $hyperHeuristic = new LearningHyperHeuristicController(
@@ -255,21 +258,21 @@ final class RunGeneticAlgorithm
             );
 
             $hyperHeuristic->registerOperators([
-                new StructuredSwapMutation(),
-                new GeneSwapMutation(),
+                new StructuredSwapMutation,
+                new GeneSwapMutation,
                 new ConflictGuidedMutation(maxDias: 5, maxPeriodosPorDia: 6),
-                new SinglePointCrossover(),
-                new BlockPreservingCrossover(),
-                new RandomDestroyOperator(),
-                new ConflictDestroyOperator(new ConflictDetector()),
-                new ClusterDestroyOperator(),
+                new SinglePointCrossover,
+                new BlockPreservingCrossover,
+                new RandomDestroyOperator,
+                new ConflictDestroyOperator(new ConflictDetector),
+                new ClusterDestroyOperator,
                 new RegretInsertionOperator($scheduleData),
             ]);
 
             $adaptiveMutation = new AdaptiveMutationController(
-                baseRate:      $islandProfile->mutationBaseRate(),
+                baseRate: $islandProfile->mutationBaseRate(),
                 amplification: $islandProfile->mutationAmplification(),
-                maxRate:       $islandProfile->mutationMaxRate(),
+                maxRate: $islandProfile->mutationMaxRate(),
             );
 
             // ✅ AÇÃO 07: Condicional parallel evaluation por population_size threshold
@@ -284,13 +287,13 @@ final class RunGeneticAlgorithm
                 ? new AsyncFitnessEvaluator(problem: $problem, concurrency: $maxWorkers)
                 : new PopulationFitnessEvaluator(problem: $problem, concurrency: $maxWorkers);
 
-            $replacement = new AdaptiveNichingReplacement(new GeneticDistance());
+            $replacement = new AdaptiveNichingReplacement(new GeneticDistance);
 
             $lns = new AdaptiveLargeNeighborhoodSearch(
                 [
-                    new RandomDestroyOperator(),
-                    new ConflictDestroyOperator(new ConflictDetector()),
-                    new ClusterDestroyOperator(),
+                    new RandomDestroyOperator,
+                    new ConflictDestroyOperator(new ConflictDetector),
+                    new ClusterDestroyOperator,
                 ],
                 [
                     new LNSRepairAdapter($repairOperator, $scheduleData),
@@ -298,13 +301,13 @@ final class RunGeneticAlgorithm
                 ],
             );
 
-            $alnsAcceptance = new StrictScoreImprovementAcceptance();
+            $alnsAcceptance = new StrictScoreImprovementAcceptance;
 
             $landscapeEngine = new LandscapeEngine(
-                new LandscapeAnalyzer(),
-                new LandscapeDetector(),
-                new LandscapeResponseStrategy(),
-                new LandscapeMemory(),
+                new LandscapeAnalyzer,
+                new LandscapeDetector,
+                new LandscapeResponseStrategy,
+                new LandscapeMemory,
             );
 
             $engine = new GeneticAlgorithmEngine(
@@ -348,9 +351,10 @@ final class RunGeneticAlgorithm
             'execution_id' => $executionId,
             'island_count' => $islandCount,
             'profiles' => array_map(
-                fn (int $idx) => match ($idx) {
-                    0 => IslandProfile::Conservative->value,
-                    1 => IslandProfile::Exploratory->value,
+                fn (int $idx) => match (true) {
+                    $islandCount === 1 => IslandProfile::Balanced->value,
+                    $idx === 0 => IslandProfile::Conservative->value,
+                    $idx === 1 => IslandProfile::Exploratory->value,
                     default => IslandProfile::Balanced->value,
                 },
                 range(0, $islandCount - 1),
@@ -361,7 +365,7 @@ final class RunGeneticAlgorithm
         $islandEngine->setExecutionId($executionId);
 
         $best = $islandEngine->run($config->numeroGeracoes);
-        $finalResult = $this->finalizeBestSolution($best, $problem);
+        $finalResult = $this->finalizeBestSolution($best, $problem, $executionId);
 
         return [
             'best' => $finalResult['candidate'],
@@ -407,19 +411,36 @@ final class RunGeneticAlgorithm
     /**
      * @return array{candidate: Cromossomo, viable: bool}
      */
-    private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem): array
+    private function finalizeBestSolution(Cromossomo $best, ScheduleProblem $problem, ?int $executionId = null): array
     {
         $candidate = $best->copy();
         $bestCandidate = $best->copy();
         $bestHardPenalty = INF;
         $attempts = 3;
         $lastHardPenalty = INF;
+        $budgetExhausted = false;
+
+        Log::info('solver.final_repair.started', [
+            'execution_id' => $executionId,
+            'attempts' => $attempts,
+            'time_budget_ms' => max(1000, (int) config('ag.final_repair.max_millis', 12000)),
+            'max_passes_without_progress' => max(1, (int) config('ag.final_repair.max_passes_without_progress', 2)),
+        ]);
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            Log::info('solver.final_repair.attempt_started', [
+                'execution_id' => $executionId,
+                'attempt' => $attempt,
+                'attempts' => $attempts,
+            ]);
+
             $candidate = $problem->repairWithTelemetry(
                 $candidate,
                 reportProgress: true,
                 source: 'final_repair',
+                progressContext: [
+                    'attempt' => $attempt,
+                ],
             );
 
             $result = $problem->evaluate($candidate);
@@ -431,8 +452,26 @@ final class RunGeneticAlgorithm
                 $bestCandidate = $candidate->copy();
             }
 
+            if (($repairTelemetry['abort_reason'] ?? null) === 'time_budget_exhausted') {
+                $budgetExhausted = true;
+
+                Log::warning('solver.final_repair_budget_exhausted', [
+                    'execution_id' => $executionId,
+                    'attempt' => $attempt,
+                    'attempts' => $attempts,
+                    'hard_penalty' => $result->hardPenalty(),
+                    'soft_penalty' => $result->softPenalty(),
+                    'score' => $result->score(),
+                    'repair' => $repairTelemetry,
+                    'fallback' => 'Persistir melhor parcial e encerrar execucao.',
+                ]);
+
+                break;
+            }
+
             if ($result->hardPenalty() <= 0.0 && $problem->isFeasible($candidate)) {
                 Log::info('solver.final_repair_succeeded', [
+                    'execution_id' => $executionId,
                     'attempt' => $attempt,
                     'hard_penalty' => $result->hardPenalty(),
                     'soft_penalty' => $result->softPenalty(),
@@ -444,6 +483,7 @@ final class RunGeneticAlgorithm
             }
 
             Log::warning('solver.final_repair_attempt_failed', [
+                'execution_id' => $executionId,
                 'attempt' => $attempt,
                 'hard_penalty' => $result->hardPenalty(),
                 'soft_penalty' => $result->softPenalty(),
@@ -453,9 +493,11 @@ final class RunGeneticAlgorithm
         }
 
         Log::critical('solver.final_repair_partial_result', [
+            'execution_id' => $executionId,
             'hard_penalty' => $bestHardPenalty < INF ? $bestHardPenalty : $lastHardPenalty,
             'score' => $bestCandidate->fitness(),
             'attempts' => $attempts,
+            'budget_exhausted' => $budgetExhausted,
             'note' => 'Persistindo melhor individuo disponivel com hard_penalty > 0. Verificar violacoes de custom constraints.',
         ]);
 

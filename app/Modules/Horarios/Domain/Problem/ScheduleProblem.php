@@ -68,7 +68,7 @@ final class ScheduleProblem implements GeneticProblem
 
     private const INITIAL_QUALITY_GATE_VIABLE_SCORE_THRESHOLD = 50.0;
 
-    private const EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS = 30;
+    private const EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS = 5;
 
     private const EVOLUTION_REPAIR_TIME_BUDGET_MS = 3000;
 
@@ -250,9 +250,7 @@ final class ScheduleProblem implements GeneticProblem
      */
     private array $initialRepairDeadEndFingerprints = [];
 
-    public function __construct(private readonly ScheduleData $data, private readonly EvaluationContextBuilder $contextBuilder, private readonly FitnessEvaluator $fitnessEvaluator, private readonly GreedyRepairOperator $repairOperator, private readonly ?ProgressReporterInterface $progress = null, private readonly ?int $executionId = null)
-    {
-    }
+    public function __construct(private readonly ScheduleData $data, private readonly EvaluationContextBuilder $contextBuilder, private readonly FitnessEvaluator $fitnessEvaluator, private readonly GreedyRepairOperator $repairOperator, private readonly ?ProgressReporterInterface $progress = null, private readonly ?int $executionId = null) {}
 
     public function createIndividual(): Cromossomo
     {
@@ -1272,6 +1270,7 @@ final class ScheduleProblem implements GeneticProblem
         $heartbeat = null;
         $repairStartedAt = microtime(true);
         $lastLongRunningRepairLogAt = null;
+        $lastFinalRepairHeartbeatAt = null;
 
         if ($reportProgress && $source === 'initial_population_quality_gate') {
             $this->reportInitialPopulationProgress($progressContext + [
@@ -1358,6 +1357,62 @@ final class ScheduleProblem implements GeneticProblem
             };
         }
 
+        if ($reportProgress && $source === 'final_repair') {
+            Log::info('schedule.final_repair.started', [
+                'execution_id' => $this->executionId,
+                'source' => $source,
+                'attempt' => $progressContext['attempt'] ?? null,
+                'hard_penalty_before' => $probe($individual)['hard_penalty'] ?? null,
+            ]);
+
+            $heartbeat = function (array $heartbeatPayload) use ($source, $progressContext, $repairStartedAt, &$lastLongRunningRepairLogAt, &$lastFinalRepairHeartbeatAt): void {
+                $now = microtime(true);
+                $repairEvent = (string) ($heartbeatPayload['event'] ?? '');
+                $processedInvalidGenes = (int) ($heartbeatPayload['processed_invalid_genes'] ?? 0);
+                $isCheckpointEvent = in_array($repairEvent, ['repair_aborted', 'pass_finished', 'pass_started', 'repair_started'], true);
+                $isGranularCheckpoint = $processedInvalidGenes > 0 && $processedInvalidGenes % 10 === 0;
+
+                $this->logLongRunningRepairOperation($source, $progressContext, $heartbeatPayload, $repairStartedAt, $lastLongRunningRepairLogAt);
+
+                $heartbeatIntervalSeconds = max(1, (int) config('ag.final_repair.heartbeat_interval_seconds', 3));
+
+                if (
+                    $lastFinalRepairHeartbeatAt !== null
+                    && ($now - $lastFinalRepairHeartbeatAt) < $heartbeatIntervalSeconds
+                    && ! $isCheckpointEvent
+                    && ! $isGranularCheckpoint
+                ) {
+                    return;
+                }
+
+                $lastFinalRepairHeartbeatAt = $now;
+
+                $this->progress?->report([
+                    'phase' => 'terminal',
+                    'stage' => 'final_repair_runtime',
+                    'execution_id' => $this->executionId,
+                    'current_operation' => 'final_repair_runtime',
+                    'operation_label' => 'Executando reparo final do melhor individuo',
+                    'attempt' => $progressContext['attempt'] ?? null,
+                    'repair_event' => $heartbeatPayload['event'] ?? null,
+                    'repair_abort_reason' => $heartbeatPayload['abort_reason'] ?? null,
+                    'repair_pass' => $heartbeatPayload['pass'] ?? null,
+                    'repair_passes_without_progress' => $heartbeatPayload['passes_without_progress'] ?? null,
+                    'repair_invalid_genes_before' => $heartbeatPayload['invalid_genes_before'] ?? null,
+                    'repair_invalid_genes_after' => $heartbeatPayload['invalid_genes_after'] ?? null,
+                    'repair_processed_invalid_genes' => $heartbeatPayload['processed_invalid_genes'] ?? null,
+                    'repair_total_invalid_genes' => $heartbeatPayload['total_invalid_genes'] ?? null,
+                    'repair_hard_penalty_before' => $heartbeatPayload['hard_penalty_before'] ?? null,
+                    'repair_hard_penalty_after' => $heartbeatPayload['hard_penalty_after'] ?? null,
+                    'repair_hard_penalty_delta' => $heartbeatPayload['hard_penalty_delta'] ?? null,
+                    'repair_target_summary_before' => $heartbeatPayload['repair_target_summary_before'] ?? null,
+                    'repair_relocations' => $heartbeatPayload['relocations'] ?? 0,
+                    'repair_swaps' => $heartbeatPayload['swaps'] ?? 0,
+                    'repair_local_rebuilds' => $heartbeatPayload['local_rebuilds'] ?? 0,
+                ]);
+            };
+        }
+
         $limits = [];
 
         if ($source === 'initial_population_quality_gate') {
@@ -1369,6 +1424,15 @@ final class ScheduleProblem implements GeneticProblem
             $limits = [
                 'max_millis' => self::EVOLUTION_REPAIR_TIME_BUDGET_MS,
                 'max_passes_without_progress' => self::EVOLUTION_REPAIR_MAX_PASSES_WITHOUT_PROGRESS,
+                'heartbeat_interval_millis' => self::EVOLUTION_REPAIR_HEARTBEAT_INTERVAL_SECONDS * 1000,
+            ];
+        } elseif ($source === 'final_repair') {
+            $heartbeatIntervalSeconds = max(1, (int) config('ag.final_repair.heartbeat_interval_seconds', 3));
+
+            $limits = [
+                'max_millis' => max(1000, (int) config('ag.final_repair.max_millis', 12000)),
+                'max_passes_without_progress' => max(1, (int) config('ag.final_repair.max_passes_without_progress', 2)),
+                'heartbeat_interval_millis' => $heartbeatIntervalSeconds * 1000,
             ];
         }
 
@@ -1403,12 +1467,32 @@ final class ScheduleProblem implements GeneticProblem
             $this->reportRepairProgress($source, $this->lastRepairTelemetry);
         }
 
+        if ($reportProgress && $source === 'final_repair') {
+            Log::info('schedule.final_repair.finished', [
+                'execution_id' => $this->executionId,
+                'source' => $source,
+                'attempt' => $progressContext['attempt'] ?? null,
+                'elapsed_ms' => (int) round(max(0, microtime(true) - $repairStartedAt) * 1000),
+                'summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+            ]);
+
+            $this->progress?->report([
+                'phase' => 'terminal',
+                'stage' => 'final_repair_finished',
+                'execution_id' => $this->executionId,
+                'current_operation' => 'final_repair_finished',
+                'operation_label' => 'Reparo final concluido',
+                'attempt' => $progressContext['attempt'] ?? null,
+                'repair_summary' => $this->summarizeRepairTelemetry($this->lastRepairTelemetry),
+            ]);
+        }
+
         return $repaired;
     }
 
     /**
-     * @param array<string, mixed> $progressContext
-     * @param array<string, mixed> $heartbeatPayload
+     * @param  array<string, mixed>  $progressContext
+     * @param  array<string, mixed>  $heartbeatPayload
      */
     private function logLongRunningRepairOperation(string $source, array $progressContext, array $heartbeatPayload, float $repairStartedAt, ?float &$lastLongRunningRepairLogAt): void
     {
@@ -2047,7 +2131,7 @@ final class ScheduleProblem implements GeneticProblem
         $structuralInfeasibilities = $this->buildStructuralInfeasibilityDiagnostics();
         $classLoadPressure = $this->buildEntityLoadPressureSummary(false);
         $professorLoadPressure = $this->buildEntityLoadPressureSummary(true);
-        $constraintFeasibility = (new ConstraintFeasibilityAnalyzer())->analyze($this->data);
+        $constraintFeasibility = (new ConstraintFeasibilityAnalyzer)->analyze($this->data);
         $constraintInfeasibilities = $constraintFeasibility->blockingIssues();
         $constraintWarnings = $constraintFeasibility->warnings();
         $constraintRiskContribution = (int) $constraintFeasibility->riskContribution();
@@ -2213,13 +2297,13 @@ final class ScheduleProblem implements GeneticProblem
         $classDayLoad = 0;
 
         foreach ($teacherBusy[$lesson->professorId] ?? [] as $key => $occupied) {
-            if (str_starts_with($key, $slot->day . '-')) {
+            if (str_starts_with($key, $slot->day.'-')) {
                 $teacherDayLoad++;
             }
         }
 
         foreach ($classBusy[$lesson->classId] ?? [] as $key => $occupied) {
-            if (str_starts_with($key, $slot->day . '-')) {
+            if (str_starts_with($key, $slot->day.'-')) {
                 $classDayLoad++;
             }
         }
@@ -2347,7 +2431,7 @@ final class ScheduleProblem implements GeneticProblem
 
     private function availableDaysCount(int $entityId, bool $isProfessor): int
     {
-        $cacheKey = ($isProfessor ? 'professor:' : 'class:') . $entityId;
+        $cacheKey = ($isProfessor ? 'professor:' : 'class:').$entityId;
 
         if (array_key_exists($cacheKey, $this->availableDaysCountCache)) {
             return $this->availableDaysCountCache[$cacheKey];
@@ -2378,7 +2462,7 @@ final class ScheduleProblem implements GeneticProblem
 
     private function availabilitySlotCount(int $entityId, bool $isProfessor): int
     {
-        $cacheKey = ($isProfessor ? 'professor:' : 'class:') . $entityId;
+        $cacheKey = ($isProfessor ? 'professor:' : 'class:').$entityId;
 
         if (array_key_exists($cacheKey, $this->availabilitySlotCountCache)) {
             return $this->availabilitySlotCountCache[$cacheKey];
@@ -2549,7 +2633,7 @@ final class ScheduleProblem implements GeneticProblem
                     'exploratory' => [self::RCL_ALPHA_EXPLORATORY_MIN, self::RCL_ALPHA_MAX],
                     default => [self::RCL_ALPHA_BALANCED_MIN, self::RCL_ALPHA_BALANCED_MAX],
                 };
-                $reason .= ' [portfolio_bias:' . $profile . ']';
+                $reason .= ' [portfolio_bias:'.$profile.']';
             }
         }
 
@@ -2569,7 +2653,7 @@ final class ScheduleProblem implements GeneticProblem
                 $profile = $this->islandProfile->value;
             }
 
-            $reason .= ' [ilha:' . $this->islandProfile->value . ']';
+            $reason .= ' [ilha:'.$this->islandProfile->value.']';
         }
 
         $alpha = $this->randomAlphaBetween($alphaMin, $alphaMax);
@@ -2631,7 +2715,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $telemetry
      * @return array<string, float|int>
      */
     private function alphaImpactSummary(array $telemetry): array
@@ -3032,7 +3116,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param list<int> $ignoredIndexes
+     * @param  list<int>  $ignoredIndexes
      * @return array{0: array<int, array<string, bool>>, 1: array<int, array<string, bool>>}
      */
     private function buildOccupancyMapsFromChromosome(Cromossomo $chromosome, array $ignoredIndexes = []): array
@@ -3046,7 +3130,7 @@ final class ScheduleProblem implements GeneticProblem
             }
 
             for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
-                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $key = $gene->diaSemana().'-'.($gene->periodoDia() + $offset);
                 $teacherBusy[$gene->professorId()][$key] = true;
                 $classBusy[$gene->turmaId()][$key] = true;
             }
@@ -3078,7 +3162,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param Gene[] $genes
+     * @param  Gene[]  $genes
      */
     private function rememberNogoodsFromAssignedGenes(array $genes): void
     {
@@ -3091,8 +3175,8 @@ final class ScheduleProblem implements GeneticProblem
             }
 
             foreach ($gene->timeslots() as $period) {
-                $teacherKey = $gene->professorId() . '-' . $gene->diaSemana() . '-' . $period;
-                $classKey = $gene->turmaId() . '-' . $gene->diaSemana() . '-' . $period;
+                $teacherKey = $gene->professorId().'-'.$gene->diaSemana().'-'.$period;
+                $classKey = $gene->turmaId().'-'.$gene->diaSemana().'-'.$period;
 
                 if (isset($teacherIndex[$teacherKey])) {
                     $this->rememberNogoodGene($gene);
@@ -3129,12 +3213,12 @@ final class ScheduleProblem implements GeneticProblem
 
     private function makeLessonSlotNogoodKey(int $lessonId, int $slotId): string
     {
-        return $lessonId . ':' . $slotId;
+        return $lessonId.':'.$slotId;
     }
 
     private function makeEntitySlotNogoodKey(int $entityId, int $slotId): string
     {
-        return $entityId . ':' . $slotId;
+        return $entityId.':'.$slotId;
     }
 
     private function totalNogoodsLearned(): int
@@ -3166,8 +3250,8 @@ final class ScheduleProblem implements GeneticProblem
 
         foreach ($candidate->genes() as $index => $gene) {
             foreach ($gene->timeslots() as $period) {
-                $teacherKey = $gene->professorId() . '-' . $gene->diaSemana() . '-' . $period;
-                $classKey = $gene->turmaId() . '-' . $gene->diaSemana() . '-' . $period;
+                $teacherKey = $gene->professorId().'-'.$gene->diaSemana().'-'.$period;
+                $classKey = $gene->turmaId().'-'.$gene->diaSemana().'-'.$period;
 
                 if (isset($teacherIndex[$teacherKey])) {
                     $conflicts[$index] = $index;
@@ -3480,8 +3564,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $qualityGate
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $qualityGate
+     * @param  array<string, mixed>  $telemetry
      */
     private function formatInitialQualityGateFailureMessage(int $attempt, array $qualityGate, array $telemetry): string
     {
@@ -3504,7 +3588,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $telemetry
      */
     private function attemptElapsedMs(array $telemetry): int
     {
@@ -3556,8 +3640,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $progressContext
-     * @param array<string, mixed> $heartbeatPayload
+     * @param  array<string, mixed>  $progressContext
+     * @param  array<string, mixed>  $heartbeatPayload
      */
     private function logInitialPopulationRepairHeartbeat(string $source, array $progressContext, array $heartbeatPayload, float $repairStartedAt): void
     {
@@ -3660,15 +3744,14 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $qualityGate
+     * @param  array<string, mixed>  $qualityGate
      */
     private function shouldSkipInitialQualityGateRepair(
         array $qualityGate,
         int $attempt,
         ?Cromossomo $candidate = null,
         array $telemetry = [],
-    ): bool
-    {
+    ): bool {
         if ($this->isInitialQualityGateRelaxedPhase($attempt)) {
             return false;
         }
@@ -3716,8 +3799,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $qualityGate
-     * @param array<string, mixed> $extraContext
+     * @param  array<string, mixed>  $qualityGate
+     * @param  array<string, mixed>  $extraContext
      */
     private function logSkippedInitialRepair(int $attempt, int $queueSize, array $qualityGate, array $extraContext = []): void
     {
@@ -3732,7 +3815,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $inspection
+     * @param  array<string, mixed>  $inspection
      */
     private function isKnownInitialRepairDeadEnd(array $inspection): bool
     {
@@ -3745,7 +3828,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $telemetry
      */
     private function rememberInitialRepairDeadEnd(array $telemetry): void
     {
@@ -3810,7 +3893,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, int> $repairTargetSummary
+     * @param  array<string, int>  $repairTargetSummary
      */
     private function initialRepairDeadEndFingerprint(int $invalidGenes, array $repairTargetSummary): ?string
     {
@@ -3836,7 +3919,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $telemetry
      * @return array<string, mixed>
      */
     private function evaluateInitialPopulationFailFast(int $attempt, int $queueSize, array $telemetry): array
@@ -3857,7 +3940,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
+     * @param  array<string, mixed>  $telemetry
      * @return array<string, mixed>
      */
     private function summarizeRepairTelemetry(array $telemetry): array
@@ -3884,8 +3967,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $telemetry
-     * @param array<string, mixed> $extra
+     * @param  array<string, mixed>  $telemetry
+     * @param  array<string, mixed>  $extra
      */
     private function recordInitialPopulationAttempt(int $attempt, string $outcome, array $telemetry, float $attemptStartedAt, array $extra = []): void
     {
@@ -4047,7 +4130,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, int> $hardConflictValues
+     * @param  array<int, int>  $hardConflictValues
      * @return array<string, mixed>
      */
     private function resolveHybridCpAssignmentSignal(array $hardConflictValues, int $queueSize): array
@@ -4087,7 +4170,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<string, mixed> $hybridSignal
+     * @param  array<string, mixed>  $hybridSignal
      */
     private function logHybridTriggerIfNeeded(array $hybridSignal): void
     {
@@ -4146,7 +4229,7 @@ final class ScheduleProblem implements GeneticProblem
         }
 
         for ($offset = 0; $offset < $lesson->requiredSlots; $offset++) {
-            $key = $slot->day . '-' . ($slot->lessonNumber + $offset);
+            $key = $slot->day.'-'.($slot->lessonNumber + $offset);
 
             if (isset($teacherBusy[$lesson->professorId][$key]) || isset($classBusy[$lesson->classId][$key])) {
                 return false;
@@ -4164,7 +4247,7 @@ final class ScheduleProblem implements GeneticProblem
     private function occupySlot(LessonData $lesson, TimeSlot $slot, array &$teacherBusy, array &$classBusy): void
     {
         for ($offset = 0; $offset < $lesson->requiredSlots; $offset++) {
-            $key = $slot->day . '-' . ($slot->lessonNumber + $offset);
+            $key = $slot->day.'-'.($slot->lessonNumber + $offset);
 
             $teacherBusy[$lesson->professorId][$key] = true;
             $classBusy[$lesson->classId][$key] = true;
@@ -4208,7 +4291,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @param  array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>  $queue
      * @return array{0: array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>, 1: array{strategy: string, reason: string}}
      */
     private function applyConstructorPortfolio(array $queue): array
@@ -4261,7 +4344,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @param  array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>  $queue
      * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
      */
     private function reorderQueueCriticalProfessorFirst(array $queue): array
@@ -4298,7 +4381,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @param  array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>  $queue
      * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
      */
     private function reorderQueueSyncConstraintsFirst(array $queue): array
@@ -4338,7 +4421,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
+     * @param  array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>  $queue
      * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
      */
     private function reorderQueueMandatoryBlocksFirst(array $queue): array
@@ -4792,7 +4875,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, int> $lessonIds
+     * @param  array<int, int>  $lessonIds
      * @return array<int, int>
      */
     private function commonCandidateSlotIdsForLessons(array $lessonIds): array
@@ -4822,8 +4905,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, int> $lessonIds
-     * @param array<int, int> $sharedSlotIds
+     * @param  array<int, int>  $lessonIds
+     * @param  array<int, int>  $sharedSlotIds
      */
     private function selectBestSharedSyncSlot(array $lessonIds, array $sharedSlotIds, array $teacherBusy, array $classBusy): ?TimeSlot
     {
@@ -4869,7 +4952,7 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, int> $lessonIds
+     * @param  array<int, int>  $lessonIds
      */
     private function professorPressureForLessonIds(array $lessonIds): float
     {
@@ -4896,8 +4979,8 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}> $queue
-     * @param array<int, int> $coveredLessonOccurrences
+     * @param  array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>  $queue
+     * @param  array<int, int>  $coveredLessonOccurrences
      * @return array<int, array{lesson: LessonData, occurrence: int, candidate_count: int}>
      */
     private function filterQueueRemovingCoveredOccurrences(array $queue, array $coveredLessonOccurrences): array
@@ -4928,7 +5011,6 @@ final class ScheduleProblem implements GeneticProblem
     }
 
     /**
-     * @param mixed $lessonIds
      * @return array<int, int>
      */
     private function normalizeSyncLessonIds(mixed $lessonIds): array
@@ -4951,7 +5033,7 @@ final class ScheduleProblem implements GeneticProblem
      * Um gene é "limpo" se nenhum outro gene compartilha o mesmo par (entidade, slot).
      * Dessa forma, as turmas/professores sem conflito podem ser usados como warm-start.
      *
-     * @param Gene[] $genes
+     * @param  Gene[]  $genes
      * @return Gene[]
      */
     private function extractConflictFreeGenes(array $genes): array
@@ -4965,7 +5047,7 @@ final class ScheduleProblem implements GeneticProblem
             }
 
             for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
-                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $key = $gene->diaSemana().'-'.($gene->periodoDia() + $offset);
                 $teacherClaims[$gene->professorId()][$key] = ($teacherClaims[$gene->professorId()][$key] ?? 0) + 1;
                 $classClaims[$gene->turmaId()][$key] = ($classClaims[$gene->turmaId()][$key] ?? 0) + 1;
             }
@@ -4981,7 +5063,7 @@ final class ScheduleProblem implements GeneticProblem
             $conflict = false;
 
             for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
-                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $key = $gene->diaSemana().'-'.($gene->periodoDia() + $offset);
 
                 if (($teacherClaims[$gene->professorId()][$key] ?? 0) > 1
                     || ($classClaims[$gene->turmaId()][$key] ?? 0) > 1
@@ -5062,7 +5144,7 @@ final class ScheduleProblem implements GeneticProblem
 
         foreach ($this->bestSalvageGenes as $gene) {
             for ($offset = 0; $offset < $gene->duracaoTempos(); $offset++) {
-                $key = $gene->diaSemana() . '-' . ($gene->periodoDia() + $offset);
+                $key = $gene->diaSemana().'-'.($gene->periodoDia() + $offset);
                 $savedTeacherBusy[$gene->professorId()][$key] = true;
                 $savedClassBusy[$gene->turmaId()][$key] = true;
             }
@@ -5122,7 +5204,7 @@ final class ScheduleProblem implements GeneticProblem
         $candidate = new Cromossomo($assignedGenes);
         $qualityGate = $this->evaluateInitialPopulationQualityGate(
             candidate: $candidate,
-            attempt:   self::MAX_BUILD_ATTEMPTS,
+            attempt: self::MAX_BUILD_ATTEMPTS,
             queueSize: count($queue),
             telemetry: $telemetry,
         );
@@ -5260,7 +5342,7 @@ final class ScheduleProblem implements GeneticProblem
     /**
      * Limita nogoods para persistência: mantém top-500 por tipo (decrescente por count).
      *
-     * @param array<string, array<string, int>> $nogoods
+     * @param  array<string, array<string, int>>  $nogoods
      * @return array<string, array<string, int>>
      */
     private function capNogoodsForPersistence(array $nogoods): array

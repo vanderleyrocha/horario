@@ -33,6 +33,22 @@ final class GreedyRepairOperator
 
     private bool $activeTimeBudgetExceeded = false;
 
+    private ?float $activeHeartbeatIntervalSeconds = null;
+
+    private ?float $lastProgressHeartbeatAt = null;
+
+    private ?string $lastProgressHeartbeatSignature = null;
+
+    /**
+     * @var callable|null
+     */
+    private $activeProgressHeartbeat = null;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $activeProgressPayload = [];
+
     /**
      * Cache local de fitness por assinatura para evitar reavaliações repetidas
      * durante o ranking de candidatos no mesmo ciclo de repair.
@@ -65,15 +81,23 @@ final class GreedyRepairOperator
         $this->activeFitnessProbe = $fitnessProbe;
         $this->activeTimeBudgetExceeded = false;
         $this->repairRankingFitnessCache = [];
+        $this->activeProgressHeartbeat = $progressHeartbeat;
+        $this->activeProgressPayload = [];
+        $this->lastProgressHeartbeatAt = null;
+        $this->lastProgressHeartbeatSignature = null;
 
         try {
             $child = $chromosome->copy();
             $this->lastTelemetry = $this->initializeTelemetry($child, $fitnessProbe);
             $startedAt = microtime(true);
             $maxMillis = isset($limits['max_millis']) ? max(1, (int) $limits['max_millis']) : null;
+            $heartbeatIntervalMillis = isset($limits['heartbeat_interval_millis'])
+                ? max(1, (int) $limits['heartbeat_interval_millis'])
+                : 5000;
             $this->activeDeadlineAt = $maxMillis !== null
                 ? $startedAt + ($maxMillis / 1000)
                 : null;
+            $this->activeHeartbeatIntervalSeconds = $heartbeatIntervalMillis / 1000;
             $maxPassesWithoutProgress = isset($limits['max_passes_without_progress'])
                 ? max(1, (int) $limits['max_passes_without_progress'])
                 : null;
@@ -95,6 +119,7 @@ final class GreedyRepairOperator
                 $this->emitHeartbeat($progressHeartbeat, 'pass_started', $passTelemetry);
                 $changed = false;
                 $processedInvalidGenes = 0;
+                $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
 
                 foreach ($repairTargets as $target) {
                     if ($this->deadlineExceeded()) {
@@ -113,6 +138,9 @@ final class GreedyRepairOperator
                         continue;
                     }
 
+                    $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
+                    $this->emitKeepAliveProgressHeartbeat();
+
                     $candidate = $this->attemptRelocation($child, $index, $data, $target['violations'] ?? []);
 
                     if ($this->deadlineExceeded()) {
@@ -124,6 +152,7 @@ final class GreedyRepairOperator
                         $child = $candidate;
                         $passTelemetry['relocations']++;
                         $changed = true;
+                        $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
 
                         continue;
                     }
@@ -139,6 +168,7 @@ final class GreedyRepairOperator
                         $child = $candidate;
                         $passTelemetry['swaps']++;
                         $changed = true;
+                        $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
 
                         continue;
                     }
@@ -154,9 +184,11 @@ final class GreedyRepairOperator
                         $child = $candidate;
                         $passTelemetry['local_rebuilds']++;
                         $changed = true;
+                        $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
                     }
 
                     $processedInvalidGenes++;
+                    $this->syncProgressHeartbeatPayload($passTelemetry, $processedInvalidGenes, count($repairTargets));
                     $this->emitProgressHeartbeat(
                         progressHeartbeat: $progressHeartbeat,
                         passTelemetry: $passTelemetry,
@@ -201,6 +233,11 @@ final class GreedyRepairOperator
             $this->activeFitnessProbe = null;
             $this->activeDeadlineAt = null;
             $this->activeTimeBudgetExceeded = false;
+            $this->activeHeartbeatIntervalSeconds = null;
+            $this->lastProgressHeartbeatAt = null;
+            $this->lastProgressHeartbeatSignature = null;
+            $this->activeProgressHeartbeat = null;
+            $this->activeProgressPayload = [];
             $this->repairRankingFitnessCache = [];
         }
     }
@@ -486,6 +523,8 @@ final class GreedyRepairOperator
         $bestRanking = null;
 
         foreach ($genes as $targetIndex => $targetGene) {
+            $this->emitKeepAliveProgressHeartbeat();
+
             if ($this->deadlineExceeded()) {
                 return null;
             }
@@ -563,6 +602,8 @@ final class GreedyRepairOperator
         $remainingIndexes = $orderedNeighborhood;
 
         foreach ($orderedNeighborhood as $geneIndex) {
+            $this->emitKeepAliveProgressHeartbeat();
+
             if ($this->deadlineExceeded()) {
                 return null;
             }
@@ -619,6 +660,8 @@ final class GreedyRepairOperator
         $turmaIndex = $chromosome->turmaPeriodoIndex();
 
         foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            $this->emitKeepAliveProgressHeartbeat();
+
             if ($this->deadlineExceeded()) {
                 break;
             }
@@ -664,6 +707,8 @@ final class GreedyRepairOperator
         $baselineRanking = $this->buildRepairRanking($chromosome, $gene, $sourceGeneIndex, $violationTypes);
 
         foreach ($this->candidateStartSlotsForGene($gene, $data) as $slotId) {
+            $this->emitKeepAliveProgressHeartbeat();
+
             if ($this->deadlineExceeded()) {
                 break;
             }
@@ -1169,6 +1214,8 @@ final class GreedyRepairOperator
             'swaps' => $passTelemetry['swaps'] ?? 0,
             'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
         ]);
+
+        $this->markProgressHeartbeatEmission();
     }
 
     /**
@@ -1197,6 +1244,8 @@ final class GreedyRepairOperator
             'swaps' => $passTelemetry['swaps'] ?? 0,
             'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
         ]);
+
+        $this->markProgressHeartbeatEmission();
     }
 
     private function emitAbortHeartbeat(
@@ -1217,6 +1266,8 @@ final class GreedyRepairOperator
             'time_budget_ms' => $timeBudgetMs,
             'passes_without_progress' => $passesWithoutProgress,
         ]);
+
+        $this->markProgressHeartbeatEmission();
     }
 
     private function abortForTimeBudget(
@@ -1229,6 +1280,57 @@ final class GreedyRepairOperator
         $this->lastTelemetry['abort_reason'] = 'time_budget_exhausted';
         $this->lastTelemetry['time_budget_ms'] = $timeBudgetMs;
         $this->emitAbortHeartbeat($progressHeartbeat, 'time_budget_exhausted', $pass, $timeBudgetMs, $passesWithoutProgress);
+    }
+
+    /**
+     * @param array<string, mixed> $passTelemetry
+     */
+    private function syncProgressHeartbeatPayload(array $passTelemetry, int $processedInvalidGenes, int $totalInvalidGenes): void
+    {
+        $this->activeProgressPayload = [
+            'pass' => $passTelemetry['pass'] ?? null,
+            'processed_invalid_genes' => $processedInvalidGenes,
+            'total_invalid_genes' => $totalInvalidGenes,
+            'relocations' => $passTelemetry['relocations'] ?? 0,
+            'swaps' => $passTelemetry['swaps'] ?? 0,
+            'local_rebuilds' => $passTelemetry['local_rebuilds'] ?? 0,
+        ];
+    }
+
+    private function emitKeepAliveProgressHeartbeat(): void
+    {
+        if ($this->activeProgressHeartbeat === null || $this->activeProgressPayload === []) {
+            return;
+        }
+
+        if ($this->activeHeartbeatIntervalSeconds === null) {
+            return;
+        }
+
+        $now = microtime(true);
+        $signature = md5(json_encode($this->activeProgressPayload));
+
+        if (
+            $this->lastProgressHeartbeatAt !== null
+            && $this->lastProgressHeartbeatSignature === $signature
+            && ($now - $this->lastProgressHeartbeatAt) < $this->activeHeartbeatIntervalSeconds
+        ) {
+            return;
+        }
+
+        ($this->activeProgressHeartbeat)([
+            'event' => 'pass_progress',
+            ...$this->activeProgressPayload,
+        ]);
+
+        $this->lastProgressHeartbeatAt = $now;
+        $this->lastProgressHeartbeatSignature = $signature;
+    }
+
+    private function markProgressHeartbeatEmission(): void
+    {
+        $this->lastProgressHeartbeatAt = microtime(true);
+        $this->lastProgressHeartbeatSignature = null;
     }
 
     private function deadlineExceeded(): bool
@@ -1276,6 +1378,8 @@ final class GreedyRepairOperator
                 'score' => -1 * $hardPenalty,
             ];
         }
+
+        $this->emitKeepAliveProgressHeartbeat();
 
         $fitness = $fitnessProbe($chromosome);
 
